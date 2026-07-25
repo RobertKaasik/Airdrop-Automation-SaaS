@@ -6,7 +6,7 @@
     <title>Smart Anti-Sybil Panel</title>
     <!-- Официальный скрипт Telegram Mini Apps -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <!-- Подключаем ethers.js для работы с кошельками -->
+    <!-- Подключаем ethers.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
     <style>
         body {
@@ -50,33 +50,37 @@
     </div>
 
     <script>
-        // Инициализация Telegram Web App
         let tg = window.Telegram.WebApp;
-        tg.expand(); // Разворачиваем на весь экран
+        tg.expand();
 
         async function connectWallet() {
-            if (typeof window.ethereum !== 'undefined') {
-                try {
-                    const provider = new ethers.providers.Web3Provider(window.ethereum);
-                    await provider.send("eth_requestAccounts", []);
-                    const signer = provider.getSigner();
-                    const address = await signer.getAddress();
-                    
-                    document.getElementById('wallet-status').innerText = `Подключено: ${address.substring(0,6)}...${address.substring(38)}`;
-                    document.getElementById('connect-btn').innerText = "Подключено ✅";
-                    tg.showAlert(`Кошелек успешно привязан: ${address}`);
-                } catch (error) {
-                    console.error(error);
-                    alert("Ошибка подключения кошелька");
-                }
-            } else {
-                alert("Пожалуйста, открывайте приложение через браузер с поддержкой MetaMask (или WalletConnect)");
+            // Проверяем наличие ethereum в окне или мобильном браузере
+            const providerEth = window.ethereum || (window.avalanche && window.avalanche);
+            
+            if (!providerEth) {
+                alert("Провайдер кошелька не найден! Откройте сайт в браузере с поддержкой MetaMask (например, встроенном браузере приложения MetaMask).");
+                return;
+            }
+
+            try {
+                const provider = new ethers.providers.Web3Provider(providerEth);
+                // Запрашиваем доступ к аккаунтам
+                await provider.send("eth_requestAccounts", []);
+                const signer = provider.getSigner();
+                const address = await signer.getAddress();
+                
+                document.getElementById('wallet-status').innerText = `Подключено: ${address.substring(0,6)}...${address.substring(38)}`;
+                document.getElementById('connect-btn').innerText = "Подключено ✅";
+                tg.showAlert(`Кошелек успешно привязан: ${address}`);
+            } catch (error) {
+                console.error("Connection error:", error);
+                alert("Не удалось подключить кошелек. Убедитесь, что разблокировали MetaMask.");
             }
         }
 
         function startFarm() {
             tg.sendData(JSON.stringify({ action: "start_farming" }));
-            tg.close(); // Закрываем мини-апп и возвращаем в чат с ботом
+            tg.close();
         }
     </script>
 </body>
