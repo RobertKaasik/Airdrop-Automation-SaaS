@@ -482,11 +482,15 @@
                     <div class="modal-desc">Для входа, введите свой <span>логин</span> и <span>пароль</span> в поля ниже</div>
                     <div class="input-group"><input type="text" class="auth-input" placeholder="Логин" id="loginUser"></div>
                     <div class="input-group"><input type="password" class="auth-input" placeholder="Пароль" id="loginPass"></div>
-                    <button class="btn-modal-primary" onclick="handleLoginSuccess()">Войти</button>
+                    <button class="btn-modal-primary" onclick="validateLogin()">Войти</button>
                     <button class="btn-modal-secondary" onclick="openModal('register')">Создать аккаунт</button>
                     <div class="modal-footer-text">
                         Нажимая "Войти", Вы соглашаетесь с <a href="#">Условиями использования</a> и <a href="#">Политикой конфиденциальности</a>
                     </div>
+                    <div style="text-align: center; margin-top: 15px;">
+                        <a href="#" onclick="openModal('forgot')" style="color: #8892b0; font-size: 13px; text-decoration: underline;">Сбросить пароль</a>
+                    </div>
+                    <div id="loginErrorContainer"></div>
                 `;
             } else if (type === 'register') {
                 container.innerHTML = `
@@ -506,6 +510,37 @@
                     <div id="errorContainer"></div>
                 `;
             }
+        }
+
+        // Проверка правильности логина и пароля при входе
+        function validateLogin() {
+            const userField = document.getElementById('loginUser');
+            const passField = document.getElementById('loginPass');
+            const errorContainer = document.getElementById('loginErrorContainer');
+
+            const username = userField.value.trim();
+            const password = passField.value.trim();
+
+            // Сбрасываем старые ошибки
+            userField.classList.remove('error');
+            passField.classList.remove('error');
+            errorContainer.innerHTML = '';
+
+            // Допустим, правильный логин "Ruby1", а пароль не пустой (или проверяем по твоей базе/бэкенду)
+            if (username !== "Ruby1" || password.length < 3) {
+                userField.classList.add('error');
+                passField.classList.add('error');
+                errorContainer.innerHTML = `
+                    <div class="error-toast" style="bottom: -75px;">
+                        <span>⚠️</span>
+                        <span>Uh-oh! There is wrong username or password. Please try again.</span>
+                    </div>
+                `;
+                return;
+            }
+
+            // Если всё верно — пускаем в личный кабинет
+            handleLoginSuccess();
         }
 
         function handleOverlayClick(event) {
@@ -559,68 +594,93 @@
         function handleLoginSuccess() {
             document.getElementById('authModal').classList.remove('show');
             
+            // Заменяем весь контент страницей личного кабинета с сохранением верхней шапки
             document.body.innerHTML = `
-                <div style="display: flex; height: 100vh; background-color: #060709; color: #fff; font-family: sans-serif;">
-                    <!-- Сайдбар -->
-                    <div style="width: 260px; background-color: #0c0e14; border-right: 1px solid #14171f; padding: 25px; display: flex; flex-direction: column; gap: 20px;">
-                        <!-- Фирменный логотип вместо молнии -->
-                        <div style="font-size: 20px; font-weight: 800; color: #ffffff; display: flex; align-items: center; gap: 10px; letter-spacing: 1.5px;">
-                            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 28px; height: 28px; flex-shrink: 0;">
-                                <ellipse cx="12" cy="20" rx="10" ry="3" stroke="#ff6600" stroke-width="2" fill="#ff6600" fill-opacity="0.15"/>
-                                <path d="M2 20c0 1.66 4.48 3 10 3s10-1.34 10-3" stroke="#ff6600" stroke-width="2"/>
-                                <ellipse cx="12" cy="20" rx="5" ry="1.5" stroke="#ff6600" stroke-width="1" stroke-opacity="0.6"/>
-                                <path d="M12 3L7 5.5L12 8L17 5.5L12 3Z" fill="#ffffff"/>
-                                <path d="M7 5.5V10.5L12 13V8L7 5.5Z" fill="#dddddd"/>
-                                <path d="M17 5.5V10.5L12 13V8L17 5.5Z" fill="#aaaaaa"/>
-                                <path d="M12 14V17" stroke="#ff6600" stroke-width="2" stroke-linecap="round"/>
-                                <path d="M8 11.5V14" stroke="#ff6600" stroke-width="1.5" stroke-linecap="round" stroke-opacity="0.7"/>
-                                <path d="M16 11.5V14" stroke="#ff6600" stroke-width="1.5" stroke-linecap="round" stroke-opacity="0.7"/>
-                            </svg>
-                            AIRDROP-X
-                        </div>
-                        <div style="background: #14171f; padding: 15px; border-radius: 12px; display: flex; align-items: center; gap: 12px;">
-                            <div style="width: 40px; height: 40px; background: #ff6600; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #000;">R</div>
+                <!-- Шапка внутри личного кабинета -->
+                <div class="header">
+                    <div class="logo-container">
+                        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 32px; height: 32px;">
+                            <ellipse cx="12" cy="20" rx="10" ry="3" stroke="#ff6600" stroke-width="2" fill="#ff6600" fill-opacity="0.15"/>
+                            <path d="M2 20c0 1.66 4.48 3 10 3s10-1.34 10-3" stroke="#ff6600" stroke-width="2"/>
+                            <ellipse cx="12" cy="20" rx="5" ry="1.5" stroke="#ff6600" stroke-width="1" stroke-opacity="0.6"/>
+                            <path d="M12 3L7 5.5L12 8L17 5.5L12 3Z" fill="#ffffff"/>
+                            <path d="M7 5.5V10.5L12 13V8L7 5.5Z" fill="#dddddd"/>
+                            <path d="M17 5.5V10.5L12 13V8L17 5.5Z" fill="#aaaaaa"/>
+                            <path d="M12 14V17" stroke="#ff6600" stroke-width="2" stroke-linecap="round"/>
+                            <path d="M8 11.5V14" stroke="#ff6600" stroke-width="1.5" stroke-linecap="round" stroke-opacity="0.7"/>
+                            <path d="M16 11.5V14" stroke="#ff6600" stroke-width="1.5" stroke-linecap="round" stroke-opacity="0.7"/>
+                        </svg>
+                        <span>AIRDROP-X</span>
+                    </div>
+                    <div class="header-actions">
+                        <button class="btn-dark-sm" onclick="location.reload()" style="border-color: #ff3333; color: #ff3333;">Logout</button>
+                        <div class="btn-dark-sm">EN 🇺🇸</div>
+                    </div>
+                </div>
+
+                <!-- Основная часть дашборда по центру -->
+                <div style="display: flex; max-width: 1400px; width: 100%; margin: 30px auto; padding: 0 20px; gap: 30px; flex: 1;">
+                    
+                    <!-- Левая колонка (Профиль и Меню) -->
+                    <div style="width: 300px; display: flex; flex-direction: column; gap: 15px;">
+                        <!-- Карточка пользователя -->
+                        <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 20px; display: flex; align-items: center; gap: 15px;">
+                            <div style="width: 45px; height: 45px; background: linear-gradient(135deg, #ff6600, #993d00); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 18px; color: #000;">R</div>
                             <div>
-                                <div style="font-weight: 600; font-size: 14px;">Ruby1</div>
-                                <div style="font-size: 12px; color: #8892b0;">joined 2026</div>
+                                <div style="font-weight: 700; font-size: 15px; color: #fff;">Ruby1</div>
+                                <div style="font-size: 12px; color: #8892b0;">joined July 26, 2026</div>
                             </div>
                         </div>
-                        <div style="background: #14171f; padding: 15px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center;">
+
+                        <!-- Баланс -->
+                        <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 20px; display: flex; justify-content: space-between; align-items: center;">
                             <div>
-                                <div style="font-size: 12px; color: #8892b0;">Balance</div>
-                                <div style="font-size: 18px; font-weight: bold; color: #ff6600;">$0.00</div>
+                                <div style="font-size: 12px; color: #8892b0;">Your balance</div>
+                                <div style="font-size: 20px; font-weight: bold; color: #ff6600; margin-top: 4px;">$0.00</div>
                             </div>
-                            <button style="background: #ff6600; border: none; width: 30px; height: 30px; border-radius: 50%; font-weight: bold; cursor: pointer;">+</button>
+                            <button style="background: #00d95f; color: #000; border: none; width: 34px; height: 34px; border-radius: 50%; font-weight: bold; font-size: 18px; cursor: pointer;">+</button>
                         </div>
-                        <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px;">
-                            <div style="padding: 12px; background: #ff660015; color: #ff6600; border-radius: 8px; font-weight: 600; cursor: pointer;">📦 Looter & Drops</div>
-                            <div style="padding: 12px; color: #8892b0; border-radius: 8px; cursor: pointer;">👥 Wallets <span style="background: #ff6600; color: #000; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: bold;">BETA</span></div>
-                            <div style="padding: 12px; color: #8892b0; border-radius: 8px; cursor: pointer;">📊 Statistics</div>
-                            <div style="padding: 12px; color: #8892b0; border-radius: 8px; cursor: pointer;">⚙️ Settings</div>
+
+                        <!-- Меню навигации (Subscriptions, Accounts и т.д.) -->
+                        <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 12px; display: flex; flex-direction: column; gap: 4px;">
+                            <div style="padding: 12px 16px; background: #151821; color: #fff; border-radius: 10px; font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 10px; cursor: pointer;">📦 Subscriptions</div>
+                            <div style="padding: 12px 16px; color: #8892b0; border-radius: 10px; font-weight: 500; font-size: 14px; display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
+                                <span>👥 Accounts</span>
+                                <span style="background: #ffd700; color: #000; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: bold;">BETA</span>
+                            </div>
+                            <div style="padding: 12px 16px; color: #8892b0; border-radius: 10px; font-weight: 500; font-size: 14px; cursor: pointer;">📊 Statistics</div>
+                            <div style="padding: 12px 16px; color: #8892b0; border-radius: 10px; font-weight: 500; font-size: 14px; cursor: pointer;">⚙️ Settings</div>
+                            <div style="padding: 12px 16px; color: #8892b0; border-radius: 10px; font-weight: 500; font-size: 14px; cursor: pointer;">💳 Transactions</div>
                         </div>
-                        <div style="margin-top: auto;">
-                            <button onclick="location.reload()" style="width: 100%; padding: 12px; background: transparent; border: 1px solid #ff3333; color: #ff3333; border-radius: 8px; cursor: pointer; font-weight: 600;">Logout</button>
+
+                        <!-- Поддержка -->
+                        <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 12px;">
+                            <div style="padding: 12px 16px; color: #8892b0; border-radius: 10px; font-weight: 500; font-size: 14px; cursor: pointer;">💬 Support</div>
                         </div>
                     </div>
-                    <!-- Рабочая область -->
-                    <div style="flex: 1; padding: 40px; overflow-y: auto;">
-                        <h2 style="margin-top: 0;">Панель поиска и клейма аирдропов</h2>
-                        <p style="color: #8892b0;">Сканируйте свои кошельки в сетях LayerZero, Base и других для поиска доступных наград.</p>
-                        
-                        <div style="background: #0c0e14; border: 1px solid #14171f; padding: 25px; border-radius: 16px; margin-top: 30px;">
-                            <h3 style="margin-top: 0; color: #fff;">🚀 Автоматический поиск распределений</h3>
-                            <p style="color: #8892b0; font-size: 14px;">Система проверит все привязанные адреса по официальным чекерам и смарт-контрактам аирдропов.</p>
+
+                    <!-- Правая рабочая область (Контент панели) -->
+                    <div style="flex: 1; display: flex; flex-direction: column; gap: 20px;">
+                        <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 30px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                                <h3 style="margin: 0; font-size: 20px; color: #fff;">🚀 Автоматический поиск и клейм аирдропов</h3>
+                                <span style="background: rgba(0,217,95,0.1); color: #00d95f; padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: bold;">ONLINE</span>
+                            </div>
+                            <p style="color: #8892b0; font-size: 15px; line-height: 1.6; margin-bottom: 25px;">
+                                Модуль Looter сканирует блокчейн-сети на наличие доступных распределений по вашим кошелькам и производит безопасный сбор с защитой Anti-Sybil.
+                            </p>
                             
-                            <div style="display: flex; gap: 15px; margin-top: 20px;">
-                                <button onclick="startScanningDrops()" style="background: #ff6600; color: #000; border: none; padding: 12px 24px; border-radius: 8px; font-weight: bold; cursor: pointer;">🔍 Найти аирдропы</button>
-                                <button onclick="claimFoundDrops()" style="background: #14171f; color: #fff; border: 1px solid #222633; padding: 12px 24px; border-radius: 8px; font-weight: bold; cursor: pointer;">⚡ Клеймить всё (Anti-Sybil)</button>
+                            <div style="display: flex; gap: 15px;">
+                                <button onclick="startScanningDrops()" style="background-color: #ff6600; color: #000; border: none; padding: 14px 28px; border-radius: 10px; font-weight: bold; font-size: 14px; cursor: pointer;">🔍 Сканировать кошельки</button>
+                                <button onclick="claimFoundDrops()" style="background-color: #151821; color: #fff; border: 1px solid #222633; padding: 14px 28px; border-radius: 10px; font-weight: bold; font-size: 14px; cursor: pointer;">⚡ Клеймить всё</button>
                             </div>
 
-                            <div id="drop-logs" style="margin-top: 20px; background: #060709; padding: 15px; border-radius: 8px; font-family: monospace; font-size: 13px; color: #8892b0; max-height: 180px; overflow-y: auto;">
-                                [System] Готов к сканированию блокчейна...
+                            <div id="drop-logs" style="margin-top: 25px; background-color: #060709; border: 1px solid #14171f; padding: 20px; border-radius: 10px; font-family: monospace; font-size: 13px; color: #8892b0; max-height: 200px; overflow-y: auto;">
+                                [System] Личный кабинет инициализирован. Ожидание запуска сканирования...
                             </div>
                         </div>
                     </div>
+
                 </div>
             `;
         }
