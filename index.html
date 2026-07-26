@@ -245,14 +245,27 @@
                 <button class="btn-dark-sm" id="login-btn">Войти</button>
                 
                 <!-- Меню выбора языка с текстовыми бейджами -->
+                <!-- Меню выбора языка с настоящими SVG-флагами -->
                 <div class="lang-dropdown-wrapper">
                     <button class="btn-dark-sm" id="lang-btn" onclick="toggleLangMenu()">
                         <span id="current-lang-text">RU</span>
                     </button>
                     <div class="lang-menu" id="langMenu">
-                        <button class="lang-option" onclick="changeLanguage('en')"><span style="color: #666; font-size: 12px; font-weight: bold; background: #1a1a1a; padding: 2px 6px; border-radius: 4px;">US</span> English</button>
-                        <button class="lang-option" onclick="changeLanguage('zh')"><span style="color: #666; font-size: 12px; font-weight: bold; background: #1a1a1a; padding: 2px 6px; border-radius: 4px;">CN</span> 中文</button>
-                        <button class="lang-option" onclick="changeLanguage('ru')"><span style="color: #666; font-size: 12px; font-weight: bold; background: #1a1a1a; padding: 2px 6px; border-radius: 4px;">RU</span> Русский</button>
+                        <!-- США -->
+                        <button class="lang-option" onclick="changeLanguage('en')">
+                            <svg width="20" height="14" viewBox="0 0 60 40" style="border-radius: 3px; flex-shrink: 0;"><rect width="60" height="40" fill="#bf0a30"/><g fill="#fff"><rect y="8" width="60" height="4"/><rect y="20" width="60" height="4"/><rect y="32" width="60" height="4"/></g><rect width="24" height="22" fill="#002868"/><text x="4" y="15" fill="#fff" font-size="10">⭐</text></svg> 
+                            English
+                        </button>
+                        <!-- Китай -->
+                        <button class="lang-option" onclick="changeLanguage('zh')">
+                            <svg width="20" height="14" viewBox="0 0 30 20" style="border-radius: 3px; flex-shrink: 0;"><rect width="30" height="20" fill="#de2910"/><path d="M5 3l1 2h2l-1.5 1 0.5 2-1.5-1-1.5 1 0.5-2-1.5-1h2z" fill="#ffde00"/></svg> 
+                            中文
+                        </button>
+                        <!-- Россия -->
+                        <button class="lang-option" onclick="changeLanguage('ru')">
+                            <svg width="20" height="14" viewBox="0 0 9 6" style="border-radius: 3px; flex-shrink: 0;"><rect width="9" height="2" fill="#fff"/><rect y="2" width="9" height="2" fill="#0039a6"/><rect y="4" width="9" height="2" fill="#d52b1e"/></svg> 
+                            Русский
+                        </button>
                     </div>
                 </div>
             </div>
