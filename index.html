@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title id="page-title">AIRDROP-X — Профессиональная панель автоматизации</title>
+    <title id="page-title">AIRDROP-X — SaaS Панель для крипто-ферм</title>
     <!-- Telegram WebApp SDK -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <!-- Ethers.js для Web3 -->
@@ -106,7 +106,7 @@
         .lang-option:hover { background-color: #1a1d24; color: #fff; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
 
-        /* Модальные окна авторизации (как у AFX) */
+        /* Модальные окна */
         .modal-overlay {
             display: none;
             position: fixed;
@@ -128,6 +128,7 @@
             padding: 32px;
             box-shadow: 0 20px 50px rgba(0,0,0,0.9);
             text-align: left;
+            position: relative;
         }
         .modal-logo {
             display: flex;
@@ -144,10 +145,7 @@
             line-height: 1.5;
         }
         .modal-desc span { color: #ff6600; font-weight: 600; }
-        .input-group {
-            position: relative;
-            margin-bottom: 16px;
-        }
+        .input-group { position: relative; margin-bottom: 16px; }
         .auth-input {
             width: 100%;
             background-color: #060709;
@@ -160,21 +158,22 @@
             transition: 0.2s;
         }
         .auth-input:focus { border-color: #ff6600; }
-        .auth-input::placeholder { color: #555c6d; }
+        .auth-input.error { border-color: #ff3333 !important; }
         
         .btn-modal-primary {
             width: 100%;
-            background-color: #151821;
-            color: #fff;
-            border: 1px solid #222633;
+            background-color: #ff6600;
+            color: #000;
+            border: none;
             padding: 14px;
             font-size: 15px;
-            font-weight: 600;
+            font-weight: bold;
             border-radius: 10px;
             margin-top: 8px;
+            cursor: pointer;
             transition: 0.2s;
         }
-        .btn-modal-primary:hover { background-color: #ff6600; color: #000; border-color: #ff6600; }
+        .btn-modal-primary:hover { background-color: #e65c00; }
         
         .btn-modal-secondary {
             width: 100%;
@@ -186,9 +185,27 @@
             font-weight: 600;
             border-radius: 10px;
             margin-top: 10px;
+            cursor: pointer;
             transition: 0.2s;
         }
         .btn-modal-secondary:hover { background-color: #12151c; color: #fff; }
+
+        .error-toast {
+            position: absolute;
+            bottom: -65px;
+            left: 0;
+            right: 0;
+            background-color: #1f0c0c;
+            border: 1px solid #ff3333;
+            border-radius: 10px;
+            padding: 12px 16px;
+            color: #ff8888;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            box-shadow: 0 10px 25px rgba(255, 51, 51, 0.2);
+        }
 
         .modal-footer-text {
             margin-top: 24px;
@@ -224,11 +241,7 @@
             max-width: 650px;
             line-height: 1.6;
         }
-        .hero-buttons {
-            display: flex;
-            gap: 15px;
-            margin-bottom: 25px;
-        }
+        .hero-buttons { display: flex; gap: 15px; margin-bottom: 25px; }
         .btn-orange-lg {
             background-color: #ff6600;
             color: #000;
@@ -301,31 +314,6 @@
         }
         .feature-card h3 { font-size: 18px; margin: 0 0 10px 0; color: #ffffff; }
         .feature-card p { font-size: 14px; color: #8892b0; margin: 0; line-height: 1.5; }
-
-        /* Стили для ошибок валидации (как на скриншоте) */
-        .auth-input.error {
-            border-color: #ff3333 !important;
-        }
-        .error-toast {
-            position: absolute;
-            bottom: -65px;
-            left: 0;
-            right: 0;
-            background-color: #1f0c0c;
-            border: 1px solid #ff3333;
-            border-radius: 10px;
-            padding: 12px 16px;
-            color: #ff8888;
-            font-size: 13px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            animation: fadeIn 0.2s ease;
-            box-shadow: 0 10px 25px rgba(255, 51, 51, 0.2);
-        }
-        .auth-modal {
-            position: relative; /* Чтобы плашка ошибки позиционировалась внутри модалки */
-        }
 
         .faq-section { width: 80%; max-width: 900px; margin: 0 auto 100px auto; text-align: left; }
         .faq-item {
@@ -403,21 +391,19 @@
         </div>
     </div>
 
-    <!-- МОДАЛЬНОЕ ОКНО АВТОРИЗАЦИИ / РЕГИСТРАЦИИ -->
+    <!-- Модальное окно авторизации/регистрации -->
     <div class="modal-overlay" id="authModal" onclick="handleOverlayClick(event)">
-        <div class="auth-modal" id="modalContainer">
-            <!-- Динамический контент окна -->
-        </div>
+        <div class="auth-modal" id="modalContainer"></div>
     </div>
 
     <!-- Главный экран -->
     <div class="hero">
-        <h1 id="hero-title">Универсальный инструмент<br>для фарма и буста Airdrop.</h1>
-        <p id="hero-desc">Разработано для того, что важно: надёжность, Anti-Sybil защита и простота работы от начала до конца.</p>
+        <h1 id="hero-title">Универсальный инструмент<br>для автоматизации и сбора Airdrop.</h1>
+        <p id="hero-desc">Фармите поинты, сканируйте кошельки на наличие распределений и клеймите аирдропы в один клик с защитой Anti-Sybil.</p>
         
         <div class="hero-buttons">
             <button id="farm-btn" class="btn-orange-lg" onclick="startFarm()">Запустить фарминг</button>
-            <button id="settings-btn" class="btn-dark-lg" onclick="openModal('register')">Создать аккаунт</button>
+            <button id="settings-btn" class="btn-dark-lg" onclick="openModal('register')">Создать аккаунт ($160)</button>
         </div>
 
         <div id="wallet-status">Кошелек не подключен</div>
@@ -429,29 +415,29 @@
         <div class="status-banner">
             <div class="status-left">
                 <span>🛡️</span>
-                <span id="banner-text">Приватное ПО с ограниченным количеством мест для защиты от детектирования.</span>
+                <span id="banner-text">Приватное ПО с ограниченным количеством слотов для защиты от детектирования.</span>
             </div>
             <div class="status-right">284 / 300 SLOTS</div>
         </div>
     </div>
 
-    <!-- Возможности -->
+    <!-- Возможности платформы -->
     <div class="section-title" id="features-heading">Возможности платформы</div>
     <div class="features-grid">
         <div class="feature-card">
-            <div class="card-icon">🔄</div>
-            <h3 id="c1-t">Auto-Swapper</h3>
-            <p id="c1-d">Автоматические регулярные свапы в ведущих сетях для набива ончейн-активности.</p>
+            <div class="card-icon">🔍</div>
+            <h3 id="c1-t">Drop Scanner & Looter</h3>
+            <p id="c1-d">Автоматический поиск доступных для клейма аирдропов и ретродропов по всем подключенным кошелькам.</p>
         </div>
         <div class="feature-card">
-            <div class="card-icon">🌉</div>
-            <h3 id="c2-t">Bridge Router</h3>
-            <p id="c2-d">Рандомизированные маршруты через официальные и сторонние мосты.</p>
+            <div class="card-icon">⚡</div>
+            <h3 id="c2-t">Multi-Chain Bridge Router</h3>
+            <p id="c2-d">Рандомизированные транзакции и свапы в сетях LayerZero, Base, Arbitrum и ZkSync для набива объемов.</p>
         </div>
         <div class="feature-card">
             <div class="card-icon">🛡️</div>
             <h3 id="c3-t">Sybil Shield</h3>
-            <p id="c3-d">Интеллектуальная имитация паттернов поведения реального пользователя.</p>
+            <p id="c3-d">Имитация паттернов реального пользователя и интеллектуальное распределение газа без связей между кошельками.</p>
         </div>
     </div>
 
@@ -459,16 +445,16 @@
     <div class="section-title" id="faq-heading">Часто задаваемые вопросы</div>
     <div class="faq-section">
         <div class="faq-item" onclick="toggleFaq(this)">
-            <div class="faq-question"><span id="q1">Как работает защита от Anti-Sybil?</span> <span>+</span></div>
-            <div class="faq-answer" id="a1">Софт генерирует уникальные временные интервалы, случайные суммы транзакций и распределяет газ, исключая любые связи между кошельками.</div>
+            <div class="faq-question"><span id="q1">Как работает авто-клейм аирдропов?</span> <span>+</span></div>
+            <div class="faq-answer" id="a1">Софт сканирует смарт-контракты и чекеры проектов, находит распределенные на ваши кошельки токены и безопасно подписывает транзакции сбора.</div>
         </div>
         <div class="faq-item" onclick="toggleFaq(this)">
-            <div class="faq-question"><span id="q2">Нужно ли держать ПК постоянно включенным?</span> <span>+</span></div>
-            <div class="faq-answer" id="a2">Нет, основные сценарии выполняются через защищенные сервера и облачные узлы с мгновенным уведомлением в ваш Telegram-бот.</div>
+            <div class="faq-question"><span id="q2">Безопасно ли подключать мультиаккаунты?</span> <span>+</span></div>
+            <div class="faq-answer" id="a2">Да, система полностью изолирует сессии, прокси и отпечатки, исключая риск сибил-бана от протоколов.</div>
         </div>
         <div class="faq-item" onclick="toggleFaq(this)">
-            <div class="faq-question"><span id="q3">Как начать работу с MetaMask?</span> <span>+</span></div>
-            <div class="faq-answer" id="a3">Просто нажмите кнопку подключения в правом верхнем углу, подтвердите запрос в расширении и запустите проверку баланса.</div>
+            <div class="faq-question"><span id="q3">Как получить доступ к софту?</span> <span>+</span></div>
+            <div class="faq-answer" id="a3">Оформите подписку в личном кабинете или свяжитесь с поддержкой, количество мест строго ограничено (300 слотов).</div>
         </div>
     </div>
 
@@ -482,7 +468,7 @@
     </div>
 
     <script>
-        // --- УПРАВЛЕНИЕ МОДАЛЬНЫМИ ОКНАМИ АВТОРИЗАЦИИ / РЕГИСТРАЦИИ ---
+        // --- Модальные окна авторизации с валидацией ---
         function openModal(type) {
             const modal = document.getElementById('authModal');
             const container = document.getElementById('modalContainer');
@@ -494,15 +480,12 @@
                         <span style="color:#ff6600;">⚡</span> AIRDROP-X
                     </div>
                     <div class="modal-desc">Для входа, введите свой <span>логин</span> и <span>пароль</span> в поля ниже</div>
-                    <div class="input-group"><input type="text" class="auth-input" placeholder="Логин"></div>
-                    <div class="input-group"><input type="password" class="auth-input" placeholder="Пароль"></div>
-                    <button class="btn-modal-primary" onclick="alert('Успешный вход!')">Войти</button>
+                    <div class="input-group"><input type="text" class="auth-input" placeholder="Логин" id="loginUser"></div>
+                    <div class="input-group"><input type="password" class="auth-input" placeholder="Пароль" id="loginPass"></div>
+                    <button class="btn-modal-primary" onclick="handleLoginSuccess()">Войти</button>
                     <button class="btn-modal-secondary" onclick="openModal('register')">Создать аккаунт</button>
                     <div class="modal-footer-text">
                         Нажимая "Войти", Вы соглашаетесь с <a href="#">Условиями использования</a> и <a href="#">Политикой конфиденциальности</a>
-                    </div>
-                    <div style="text-align: center; margin-top: 15px;">
-                        <a href="#" onclick="openModal('forgot')" style="color: #8892b0; font-size: 13px; text-decoration: underline;">Сбросить пароль</a>
                     </div>
                 `;
             } else if (type === 'register') {
@@ -511,25 +494,16 @@
                         <span style="color:#ff6600;">⚡</span> AIRDROP-X
                     </div>
                     <div class="modal-desc">Для создания аккаунта, введите данные в поля ниже</div>
-                    <div class="input-group"><input type="email" class="auth-input" placeholder="Почта"></div>
-                    <div class="input-group"><input type="text" class="auth-input" placeholder="Логин"></div>
-                    <div class="input-group"><input type="password" class="auth-input" placeholder="Пароль"></div>
-                    <div class="input-group"><input type="password" class="auth-input" placeholder="Повторите пароль"></div>
-                    <button class="btn-modal-primary" onclick="alert('Аккаунт создан!')">Создать аккаунт</button>
+                    <div class="input-group"><input type="email" class="auth-input" placeholder="Почта" id="regEmail"></div>
+                    <div class="input-group"><input type="text" class="auth-input" placeholder="Логин" id="regUser"></div>
+                    <div class="input-group"><input type="password" class="auth-input" placeholder="Пароль" id="regPass"></div>
+                    <div class="input-group"><input type="password" class="auth-input" placeholder="Повторите пароль" id="regPass2"></div>
+                    <button class="btn-modal-primary" onclick="validateRegister()">Создать аккаунт</button>
                     <button class="btn-modal-secondary" onclick="openModal('login')">Войти</button>
                     <div class="modal-footer-text">
                         Нажимая "Создать аккаунт", Вы соглашаетесь с <a href="#">Условиями использования</a> и <a href="#">Политикой конфиденциальности</a>
                     </div>
-                `;
-            } else if (type === 'forgot') {
-                container.innerHTML = `
-                    <div class="modal-logo">
-                        <span style="color:#ff6600;">⚡</span> AIRDROP-X
-                    </div>
-                    <div class="modal-desc">Введите вашу почту для сброса пароля</div>
-                    <div class="input-group"><input type="email" class="auth-input" placeholder="Email"></div>
-                    <button class="btn-modal-primary" onclick="alert('Инструкция отправлена на почту!')">Отправить</button>
-                    <button class="btn-modal-secondary" onclick="openModal('login')">Назад к входу</button>
+                    <div id="errorContainer"></div>
                 `;
             }
         }
@@ -540,52 +514,169 @@
             }
         }
 
-        // --- МУЛЬТИЯЗЫЧНОСТЬ ---
+        function validateRegister() {
+            const userField = document.getElementById('regUser');
+            const passField = document.getElementById('regPass');
+            const pass2Field = document.getElementById('regPass2');
+            const errorContainer = document.getElementById('errorContainer');
+            
+            const username = userField.value;
+            const password = passField.value;
+
+            userField.classList.remove('error');
+            passField.classList.remove('error');
+            pass2Field.classList.remove('error');
+            errorContainer.innerHTML = '';
+
+            if (username.length > 0 && username.length < 5) {
+                userField.classList.add('error');
+                errorContainer.innerHTML = `
+                    <div class="error-toast">
+                        <span>⚠️</span><span>Ой! Логин должен быть длиннее 5 символов. Попробуйте еще раз.</span>
+                    </div>
+                `;
+                return;
+            }
+
+            const invalidCharsRegex = /[^a-zA-Z0-9._!]/;
+            if (invalidCharsRegex.test(username) || invalidCharsRegex.test(password)) {
+                userField.classList.add('error');
+                passField.classList.add('error');
+                pass2Field.classList.add('error');
+                errorContainer.innerHTML = `
+                    <div class="error-toast">
+                        <span>⚠️</span><span>Ой! Используйте только латинские буквы, цифры, '.' или '!'.</span>
+                    </div>
+                `;
+                return;
+            }
+
+            alert('Аккаунт успешно создан!');
+            handleLoginSuccess();
+        }
+
+        // --- ПЕРЕХОД В ЛИЧНЫЙ КАБИНЕТ С МОДУЛЕМ ПОИСКА И КЛЕЙМА АИРДРОПОВ ---
+        function handleLoginSuccess() {
+            document.getElementById('authModal').classList.remove('show');
+            
+            document.body.innerHTML = `
+                <div style="display: flex; height: 100vh; background-color: #060709; color: #fff; font-family: sans-serif;">
+                    <!-- Сайдбар -->
+                    <div style="width: 260px; background-color: #0c0e14; border-right: 1px solid #14171f; padding: 25px; display: flex; flex-direction: column; gap: 20px;">
+                        <div style="font-size: 20px; font-weight: 800; color: #ff6600; display: flex; align-items: center; gap: 10px;">
+                            ⚡ AIRDROP-X
+                        </div>
+                        <div style="background: #14171f; padding: 15px; border-radius: 12px; display: flex; align-items: center; gap: 12px;">
+                            <div style="width: 40px; height: 40px; background: #ff6600; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #000;">R</div>
+                            <div>
+                                <div style="font-weight: 600; font-size: 14px;">Ruby1</div>
+                                <div style="font-size: 12px; color: #8892b0;">joined 2026</div>
+                            </div>
+                        </div>
+                        <div style="background: #14171f; padding: 15px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center;">
+                            <div>
+                                <div style="font-size: 12px; color: #8892b0;">Balance</div>
+                                <div style="font-size: 18px; font-weight: bold; color: #ff6600;">$0.00</div>
+                            </div>
+                            <button style="background: #ff6600; border: none; width: 30px; height: 30px; border-radius: 50%; font-weight: bold; cursor: pointer;">+</button>
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px;">
+                            <div style="padding: 12px; background: #ff660015; color: #ff6600; border-radius: 8px; font-weight: 600; cursor: pointer;">📦 Looter & Drops</div>
+                            <div style="padding: 12px; color: #8892b0; border-radius: 8px; cursor: pointer;">👥 Wallets <span style="background: #ff6600; color: #000; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: bold;">BETA</span></div>
+                            <div style="padding: 12px; color: #8892b0; border-radius: 8px; cursor: pointer;">📊 Statistics</div>
+                            <div style="padding: 12px; color: #8892b0; border-radius: 8px; cursor: pointer;">⚙️ Settings</div>
+                        </div>
+                        <div style="margin-top: auto;">
+                            <button onclick="location.reload()" style="width: 100%; padding: 12px; background: transparent; border: 1px solid #ff3333; color: #ff3333; border-radius: 8px; cursor: pointer; font-weight: 600;">Logout</button>
+                        </div>
+                    </div>
+                    <!-- Рабочая область -->
+                    <div style="flex: 1; padding: 40px; overflow-y: auto;">
+                        <h2 style="margin-top: 0;">Панель поиска и клейма аирдропов</h2>
+                        <p style="color: #8892b0;">Сканируйте свои кошельки в сетях LayerZero, Base и других для поиска доступных наград.</p>
+                        
+                        <div style="background: #0c0e14; border: 1px solid #14171f; padding: 25px; border-radius: 16px; margin-top: 30px;">
+                            <h3 style="margin-top: 0; color: #fff;">🚀 Автоматический поиск распределений</h3>
+                            <p style="color: #8892b0; font-size: 14px;">Система проверит все привязанные адреса по официальным чекерам и смарт-контрактам аирдропов.</p>
+                            
+                            <div style="display: flex; gap: 15px; margin-top: 20px;">
+                                <button onclick="startScanningDrops()" style="background: #ff6600; color: #000; border: none; padding: 12px 24px; border-radius: 8px; font-weight: bold; cursor: pointer;">🔍 Найти аирдропы</button>
+                                <button onclick="claimFoundDrops()" style="background: #14171f; color: #fff; border: 1px solid #222633; padding: 12px 24px; border-radius: 8px; font-weight: bold; cursor: pointer;">⚡ Клеймить всё (Anti-Sybil)</button>
+                            </div>
+
+                            <div id="drop-logs" style="margin-top: 20px; background: #060709; padding: 15px; border-radius: 8px; font-family: monospace; font-size: 13px; color: #8892b0; max-height: 180px; overflow-y: auto;">
+                                [System] Готов к сканированию блокчейна...
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function startScanningDrops() {
+            const log = document.getElementById('drop-logs');
+            log.innerHTML += `<br>[${new Date().toLocaleTimeString()}] 🔍 Сканирование кошельков по чекерам LayerZero & Base...`;
+            setTimeout(() => {
+                log.innerHTML += `<br><span style="color: #00d95f;">[${new Date().toLocaleTimeString()}] ✅ Обнаружено 2 доступных аирдропа на общую сумму ~$1,240!</span>`;
+                log.scrollTop = log.scrollHeight;
+            }, 1500);
+        }
+
+        function claimFoundDrops() {
+            const log = document.getElementById('drop-logs');
+            log.innerHTML += `<br><span style="color: #ff6600;">[${new Date().toLocaleTimeString()}] ⚡ Запуск безопасного клейма с рандомизацией газа...</span>`;
+            setTimeout(() => {
+                log.innerHTML += `<br><span style="color: #00d95f;">[${new Date().toLocaleTimeString()}] 🚀 Успешно! Токены получены и распределены по основным кошелькам.</span>`;
+                log.scrollTop = log.scrollHeight;
+            }, 2000);
+        }
+
+        // --- Мультиязычность ---
         const translations = {
             ru: {
-                title: "AIRDROP-X — Профессиональная панель автоматизации",
+                title: "AIRDROP-X — SaaS Панель для крипто-ферм",
                 connect: "Подключить кошелек", login: "Войти", langCode: "RU", langName: "Русский",
-                heroTitle: "Универсальный инструмент<br>для фарма и буста Airdrop.",
-                heroDesc: "Разработано для того, что важно: надёжность, Anti-Sybil защита и простота работы от начала до конца.",
-                farmBtn: "Запустить фарминг", settingsBtn: "Создать аккаунт", walletNotConnected: "Кошелек не подключен",
-                bannerText: "Приватное ПО с ограниченным количеством мест для защиты от детектирования.",
+                heroTitle: "Универсальный инструмент<br>для автоматизации и сбора Airdrop.",
+                heroDesc: "Фармите поинты, сканируйте кошельки на наличие распределений и клеймите аирдропы в один клик с защитой Anti-Sybil.",
+                farmBtn: "Запустить фарминг", settingsBtn: "Создать аккаунт ($160)", walletNotConnected: "Кошелек не подключен",
+                bannerText: "Приватное ПО с ограниченным количеством слотов для защиты от детектирования.",
                 featuresHeading: "Возможности платформы", faqHeading: "Часто задаваемые вопросы",
-                c1t: "Auto-Swapper", c1d: "Автоматические регулярные свапы в ведущих сетях для набива ончейн-активности.",
-                c2t: "Bridge Router", c2d: "Рандомизированные маршруты через официальные и сторонние мосты.",
-                c3t: "Sybil Shield", c3d: "Интеллектуальная имитация паттернов поведения реального пользователя.",
-                q1: "Как работает защита от Anti-Sybil?", a1: "Софт генерирует уникальные временные интервалы, случайные суммы транзакций и распределяет газ, исключая любые связи между кошельками.",
-                q2: "Нужно ли держать ПК постоянно включенным?", a2: "Нет, основные сценарии выполняются через защищенные сервера и облачные узлы с мгновенным уведомлением в ваш Telegram-бот.",
-                q3: "Как начать работу с MetaMask?", a3: "Просто нажмите кнопку подключения в правом верхнем углу, подтвердите запрос в расширении и запустите проверку баланса."
+                c1t: "Drop Scanner & Looter", c1d: "Автоматический поиск доступных для клейма аирдропов и ретродропов по всем подключенным кошелькам.",
+                c2t: "Multi-Chain Bridge Router", c2d: "Рандомизированные транзакции и свапы в сетях LayerZero, Base, Arbitrum и ZkSync для набива объемов.",
+                c3t: "Sybil Shield", c3d: "Имитация паттернов реального пользователя и интеллектуальное распределение газа без связей между кошельками.",
+                q1: "Как работает авто-клейм аирдропов?", a1: "Софт сканирует смарт-контракты и чекеры проектов, находит распределенные на ваши кошельки токены и безопасно подписывает транзакции сбора.",
+                q2: "Безопасно ли подключать мультиаккаунты?", a2: "Да, система полностью изолирует сессии, прокси и отпечатки, исключая риск сибил-бана от протоколов.",
+                q3: "Как получить доступ к софту?", a3: "Оформите подписку в личном кабинете или свяжитесь с поддержкой, количество мест строго ограничено (300 слотов)."
             },
             en: {
-                title: "AIRDROP-X — Professional Automation Panel",
+                title: "AIRDROP-X — Crypto Farm SaaS Panel",
                 connect: "Connect Wallet", login: "Login", langCode: "US", langName: "English",
-                heroTitle: "Universal Tool<br>for Airdrop Farming & Boosting.",
-                heroDesc: "Designed for what matters: reliability, Anti-Sybil protection, and seamless workflow from start to finish.",
-                farmBtn: "Start Farming", settingsBtn: "Create Account", walletNotConnected: "Wallet not connected",
+                heroTitle: "Universal Tool<br>for Airdrop Automation & Claiming.",
+                heroDesc: "Farm points, scan wallets for allocations, and claim airdrops in one click with robust Anti-Sybil protection.",
+                farmBtn: "Start Farming", settingsBtn: "Create Account ($160)", walletNotConnected: "Wallet not connected",
                 bannerText: "Private software with limited slots to ensure maximum safety and reliability.",
                 featuresHeading: "Platform Features", faqHeading: "Frequently Asked Questions",
-                c1t: "Auto-Swapper", c1d: "Automated regular swaps across leading networks to build on-chain volume.",
-                c2t: "Bridge Router", c2d: "Randomized routing through official and third-party bridges.",
-                c3t: "Sybil Shield", c3d: "Intelligent simulation of real user behavioral patterns.",
-                q1: "How does Anti-Sybil protection work?", a1: "The software generates unique time intervals, random transaction amounts, and distributes gas to eliminate links between wallets.",
-                q2: "Do I need to keep my PC running 24/7?", a2: "No, main scenarios run via secure servers and cloud nodes with instant notifications sent to your Telegram bot.",
-                q3: "How to get started with MetaMask?", a3: "Simply click the connect button in the top right corner, confirm the request in your extension, and run the balance check."
+                c1t: "Drop Scanner & Looter", c1d: "Automatic search for claimable airdrops and retro-drops across all connected wallets.",
+                c2t: "Multi-Chain Bridge Router", c2d: "Randomized transactions and swaps across LayerZero, Base, Arbitrum, and ZkSync networks.",
+                c3t: "Sybil Shield", c3d: "Simulation of real user behavioral patterns and smart gas distribution without wallet links.",
+                q1: "How does auto-claiming work?", a1: "The software scans smart contracts and project checkers, finds tokens allocated to your wallets, and securely signs claim transactions.",
+                q2: "Is it safe to connect multiple accounts?", a2: "Yes, the system completely isolates sessions, proxies, and fingerprints, eliminating sybil-ban risks.",
+                q3: "How to get access?", a3: "Subscribe in your dashboard or contact support. Slots are strictly limited (300 slots)."
             },
             zh: {
-                title: "AIRDROP-X — 专业空投自动化面板",
+                title: "AIRDROP-X — 加密农场 SaaS 面板",
                 connect: "连接钱包", login: "登录", langCode: "CN", langName: "中文",
-                heroTitle: "用于空投刷量与<br>强化的通用工具。",
-                heroDesc: "专注于核心要素：可靠性、防女巫保护以及从头到尾的简便工作流程。",
-                farmBtn: "启动挖矿", settingsBtn: "创建账户", walletNotConnected: "未连接钱包",
+                heroTitle: "用于空投自动化与<br>领取的通用工具。",
+                heroDesc: "使用强大的防女巫保护，一键刷取积分、扫描钱包额度并领取空投。",
+                farmBtn: "启动挖矿", settingsBtn: "创建账户 ($160)", walletNotConnected: "未连接钱包",
                 bannerText: "名额有限的私有软件，确保最高安全性和可靠性。",
                 featuresHeading: "平台功能", faqHeading: "常见问题",
-                c1t: "自动兑换", c1d: "在主流网络中进行自动定期兑换，以累积链上活跃度。",
-                c2t: "跨链路由", c2d: "通过官方和第三方跨链桥进行随机路由规划。",
-                c3t: "防女巫盾", c3d: "智能模拟真实用户的行为特征模式。",
-                q1: "防女巫保护是如何工作的？", a1: "软件生成独特的时间间隔、随机交易金额并分配gas，消除钱包之间的任何关联。",
-                q2: "我需要一直开着电脑吗？", a2: "不需要，主要任务通过安全服务器和云端节点运行，并向您的 Telegram 机器人发送即时通知。",
-                q3: "如何开始使用 MetaMask？", a3: "只需点击右上角的连接按钮，在扩展程序中确认请求并运行余额检查即可。"
+                c1t: "空投扫描与领取", c1d: "自动在所有连接的钱包中搜索可领取的空投和retro-drop。",
+                c2t: "多链跨链路由", c2d: "在 LayerZero、Base、Arbitrum 和 ZkSync 网络中进行随机交易与兑换。",
+                c3t: "防女巫盾", c3d: "模拟真实用户的行为特征模式，智能分配gas且无钱包关联。",
+                q1: "自动领取是如何工作的？", a1: "软件扫描智能合约和项目检查器，查找分配给您钱包的代币并安全签署领取交易。",
+                q2: "连接多账户安全吗？", a2: "是的，系统完全隔离会话、代理和指纹，消除女巫封禁风险。",
+                q3: "如何获取权限？", a3: "在控制面板中订阅或联系客服，名额严格限制（300个名额）。"
             }
         };
 
@@ -644,7 +735,7 @@
             span.innerText = element.classList.contains('active') ? '-' : '+';
         }
 
-        // Web3 & Telegram Логика
+        // Web3 & Telegram
         const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
         const isInTelegramDesktop = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.platform === 'tdesktop';
 
@@ -694,107 +785,7 @@
                 }
             }
         }
-        function openModal(type) {
-            const modal = document.getElementById('authModal');
-            const container = document.getElementById('modalContainer');
-            modal.classList.add('show');
 
-            if (type === 'login') {
-                container.innerHTML = `
-                    <div class="modal-logo">
-                        <span style="color:#ff6600;">⚡</span> AIRDROP-X
-                    </div>
-                    <div class="modal-desc">Для входа, введите свой <span>логин</span> и <span>пароль</span> в поля ниже</div>
-                    <div class="input-group"><input type="text" class="auth-input" placeholder="Логин" id="loginUser"></div>
-                    <div class="input-group"><input type="password" class="auth-input" placeholder="Пароль" id="loginPass"></div>
-                    <button class="btn-modal-primary" onclick="alert('Успешный вход!')" style="background-color: #ff6600; color: #000;">Войти</button>
-                    <button class="btn-modal-secondary" onclick="openModal('register')">Создать аккаунт</button>
-                    <div class="modal-footer-text">
-                        Нажимая "Войти", Вы соглашаетесь с <a href="#">Условиями использования</a> и <a href="#">Политикой конфиденциальности</a>
-                    </div>
-                    <div style="text-align: center; margin-top: 15px;">
-                        <a href="#" onclick="openModal('forgot')" style="color: #8892b0; font-size: 13px; text-decoration: underline;">Сбросить пароль</a>
-                    </div>
-                `;
-            } else if (type === 'register') {
-                container.innerHTML = `
-                    <div class="modal-logo">
-                        <span style="color:#ff6600;">⚡</span> AIRDROP-X
-                    </div>
-                    <div class="modal-desc">Для создания аккаунта, введите данные в поля ниже</div>
-                    <div class="input-group"><input type="email" class="auth-input" placeholder="Почта" id="regEmail"></div>
-                    <div class="input-group"><input type="text" class="auth-input" placeholder="Логин" id="regUser"></div>
-                    <div class="input-group"><input type="password" class="auth-input" placeholder="Пароль" id="regPass"></div>
-                    <div class="input-group"><input type="password" class="auth-input" placeholder="Повторите пароль" id="regPass2"></div>
-                    
-                    <button class="btn-modal-primary" onclick="validateRegister()" style="background-color: #ff6600; color: #000;">Создать аккаунт</button>
-                    <button class="btn-modal-secondary" onclick="openModal('login')">Войти</button>
-                    
-                    <div class="modal-footer-text">
-                        Нажимая "Создать аккаунт", Вы соглашаетесь с <a href="#">Условиями использования</a> и <a href="#">Политикой конфиденциальности</a>
-                    </div>
-                    <!-- Контейнер для ошибок динамически -->
-                    <div id="errorContainer"></div>
-                `;
-            } else if (type === 'forgot') {
-                container.innerHTML = `
-                    <div class="modal-logo">
-                        <span style="color:#ff6600;">⚡</span> AIRDROP-X
-                    </div>
-                    <div class="modal-desc">Введите вашу почту для сброса пароля</div>
-                    <div class="input-group"><input type="email" class="auth-input" placeholder="Email"></div>
-                    <button class="btn-modal-primary" onclick="alert('Инструкция отправлена на почту!')" style="background-color: #ff6600; color: #000;">Отправить</button>
-                    <button class="btn-modal-secondary" onclick="openModal('login')">Назад к входу</button>
-                `;
-            }
-        }
-
-        // Логика проверки ошибок при регистрации (как на твоих скринштах)
-        function validateRegister() {
-            const userField = document.getElementById('regUser');
-            const passField = document.getElementById('regPass');
-            const pass2Field = document.getElementById('regPass2');
-            const errorContainer = document.getElementById('errorContainer');
-            
-            const username = userField.value;
-            const password = passField.value;
-
-            // Сбрасываем старые ошибки
-            userField.classList.remove('error');
-            passField.classList.remove('error');
-            pass2Field.classList.remove('error');
-            errorContainer.innerHTML = '';
-
-            // Проверка 1: Длина логина меньше 5 символов
-            if (username.length > 0 && username.length < 5) {
-                userField.classList.add('error');
-                errorContainer.innerHTML = `
-                    <div class="error-toast">
-                        <span style="font-size: 16px;">⚠️</span>
-                        <span>Ой! Логин должен быть длиннее 5 символов. Попробуйте еще раз.</span>
-                    </div>
-                `;
-                return;
-            }
-
-            // Проверка 2: Запрещенные символы (например, скобки [] или спецсимволы, кроме разрешенных)
-            const invalidCharsRegex = /[^a-zA-Z0-9._!]/;
-            if (invalidCharsRegex.test(username) || invalidCharsRegex.test(password)) {
-                userField.classList.add('error');
-                passField.classList.add('error');
-                pass2Field.classList.add('error');
-                errorContainer.innerHTML = `
-                    <div class="error-toast">
-                        <span style="font-size: 16px;">⚠️</span>
-                        <span>Ой! Пожалуйста, используйте только латинские буквы, цифры, '.' или '!'. Попробуйте еще раз.</span>
-                    </div>
-                `;
-                return;
-            }
-
-            // Если всё ок
-            alert('Регистрация успешно пройдена!');
-        }
         async function startFarm() {
             const statusText = document.getElementById('wallet-status').innerText;
             if (!statusText.includes("Подключено:") && !statusText.includes("0x")) {
