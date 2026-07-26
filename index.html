@@ -129,16 +129,15 @@
                 
                 console.log(`Баланс: ${balanceEth} Sepolia ETH`);
 
-                // ПРОВЕРКА: Если баланс меньше 0.005 ETH (этого не хватит на комиссии)
+                // ПРОВЕРКА: Если баланс меньше 0.005 ETH 
                 if (parseFloat(balanceEth) < 0.005) {
                     container.innerHTML = `
                         <div class="card" style="border: 2px solid #e74c3c; background-color: rgba(231, 76, 60, 0.1);">
                             <h3 style="color: #e74c3c; margin-top: 0;">🛑 Ошибка: Пустой кошелек</h3>
-                            <p style="font-size: 14px;">Anti-Sybil защита отклонила запуск. Ваш баланс <b>${balanceEth} SepETH</b>. Для оплаты комиссий сети (Gas) требуется тестовый эфир.</p>
-                            <p style="font-size: 14px;">Пожалуйста, получите бесплатные тестовые токены по ссылкам ниже, после чего повторите попытку:</p>
+                            <p style="font-size: 14px;">Anti-Sybil защита отклонила запуск. Ваш баланс <b>${parseFloat(balanceEth).toFixed(5)} SepETH</b>. Для оплаты газа требуется тестовый эфир.</p>
+                            <p style="font-size: 14px;">Пожалуйста, получите бесплатные тестовые токены через майнинг-кран (не требует реальных средств на счету):</p>
                             
-                            <a href="https://sepoliafaucet.com/" target="_blank" class="faucet-link">💧 Alchemy Sepolia Faucet</a>
-                            <a href="https://www.infura.io/faucet/sepolia" target="_blank" class="faucet-link">💧 Infura Sepolia Faucet</a>
+                            <a href="https://sepolia-faucet.pk910.de/" target="_blank" class="faucet-link">⛏️ PoW Sepolia Faucet (Майнинг)</a>
                         </div>
                     `;
                     // Возвращаем кнопку в исходное состояние
