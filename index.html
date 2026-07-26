@@ -39,13 +39,6 @@
             letter-spacing: 1px;
         }
 
-        .logo-icon {
-            width: 24px;
-            height: 24px;
-            background-color: #fff;
-            border-radius: 4px;
-        }
-
         .header-actions {
             display: flex;
             gap: 10px;
@@ -77,16 +70,16 @@
         }
         .btn-dark-sm:hover { background-color: #1a1a1a; }
 
-        /* Главный экран (Hero) */
+        /* Главный экран (Hero) - Выравнивание по левому краю */
         .hero {
             flex: 1;
             display: flex;
             flex-direction: column;
-            align-items: center;
+            align-items: flex-start; /* Смещаем весь контент влево */
             justify-content: flex-start;
-            padding-top: 80px;
-            text-align: center;
-            background: radial-gradient(circle at center, rgba(0, 217, 95, 0.05) 0%, rgba(10, 10, 10, 1) 50%);
+            padding: 80px 10% 0 10%; /* Добавляем отступы по краям */
+            text-align: left; /* Выравниваем сам текст */
+            background: radial-gradient(circle at 20% 40%, rgba(0, 217, 95, 0.08) 0%, rgba(10, 10, 10, 1) 60%);
         }
 
         .hero h1 {
@@ -130,17 +123,18 @@
         }
         .btn-dark-lg:hover { background-color: #1a1a1a; }
 
-        /* Контейнер статуса */
+        /* Контейнер статуса - сдвинут влево */
         #wallet-status {
             color: #8892b0;
             font-size: 14px;
             margin-bottom: 20px;
+            text-align: left;
         }
 
         #anti-sybil-container {
             width: 100%;
             max-width: 600px;
-            margin: 0 auto;
+            margin: 0; /* Убрано авто-центрирование */
             text-align: left;
         }
         
@@ -160,7 +154,8 @@
     </style>
 </head>
 <body>
-<!-- Шапка интерфейса -->
+
+    <!-- Шапка интерфейса -->
     <div class="header">
         <div class="logo-container">
             <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="background: transparent; width: 32px; height: 32px; flex-shrink: 0;">
@@ -182,7 +177,6 @@
             </svg>
             <span>AIRDROP-X</span>
         </div>
-        
         <div class="header-actions">
             <!-- Кнопка подключения кошелька -->
             <button id="connect-btn" class="btn-green-sm" onclick="connectWallet()">Подключить кошелек</button>
@@ -190,6 +184,7 @@
             <button class="btn-dark-sm">RU 🇷🇺</button>
         </div>
     </div>
+
     <!-- Главный контент -->
     <div class="hero">
         <h1>Мощный инструмент<br>для фарма и буста Airdrop</h1>
@@ -287,6 +282,8 @@
             const originalBtnText = btn.innerText;
             btn.innerText = "Проверка Anti-Sybil...";
             btn.style.backgroundColor = "#f39c12";
+            btn.style.border = "none";
+            btn.style.color = "#000";
 
             try {
                 const provider = new ethers.providers.JsonRpcProvider("https://ethereum-sepolia-rpc.publicnode.com");
@@ -338,6 +335,8 @@
                 alert("Ошибка сети. Попробуйте еще раз.");
                 btn.innerText = originalBtnText;
                 btn.style.backgroundColor = "#00d95f";
+                btn.style.color = "#000";
+                btn.style.border = "none";
             }
         }
     </script>
