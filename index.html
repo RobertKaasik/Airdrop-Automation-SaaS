@@ -78,10 +78,40 @@
             }
         }
 
-        function startFarm() {
-            tg.sendData(JSON.stringify({ action: "start_farming" }));
-            tg.close();
-        }
+        async function startFarm() {
+    const statusText = document.getElementById('wallet-status').innerText;
+    
+    // Проверяем, подключен ли кошелек перед запуском
+    if (!statusText.includes("Подключено:")) {
+        alert("Сначала подключите кошелек MetaMask!");
+        return;
+    }
+
+    // Достаем адрес кошелька из текста статуса
+    const walletAddress = statusText.replace("Подключено: ", "");
+
+    try {
+        // Отправляем запрос на твой локальный сервер (или бэкенд)
+        const response = await fetch('http://127.0.0.1:8000/api/start-farm', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                wallet_address: walletAddress,
+                action: "start_farming"
+            })
+        });
+
+        const result = await response.json();
+        alert(result.message || "Фарминг запущен!");
+    } catch (error) {
+        console.error("Ошибка отправки:", error);
+        // Если сервер не запущен, просто отправляем данные в Telegram боту
+        tg.sendData(JSON.stringify({ action: "start_farming", wallet: walletAddress }));
+        tg.close();
+    }
+}
     </script>
 </body>
 </html>
