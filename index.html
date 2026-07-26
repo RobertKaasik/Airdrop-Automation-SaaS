@@ -290,6 +290,23 @@
             max-width: 1000px;
             margin: 0 auto 80px auto;
         }
+        /* Иконка переключения видимости пароля внутри инпута */
+        .password-wrapper {
+            position: relative;
+            width: 100%;
+        }
+        .password-toggle-icon {
+            position: absolute;
+            right: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            cursor: pointer;
+            color: #555c6d;
+            font-size: 16px;
+            user-select: none;
+            transition: 0.2s;
+        }
+        .password-toggle-icon:hover { color: #ff6600; }
         .feature-card {
             background-color: #0d0f14;
             border: 1px solid #14171f;
@@ -481,7 +498,10 @@
                     </div>
                     <div class="modal-desc">Для входа, введите свой <span>логин</span> и <span>пароль</span> в поля ниже</div>
                     <div class="input-group"><input type="text" class="auth-input" placeholder="Логин" id="loginUser"></div>
-                    <div class="input-group"><input type="password" class="auth-input" placeholder="Пароль" id="loginPass"></div>
+                    <div class="input-group password-wrapper">
+                        <input type="password" class="auth-input" placeholder="Пароль" id="loginPass">
+                        <span class="password-toggle-icon" onclick="togglePassword('loginPass', this)">👁️‍🗨️</span>
+                    </div>
                     <button class="btn-modal-primary" onclick="validateLogin()">Войти</button>
                     <button class="btn-modal-secondary" onclick="openModal('register')">Создать аккаунт</button>
                     <div class="modal-footer-text">
@@ -500,8 +520,16 @@
                     <div class="modal-desc">Для создания аккаунта, введите данные в поля ниже</div>
                     <div class="input-group"><input type="email" class="auth-input" placeholder="Почта" id="regEmail"></div>
                     <div class="input-group"><input type="text" class="auth-input" placeholder="Логин" id="regUser"></div>
-                    <div class="input-group"><input type="password" class="auth-input" placeholder="Пароль" id="regPass"></div>
-                    <div class="input-group"><input type="password" class="auth-input" placeholder="Повторите пароль" id="regPass2"></div>
+                    
+                    <div class="input-group password-wrapper">
+                        <input type="password" class="auth-input" placeholder="Пароль" id="regPass">
+                        <span class="password-toggle-icon" onclick="togglePassword('regPass', this)">👁️‍🗨️</span>
+                    </div>
+                    <div class="input-group password-wrapper">
+                        <input type="password" class="auth-input" placeholder="Повторите пароль" id="regPass2">
+                        <span class="password-toggle-icon" onclick="togglePassword('regPass2', this)">👁️‍🗨️</span>
+                    </div>
+
                     <button class="btn-modal-primary" onclick="validateRegister()">Создать аккаунт</button>
                     <button class="btn-modal-secondary" onclick="openModal('login')">Войти</button>
                     <div class="modal-footer-text">
@@ -509,6 +537,18 @@
                     </div>
                     <div id="errorContainer"></div>
                 `;
+            }
+        }
+
+        // Функция переключения видимости пароля
+        function togglePassword(fieldId, iconElement) {
+            const field = document.getElementById(fieldId);
+            if (field.type === "password") {
+                field.type = "text";
+                iconElement.style.color = "#ff6600"; // Подсвечиваем иконку оранжевым, когда пароль виден
+            } else {
+                field.type = "password";
+                iconElement.style.color = "#555c6d";
             }
         }
 
