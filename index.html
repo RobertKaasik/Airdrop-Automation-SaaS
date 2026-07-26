@@ -9,205 +9,322 @@
     <!-- Подключаем ethers.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
     <style>
+        /* Скопированный премиум-стиль AFX */
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            background-color: var(--tg-theme-bg-color, #18222d);
-            color: var(--tg-theme-text-color, #ffffff);
-            padding: 20px;
-            text-align: center;
+            background-color: #0a0a0a;
+            color: #ffffff;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
         }
+
+        /* Шапка (Header) */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 30px;
+            border-bottom: 1px solid #1f1f1f;
+        }
+
+        .logo-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 20px;
+            font-weight: 800;
+            letter-spacing: 1px;
+        }
+
+        .logo-icon {
+            width: 24px;
+            height: 24px;
+            background-color: #fff;
+            border-radius: 4px;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        /* Общие стили кнопок */
+        button {
+            cursor: pointer;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            transition: all 0.2s ease;
+        }
+
+        .btn-green-sm {
+            background-color: #00d95f;
+            color: #000;
+            padding: 10px 20px;
+            font-size: 14px;
+        }
+        .btn-green-sm:hover { background-color: #00bf53; }
+
+        .btn-dark-sm {
+            background-color: transparent;
+            color: #fff;
+            border: 1px solid #333;
+            padding: 10px 20px;
+            font-size: 14px;
+        }
+        .btn-dark-sm:hover { background-color: #1a1a1a; }
+
+        /* Главный экран (Hero) */
+        .hero {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            padding-top: 80px;
+            text-align: center;
+            background: radial-gradient(circle at center, rgba(0, 217, 95, 0.05) 0%, rgba(10, 10, 10, 1) 50%);
+        }
+
+        .hero h1 {
+            font-size: 46px;
+            font-weight: 700;
+            margin-bottom: 20px;
+            line-height: 1.2;
+            max-width: 800px;
+        }
+
+        .hero p {
+            color: #8892b0;
+            font-size: 18px;
+            margin-bottom: 40px;
+            max-width: 600px;
+            line-height: 1.5;
+        }
+
+        .hero-buttons {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .btn-green-lg {
+            background-color: #00d95f;
+            color: #000;
+            padding: 14px 32px;
+            font-size: 16px;
+            border-radius: 8px;
+        }
+        .btn-green-lg:hover { background-color: #00bf53; }
+
+        .btn-dark-lg {
+            background-color: #0f0f0f;
+            color: #fff;
+            border: 1px solid #333;
+            padding: 14px 32px;
+            font-size: 16px;
+            border-radius: 8px;
+        }
+        .btn-dark-lg:hover { background-color: #1a1a1a; }
+
+        /* Контейнер статуса */
+        #wallet-status {
+            color: #8892b0;
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+
+        #anti-sybil-container {
+            width: 100%;
+            max-width: 600px;
+            margin: 0 auto;
+            text-align: left;
+        }
+        
         .card {
-            background: var(--tg-theme-secondary-bg-color, #232e3c);
             padding: 20px;
             border-radius: 12px;
-            margin-bottom: 15px;
-            transition: all 0.3s ease;
+            margin-top: 20px;
         }
-        button {
-            background-color: var(--tg-theme-button-color, #2481cc);
-            color: var(--tg-theme-button-text-color, #ffffff);
-            border: none;
-            padding: 12px 20px;
-            border-radius: 8px;
-            font-size: 16px;
-            cursor: pointer;
-            width: 100%;
-            margin-top: 10px;
-            font-weight: bold;
-        }
-        button:active {
-            opacity: 0.8;
-        }
-        /* Стиль для кликабельных ссылок кранов */
+        
         .faucet-link {
-            display: block;
-            color: #4da6ff;
+            display: inline-block;
+            margin-top: 10px;
+            color: #3498db;
             text-decoration: none;
-            margin: 10px 0;
-            padding: 10px;
-            background: rgba(77, 166, 255, 0.1);
-            border-radius: 6px;
             font-weight: bold;
         }
     </style>
 </head>
 <body>
 
-    <h1>🚀 Smart Anti-Sybil</h1>
-    <p>Панель управления фармингом</p>
-
-    <div class="card">
-        <p id="wallet-status">Кошелек не подключен</p>
-        <button id="connect-btn" onclick="connectWallet()">Подключить MetaMask</button>
+    <!-- Шапка интерфейса -->
+    <div class="header">
+        <div class="logo-container">
+            <div class="logo-icon"></div>
+            <span>AIRDROP-X</span>
+        </div>
+        <div class="header-actions">
+            <!-- Кнопка подключения кошелька -->
+            <button id="connect-btn" class="btn-green-sm" onclick="connectWallet()">Подключить кошелек</button>
+            <button class="btn-dark-sm">Войти</button>
+            <button class="btn-dark-sm">RU 🇷🇺</button>
+        </div>
     </div>
 
-    <div class="card">
-        <button onclick="startFarm()" style="background-color: #2ecc71;">Запустить фарминг</button>
-    </div>
+    <!-- Главный контент -->
+    <div class="hero">
+        <h1>Мощный инструмент<br>для фарма и буста Airdrop</h1>
+        <p>Фармите поинты, прогревайте кошельки и набивайте транзакции — с надёжной защитой от Anti-Sybil алгоритмов и минимальным риском бритья.</p>
+        
+        <div class="hero-buttons">
+            <!-- Кнопка запуска -->
+            <button id="farm-btn" class="btn-green-lg" onclick="startFarm()">Получить доступ (Запуск)</button>
+            <button class="btn-dark-lg">Настройки</button>
+        </div>
 
-    <!-- Здесь будет появляться Anti-Sybil окно, если баланс 0 -->
-    <div id="anti-sybil-container"></div>
+        <div id="wallet-status">Кошелек не подключен</div>
+        <div id="anti-sybil-container"></div>
+    </div>
 
     <script>
-    // 1. Сначала проверяем, открыт ли сайт с ПК в Telegram Desktop
-    // Проверяем: если это ПК И реальный объект Telegram WebApp запущен (и платформа не мобильная)
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    const isInTelegramDesktop = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.platform === 'tdesktop';
+        // 1. Проверка на открытие с ПК в Telegram Desktop
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        const isInTelegramDesktop = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.platform === 'tdesktop';
 
-    if (!isMobile && isInTelegramDesktop) {
-    // Здесь идет код создания предупреждения (оставь его как есть ниже)
-        const webVersionUrl = "http://127.0.0.1:5500/index.html"; 
-        
-        const warningDiv = document.createElement('div');
-        warningDiv.style.position = 'fixed';
-        warningDiv.style.top = '0';
-        warningDiv.style.left = '0';
-        warningDiv.style.width = '100%';
-        warningDiv.style.height = '100%';
-        warningDiv.style.backgroundColor = 'rgba(18, 18, 18, 0.95)';
-        warningDiv.style.zIndex = '9999';
-        warningDiv.style.display = 'flex';
-        warningDiv.style.flexDirection = 'column';
-        warningDiv.style.alignItems = 'center';
-        warningDiv.style.justifyContent = 'center';
-        warningDiv.style.color = '#fff';
-        warningDiv.style.padding = '20px';
-        warningDiv.style.textAlign = 'center';
-        
-        warningDiv.innerHTML = `
-            <h2 style="margin-bottom: 15px; color: #f39c12;">⚠️ Открыто с компьютера (Telegram Desktop)</h2>
-            <p style="margin-bottom: 20px; max-width: 400px; color: #ccc;">Для работы с MetaMask на ПК лучше использовать обычный браузер (Chrome), так как во встроенном окне Telegram расширения не поддерживаются.</p>
-            <a href="${webVersionUrl}" target="_blank" style="background-color: #3498db; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold;">Открыть в Google Chrome</a>
-        `;
-        
-        document.body.appendChild(warningDiv);
-    }
-
-    // 2. Инициализация Telegram WebApp
-    let tg = window.Telegram.WebApp;
-    tg.expand();
+        if (!isMobile && isInTelegramDesktop) {
+            const webVersionUrl = "http://127.0.0.1:5500/index.html"; 
             
-    async function connectWallet() {
-        if (window.ethereum) {
-            try {
-                const provider = new ethers.providers.Web3Provider(window.ethereum);
-                await provider.send("wallet_requestPermissions", [{ eth_accounts: {} }]);
-                
-                const signer = provider.getSigner();
-                const address = await signer.getAddress();
-                
-                document.getElementById('wallet-status').innerText = `Подключено: ${address}`;
-                document.getElementById('connect-btn').innerText = `Подключено: ${address.substring(0,6)}...${address.substring(38)} ✅`;
-                
-                document.getElementById('anti-sybil-container').innerHTML = '';
-            } catch (error) {
-                console.error("Ошибка:", error);
-                alert("Подключение отменено или кошелек заблокирован.");
-            }
-        } else {
-            const userWantsToOpenApp = confirm("Кошелек не обнаружен. Открыть приложение MetaMask?");
-            if (userWantsToOpenApp) {
-                const dappUrl = "robertkaasik.github.io/Airdrop-Automation-SaaS/";
-                window.location.href = `https://metamask.app.link/dapp/${dappUrl}`;
-            }
-        }
-    }
-
-    async function startFarm() {
-        const statusText = document.getElementById('wallet-status').innerText;
-        
-        if (!statusText.includes("Подключено:")) {
-            alert("Сначала подключите кошелек MetaMask!");
-            return;
+            const warningDiv = document.createElement('div');
+            warningDiv.style.position = 'fixed';
+            warningDiv.style.top = '0';
+            warningDiv.style.left = '0';
+            warningDiv.style.width = '100%';
+            warningDiv.style.height = '100%';
+            warningDiv.style.backgroundColor = 'rgba(10, 10, 10, 0.98)';
+            warningDiv.style.zIndex = '9999';
+            warningDiv.style.display = 'flex';
+            warningDiv.style.flexDirection = 'column';
+            warningDiv.style.alignItems = 'center';
+            warningDiv.style.justifyContent = 'center';
+            warningDiv.style.color = '#fff';
+            warningDiv.style.padding = '20px';
+            warningDiv.style.textAlign = 'center';
+            
+            warningDiv.innerHTML = `
+                <h2 style="margin-bottom: 15px; color: #f39c12;">⚠️ Открыто с компьютера (Telegram Desktop)</h2>
+                <p style="margin-bottom: 20px; max-width: 400px; color: #8892b0;">Для работы с MetaMask на ПК лучше использовать обычный браузер (Chrome), так как во встроенном окне Telegram расширения не поддерживаются.</p>
+                <a href="${webVersionUrl}" target="_blank" style="background-color: #00d95f; color: #000; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold;">Открыть в браузере</a>
+            `;
+            document.body.appendChild(warningDiv);
         }
 
-        const walletAddress = statusText.replace("Подключено: ", "").trim();
-        const container = document.getElementById('anti-sybil-container');
-        
-        const btn = document.querySelector('button[onclick="startFarm()"]');
-        const originalBtnText = btn.innerText;
-        btn.innerText = "Проверка Anti-Sybil...";
-        btn.style.backgroundColor = "#f39c12";
+        // 2. Инициализация Telegram WebApp
+        let tg = window.Telegram.WebApp;
+        tg.expand();
+                
+        // 3. Функция подключения MetaMask
+        async function connectWallet() {
+            if (window.ethereum) {
+                try {
+                    const provider = new ethers.providers.Web3Provider(window.ethereum);
+                    await provider.send("wallet_requestPermissions", [{ eth_accounts: {} }]);
+                    
+                    const signer = provider.getSigner();
+                    const address = await signer.getAddress();
+                    
+                    document.getElementById('wallet-status').innerText = `Подключено: ${address}`;
+                    document.getElementById('connect-btn').innerText = `${address.substring(0,6)}...${address.substring(38)} ✅`;
+                    document.getElementById('connect-btn').style.backgroundColor = 'transparent';
+                    document.getElementById('connect-btn').style.color = '#fff';
+                    document.getElementById('connect-btn').style.border = '1px solid #333';
+                    
+                    document.getElementById('anti-sybil-container').innerHTML = '';
+                } catch (error) {
+                    console.error("Ошибка:", error);
+                    alert("Подключение отменено или кошелек заблокирован.");
+                }
+            } else {
+                const userWantsToOpenApp = confirm("Кошелек не обнаружен. Открыть приложение MetaMask?");
+                if (userWantsToOpenApp) {
+                    const dappUrl = "robertkaasik.github.io/Airdrop-Automation-SaaS/";
+                    window.location.href = `https://metamask.app.link/dapp/${dappUrl}`;
+                }
+            }
+        }
 
-        try {
-            const provider = new ethers.providers.JsonRpcProvider("https://ethereum-sepolia-rpc.publicnode.com");
+        // 4. Функция запуска фарминга
+        async function startFarm() {
+            const statusText = document.getElementById('wallet-status').innerText;
             
-            const balanceWei = await provider.getBalance(walletAddress);
-            const balanceEth = ethers.utils.formatEther(balanceWei);
-            
-            console.log(`Баланс: ${balanceEth} Sepolia ETH`);
-
-            if (parseFloat(balanceEth) < 0.005) {
-                container.innerHTML = `
-                    <div class="card" style="border: 2px solid #e74c3c; background-color: rgba(231, 76, 60, 0.1);">
-                        <h3 style="color: #e74c3c; margin-top: 0;">🛑 Ошибка: Пустой кошелек</h3>
-                        <p style="font-size: 14px;">Anti-Sybil защита отклонила запуск. Ваш баланс <b>${parseFloat(balanceEth).toFixed(5)} SepETH</b>. Для оплаты газа требуется тестовый эфир.</p>
-                        <p style="font-size: 14px;">Пожалуйста, получите бесплатные тестовые токены через майнинг-кран:</p>
-                        <a href="https://sepolia-faucet.pk910.de/" target="_blank" class="faucet-link">⛏️ PoW Sepolia Faucet (Майнинг)</a>
-                    </div>
-                `;
-                btn.innerText = "Запустить фарминг";
-                btn.style.backgroundColor = "#2ecc71";
+            if (!statusText.includes("Подключено:")) {
+                alert("Сначала подключите кошелек MetaMask!");
                 return;
             }
 
-            container.innerHTML = `
-                <div class="card" style="border: 2px solid #2ecc71; background-color: rgba(46, 204, 113, 0.1);">
-                    <h3 style="color: #2ecc71; margin-top: 0;">✅ Anti-Sybil пройден!</h3>
-                    <p>Баланс: ${parseFloat(balanceEth).toFixed(4)} SepETH.</p>
-                    <p>Данные отправлены на сервер. Фарминг запущен!</p>
-                </div>
-            `;
+            const walletAddress = statusText.replace("Подключено: ", "").trim();
+            const container = document.getElementById('anti-sybil-container');
+            const btn = document.getElementById('farm-btn');
             
-            btn.innerText = "Фарминг в процессе ⚙️";
-            btn.style.backgroundColor = "#27ae60";
+            const originalBtnText = btn.innerText;
+            btn.innerText = "Проверка Anti-Sybil...";
+            btn.style.backgroundColor = "#f39c12";
 
             try {
-                const response = await fetch('http://127.0.0.1:8000/api/start-farm', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                        wallet: walletAddress,
-                        balance: balanceEth,
-                        telegram_id: tg.initDataUnsafe?.user?.id || "unknown"
-                    })
-                });
+                const provider = new ethers.providers.JsonRpcProvider("https://ethereum-sepolia-rpc.publicnode.com");
+                const balanceWei = await provider.getBalance(walletAddress);
+                const balanceEth = ethers.utils.formatEther(balanceWei);
+
+                if (parseFloat(balanceEth) < 0.005) {
+                    container.innerHTML = `
+                        <div class="card" style="border: 1px solid #e74c3c; background-color: rgba(231, 76, 60, 0.05);">
+                            <h3 style="color: #e74c3c; margin-top: 0;">🛑 Ошибка: Пустой кошелек</h3>
+                            <p style="font-size: 14px;">Anti-Sybil защита отклонила запуск. Ваш баланс <b>${parseFloat(balanceEth).toFixed(5)} SepETH</b>.</p>
+                            <a href="https://sepolia-faucet.pk910.de/" target="_blank" class="faucet-link">⛏️ Получить тестовый ETH</a>
+                        </div>
+                    `;
+                    btn.innerText = "Попробовать снова";
+                    btn.style.backgroundColor = "#e74c3c";
+                    return;
+                }
+
+                container.innerHTML = `
+                    <div class="card" style="border: 1px solid #00d95f; background-color: rgba(0, 217, 95, 0.05);">
+                        <h3 style="color: #00d95f; margin-top: 0;">✅ Anti-Sybil пройден!</h3>
+                        <p>Баланс: ${parseFloat(balanceEth).toFixed(4)} SepETH.</p>
+                        <p style="color: #8892b0; font-size: 14px;">Данные отправлены на сервер. Фарминг запущен!</p>
+                    </div>
+                `;
                 
-                const result = await response.json();
-                console.log("Ответ сервера:", result);
-            } catch (serverError) {
-                console.error("Ошибка отправки на сервер:", serverError);
+                btn.innerText = "Фарминг в процессе ⚙️";
+                btn.style.backgroundColor = "transparent";
+                btn.style.border = "1px solid #00d95f";
+                btn.style.color = "#00d95f";
+
+                try {
+                    const response = await fetch('http://127.0.0.1:8000/api/start-farm', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            wallet: walletAddress,
+                            balance: balanceEth,
+                            telegram_id: tg.initDataUnsafe?.user?.id || "unknown"
+                        })
+                    });
+                } catch (serverError) {
+                    console.error("Ошибка отправки на сервер:", serverError);
+                }
+                
+            } catch (error) {
+                console.error("Ошибка проверки баланса:", error);
+                alert("Ошибка сети. Попробуйте еще раз.");
+                btn.innerText = originalBtnText;
+                btn.style.backgroundColor = "#00d95f";
             }
-            
-        } catch (error) {
-            console.error("Ошибка проверки баланса:", error);
-            alert("Ошибка сети при проверке кошелька. Попробуйте еще раз.");
-            btn.innerText = originalBtnText;
-            btn.style.backgroundColor = "#2ecc71";
         }
-    }
-</script>
+    </script>
 </body>
 </html>
