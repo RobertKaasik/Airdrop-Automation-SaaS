@@ -25,6 +25,7 @@
             align-items: center;
             padding: 15px 30px;
             border-bottom: 1px solid #1f1f1f;
+            position: relative;
         }
         .logo-container {
             display: flex;
@@ -37,6 +38,7 @@
         .header-actions {
             display: flex;
             gap: 10px;
+            align-items: center;
         }
         button {
             cursor: pointer;
@@ -58,8 +60,57 @@
             border: 1px solid #333;
             padding: 10px 20px;
             font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
         .btn-dark-sm:hover { background-color: #1a1a1a; }
+
+        /* Выпадающее меню языков в стиле AFX */
+        .lang-dropdown-wrapper {
+            position: relative;
+        }
+        .lang-menu {
+            display: none;
+            position: absolute;
+            right: 0;
+            top: 45px;
+            background-color: #0f1115;
+            border: 1px solid #222;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
+            width: 160px;
+            z-index: 1000;
+            overflow: hidden;
+            animation: fadeIn 0.2s ease;
+        }
+        .lang-menu.show {
+            display: block;
+        }
+        .lang-option {
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: #8892b0;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background 0.2s, color 0.2s;
+            background: transparent;
+            border: none;
+            width: 100%;
+            text-align: left;
+        }
+        .lang-option:hover {
+            background-color: #1a1d24;
+            color: #ffffff;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
         .hero {
             flex: 1;
             display: flex;
@@ -192,8 +243,18 @@
         <div class="header-actions">
             <button id="connect-btn" class="btn-green-sm" onclick="connectWallet()">Подключить кошелек</button>
             <button class="btn-dark-sm" id="login-btn">Войти</button>
-            <!-- Кнопка переключения языков -->
-            <button class="btn-dark-sm" id="lang-btn" onclick="toggleLanguage()">RU 🇷🇺</button>
+            
+            <!-- Выпадающее меню языков с флагами -->
+            <div class="lang-dropdown-wrapper">
+                <button class="btn-dark-sm" id="lang-btn" onclick="toggleLangMenu()">
+                    <span id="current-lang-text">RU</span> 🇷🇺
+                </button>
+                <div class="lang-menu" id="langMenu">
+                    <button class="lang-option" onclick="changeLanguage('en')">🇺🇸 English</button>
+                    <button class="lang-option" onclick="changeLanguage('zh')">🇨🇳 中文</button>
+                    <button class="lang-option" onclick="changeLanguage('ru')">🇷🇺 Русский</button>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -231,13 +292,14 @@
     </div>
 
     <script>
-        // Перевод интерфейса (RU -> EN -> ZH)
+        // Данные переводов
         const translations = {
             ru: {
                 title: "AIRDROP-X — Панель управления фармом",
                 connect: "Подключить кошелек",
                 login: "Войти",
-                lang: "RU 🇷🇺",
+                langCode: "RU",
+                langFlag: "🇷🇺",
                 heroTitle: "Мощный инструмент<br>для фарма и буста Airdrop",
                 heroDesc: "Фармите поинты, прогревайте кошельки и набивайте транзакции — с защитой от Anti-Sybil и минимальным риском бритья.",
                 farmBtn: "Получить доступ (Запуск)",
@@ -251,7 +313,8 @@
                 title: "AIRDROP-X — Farming Automation Panel",
                 connect: "Connect Wallet",
                 login: "Login",
-                lang: "EN 🇬🇧",
+                langCode: "EN",
+                langFlag: "🇬🇧",
                 heroTitle: "Powerful Tool<br>for Airdrop Farming & Boosting",
                 heroDesc: "Farm points, warm up wallets, and grind transactions with robust Anti-Sybil protection and minimal risk.",
                 farmBtn: "Get Access (Run)",
@@ -265,7 +328,8 @@
                 title: "AIRDROP-X — 空投自动化面板",
                 connect: "连接钱包",
                 login: "登录",
-                lang: "ZH 🇨🇳",
+                langCode: "ZH",
+                langFlag: "🇨🇳",
                 heroTitle: "用于空投刷量与<br>强化的强大工具",
                 heroDesc: "通过防女巫(Anti-Sybil)保护和极低的被 ban 风险，轻松刷取积分、养号并完成链上交互。",
                 farmBtn: "获取权限 (运行)",
@@ -277,24 +341,36 @@
             }
         };
 
-        let currentLang = 'ru';
+        // Открытие/закрытие меню языков
+        function toggleLangMenu() {
+            const menu = document.getElementById('langMenu');
+            menu.classList.toggle('show');
+        }
 
-        function toggleLanguage() {
-            if (currentLang === 'ru') currentLang = 'en';
-            else if (currentLang === 'en') currentLang = 'zh';
-            else currentLang = 'ru';
+        // Закрытие меню при клике вне его
+        window.onclick = function(event) {
+            if (!event.target.closest('.lang-dropdown-wrapper')) {
+                const menu = document.getElementById('langMenu');
+                if (menu.classList.contains('show')) {
+                    menu.classList.remove('show');
+                }
+            }
+        }
 
-            const t = translations[currentLang];
+        // Смена языка
+        function changeLanguage(lang) {
+            const t = translations[lang];
             document.getElementById('page-title').innerText = t.title;
             
-            // Меняем текст на кнопке подключения только если кошелек не подключен
             const connectBtn = document.getElementById('connect-btn');
             if (!connectBtn.innerText.includes("✅")) {
                 connectBtn.innerText = t.connect;
             }
             
             document.getElementById('login-btn').innerText = t.login;
-            document.getElementById('lang-btn').innerText = t.lang;
+            document.getElementById('current-lang-text').innerText = t.langCode;
+            document.getElementById('lang-btn').innerHTML = `<span id="current-lang-text">${t.langCode}</span> ${t.langFlag}`;
+            
             document.getElementById('hero-title').innerHTML = t.heroTitle;
             document.getElementById('hero-desc').innerText = t.heroDesc;
             
@@ -316,6 +392,8 @@
             document.getElementById('card2-desc').innerText = t.c2Desc;
             document.getElementById('card3-title').innerText = t.c3Title;
             document.getElementById('card3-desc').innerText = t.c3Desc;
+
+            document.getElementById('langMenu').classList.remove('show');
         }
 
         // Telegram Desktop ПК проверка
