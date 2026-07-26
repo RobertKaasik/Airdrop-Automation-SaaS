@@ -70,9 +70,12 @@
 
     <script>
     // 1. Сначала проверяем, открыт ли сайт с ПК в Telegram Desktop
+    // Проверяем: если это ПК И реальный объект Telegram WebApp запущен (и платформа не мобильная)
     const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const isInTelegramDesktop = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.platform === 'tdesktop';
 
-    if (!isMobile && window.Telegram && window.Telegram.WebApp) {
+    if (!isMobile && isInTelegramDesktop) {
+    // Здесь идет код создания предупреждения (оставь его как есть ниже)
         const webVersionUrl = "http://127.0.0.1:5500/index.html"; 
         
         const warningDiv = document.createElement('div');
