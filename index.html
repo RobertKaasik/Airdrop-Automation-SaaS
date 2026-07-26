@@ -9,7 +9,7 @@
     <!-- Ethers.js для Web3 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
     <style>
-        * { box-sizing: border-box; }
+        * { box-sizing: border-box; scroll-behavior: smooth; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background-color: #060709;
@@ -40,6 +40,7 @@
             font-size: 22px;
             font-weight: 800;
             letter-spacing: 1.5px;
+            cursor: pointer;
         }
         .header-actions {
             display: flex;
@@ -159,6 +160,13 @@
         }
         .auth-input:focus { border-color: #ff6600; }
         .auth-input.error { border-color: #ff3333 !important; }
+
+        .password-wrapper { position: relative; width: 100%; }
+        .password-toggle-icon {
+            position: absolute; right: 16px; top: 50%; transform: translateY(-50%);
+            cursor: pointer; color: #555c6d; font-size: 16px; user-select: none; transition: 0.2s;
+        }
+        .password-toggle-icon:hover { color: #ff6600; }
         
         .btn-modal-primary {
             width: 100%;
@@ -192,7 +200,7 @@
 
         .error-toast {
             position: absolute;
-            bottom: -65px;
+            bottom: -75px;
             left: 0;
             right: 0;
             background-color: #1f0c0c;
@@ -260,11 +268,6 @@
         }
         .btn-dark-lg:hover { background-color: #1a1d24; }
 
-        #wallet-status { color: #8892b0; font-size: 14px; margin-bottom: 15px; text-align: center; }
-        #anti-sybil-container { width: 100%; max-width: 600px; margin: 0 auto 40px auto; text-align: left; }
-        .card { padding: 20px; border-radius: 12px; margin-top: 15px; }
-        .faucet-link { display: inline-block; margin-top: 10px; color: #ff6600; text-decoration: none; font-weight: bold; }
-
         .status-banner {
             width: 100%;
             max-width: 900px;
@@ -290,23 +293,6 @@
             max-width: 1000px;
             margin: 0 auto 80px auto;
         }
-        /* Иконка переключения видимости пароля внутри инпута */
-        .password-wrapper {
-            position: relative;
-            width: 100%;
-        }
-        .password-toggle-icon {
-            position: absolute;
-            right: 16px;
-            top: 50%;
-            transform: translateY(-50%);
-            cursor: pointer;
-            color: #555c6d;
-            font-size: 16px;
-            user-select: none;
-            transition: 0.2s;
-        }
-        .password-toggle-icon:hover { color: #ff6600; }
         .feature-card {
             background-color: #0d0f14;
             border: 1px solid #14171f;
@@ -374,9 +360,9 @@
 </head>
 <body>
 
-    <!-- Шапка -->
+    <!-- Шапка (Логотип кликабельный -> ведет наверх/главную) -->
     <div class="header">
-        <div class="logo-container">
+        <div class="logo-container" onclick="location.reload()">
             <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 32px; height: 32px;">
                 <ellipse cx="12" cy="20" rx="10" ry="3" stroke="#ff6600" stroke-width="2" fill="#ff6600" fill-opacity="0.15"/>
                 <path d="M2 20c0 1.66 4.48 3 10 3s10-1.34 10-3" stroke="#ff6600" stroke-width="2"/>
@@ -391,8 +377,7 @@
             <span>AIRDROP-X</span>
         </div>
         <div class="header-actions">
-            <button id="connect-btn" class="btn-orange-sm" onclick="connectWallet()">Подключить кошелек</button>
-            <button class="btn-dark-sm" id="login-btn" onclick="openModal('login')">Войти</button>
+            <button id="login-btn" class="btn-dark-sm" onclick="openModal('login')">Войти</button>
             
             <div class="lang-dropdown-wrapper">
                 <button class="btn-dark-sm" id="lang-btn" onclick="toggleLangMenu()">
@@ -413,18 +398,15 @@
         <div class="auth-modal" id="modalContainer"></div>
     </div>
 
-    <!-- Главный экран -->
+    <!-- Главный экран с кнопками "Получить доступ" и "Подробнее" -->
     <div class="hero">
         <h1 id="hero-title">Универсальный инструмент<br>для автоматизации и сбора Airdrop.</h1>
         <p id="hero-desc">Фармите поинты, сканируйте кошельки на наличие распределений и клеймите аирдропы в один клик с защитой Anti-Sybil.</p>
         
         <div class="hero-buttons">
-            <button id="farm-btn" class="btn-orange-lg" onclick="startFarm()">Запустить фарминг</button>
-            <button id="settings-btn" class="btn-dark-lg" onclick="openModal('register')">Создать аккаунт ($160)</button>
+            <button id="farm-btn" class="btn-orange-lg" onclick="openModal('register')">Получить доступ ($160)</button>
+            <button id="settings-btn" class="btn-dark-lg" onclick="scrollToFeatures()">Подробнее</button>
         </div>
-
-        <div id="wallet-status">Кошелек не подключен</div>
-        <div id="anti-sybil-container"></div>
     </div>
 
     <!-- Баннер лимита -->
@@ -438,8 +420,8 @@
         </div>
     </div>
 
-    <!-- Возможности платформы -->
-    <div class="section-title" id="features-heading">Возможности платформы</div>
+    <!-- Возможности платформы (цель прокрутки кнопки "Подробнее") -->
+    <div id="features-section" class="section-title" id="features-heading">Возможности платформы</div>
     <div class="features-grid">
         <div class="feature-card">
             <div class="card-icon">🔍</div>
@@ -485,7 +467,12 @@
     </div>
 
     <script>
-        // --- Модальные окна авторизации с валидацией ---
+        // Плавная прокрутка кнопки "Подробнее"
+        function scrollToFeatures() {
+            document.getElementById('features-section').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        // --- Модальные окна с глазиком и валидацией ---
         function openModal(type) {
             const modal = document.getElementById('authModal');
             const container = document.getElementById('modalContainer');
@@ -506,9 +493,6 @@
                     <button class="btn-modal-secondary" onclick="openModal('register')">Создать аккаунт</button>
                     <div class="modal-footer-text">
                         Нажимая "Войти", Вы соглашаетесь с <a href="#">Условиями использования</a> и <a href="#">Политикой конфиденциальности</a>
-                    </div>
-                    <div style="text-align: center; margin-top: 15px;">
-                        <a href="#" onclick="openModal('forgot')" style="color: #8892b0; font-size: 13px; text-decoration: underline;">Сбросить пароль</a>
                     </div>
                     <div id="loginErrorContainer"></div>
                 `;
@@ -540,47 +524,15 @@
             }
         }
 
-        // Функция переключения видимости пароля
         function togglePassword(fieldId, iconElement) {
             const field = document.getElementById(fieldId);
             if (field.type === "password") {
                 field.type = "text";
-                iconElement.style.color = "#ff6600"; // Подсвечиваем иконку оранжевым, когда пароль виден
+                iconElement.style.color = "#ff6600";
             } else {
                 field.type = "password";
                 iconElement.style.color = "#555c6d";
             }
-        }
-
-        // Проверка правильности логина и пароля при входе
-        function validateLogin() {
-            const userField = document.getElementById('loginUser');
-            const passField = document.getElementById('loginPass');
-            const errorContainer = document.getElementById('loginErrorContainer');
-
-            const username = userField.value.trim();
-            const password = passField.value.trim();
-
-            // Сбрасываем старые ошибки
-            userField.classList.remove('error');
-            passField.classList.remove('error');
-            errorContainer.innerHTML = '';
-
-            // Допустим, правильный логин "Ruby1", а пароль не пустой (или проверяем по твоей базе/бэкенду)
-            if (username !== "Ruby1" || password.length < 3) {
-                userField.classList.add('error');
-                passField.classList.add('error');
-                errorContainer.innerHTML = `
-                    <div class="error-toast" style="bottom: -75px;">
-                        <span>⚠️</span>
-                        <span>Uh-oh! There is wrong username or password. Please try again.</span>
-                    </div>
-                `;
-                return;
-            }
-
-            // Если всё верно — пускаем в личный кабинет
-            handleLoginSuccess();
         }
 
         function handleOverlayClick(event) {
@@ -592,35 +544,31 @@
         function validateRegister() {
             const userField = document.getElementById('regUser');
             const passField = document.getElementById('regPass');
-            const pass2Field = document.getElementById('regPass2');
             const errorContainer = document.getElementById('errorContainer');
             
-            const username = userField.value;
-            const password = passField.value;
+            const username = userField.value.trim();
+            const password = passField.value.trim();
 
             userField.classList.remove('error');
             passField.classList.remove('error');
-            pass2Field.classList.remove('error');
             errorContainer.innerHTML = '';
 
             if (username.length > 0 && username.length < 5) {
                 userField.classList.add('error');
                 errorContainer.innerHTML = `
                     <div class="error-toast">
-                        <span>⚠️</span><span>Ой! Логин должен быть длиннее 5 символов. Попробуйте еще раз.</span>
+                        <span>⚠️</span><span>Ой! Логин должен быть длиннее 5 символов.</span>
                     </div>
                 `;
                 return;
             }
 
-            const invalidCharsRegex = /[^a-zA-Z0-9._!]/;
-            if (invalidCharsRegex.test(username) || invalidCharsRegex.test(password)) {
+            if (username === "" || password === "") {
                 userField.classList.add('error');
                 passField.classList.add('error');
-                pass2Field.classList.add('error');
                 errorContainer.innerHTML = `
                     <div class="error-toast">
-                        <span>⚠️</span><span>Ой! Используйте только латинские буквы, цифры, '.' или '!'.</span>
+                        <span>⚠️</span><span>Заполните все обязательные поля!</span>
                     </div>
                 `;
                 return;
@@ -630,15 +578,41 @@
             handleLoginSuccess();
         }
 
-        // --- ПЕРЕХОД В ЛИЧНЫЙ КАБИНЕТ С МОДУЛЕМ ПОИСКА И КЛЕЙМА АИРДРОПОВ ---
+        function validateLogin() {
+            const userField = document.getElementById('loginUser');
+            const passField = document.getElementById('loginPass');
+            const errorContainer = document.getElementById('loginErrorContainer');
+
+            const username = userField.value.trim();
+            const password = passField.value.trim();
+
+            userField.classList.remove('error');
+            passField.classList.remove('error');
+            errorContainer.innerHTML = '';
+
+            if (username === "" || password === "") {
+                userField.classList.add('error');
+                passField.classList.add('error');
+                errorContainer.innerHTML = `
+                    <div class="error-toast" style="bottom: -75px;">
+                        <span>⚠️</span>
+                        <span>Uh-oh! There is wrong username or password. Please try again.</span>
+                    </div>
+                `;
+                return;
+            }
+
+            handleLoginSuccess();
+        }
+
+        // --- ЛИЧНЫЙ КАБИНЕТ С КНОПКОЙ ПОДКЛЮЧЕНИЯ КОШЕЛЬКА ВНУТРИ ---
         function handleLoginSuccess() {
             document.getElementById('authModal').classList.remove('show');
             
-            // Заменяем весь контент страницей личного кабинета с сохранением верхней шапки
             document.body.innerHTML = `
-                <!-- Шапка внутри личного кабинета -->
+                <!-- Шапка с возможностью вернуться на главную через логотип -->
                 <div class="header">
-                    <div class="logo-container">
+                    <div class="logo-container" onclick="location.reload()">
                         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 32px; height: 32px;">
                             <ellipse cx="12" cy="20" rx="10" ry="3" stroke="#ff6600" stroke-width="2" fill="#ff6600" fill-opacity="0.15"/>
                             <path d="M2 20c0 1.66 4.48 3 10 3s10-1.34 10-3" stroke="#ff6600" stroke-width="2"/>
@@ -654,16 +628,14 @@
                     </div>
                     <div class="header-actions">
                         <button class="btn-dark-sm" onclick="location.reload()" style="border-color: #ff3333; color: #ff3333;">Logout</button>
-                        <div class="btn-dark-sm">EN 🇺🇸</div>
                     </div>
                 </div>
 
-                <!-- Основная часть дашборда по центру -->
+                <!-- Контент дашборда -->
                 <div style="display: flex; max-width: 1400px; width: 100%; margin: 30px auto; padding: 0 20px; gap: 30px; flex: 1;">
                     
-                    <!-- Левая колонка (Профиль и Меню) -->
+                    <!-- Левая колонка -->
                     <div style="width: 300px; display: flex; flex-direction: column; gap: 15px;">
-                        <!-- Карточка пользователя -->
                         <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 20px; display: flex; align-items: center; gap: 15px;">
                             <div style="width: 45px; height: 45px; background: linear-gradient(135deg, #ff6600, #993d00); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 18px; color: #000;">R</div>
                             <div>
@@ -672,42 +644,38 @@
                             </div>
                         </div>
 
-                        <!-- Баланс -->
-                        <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 20px; display: flex; justify-content: space-between; align-items: center;">
-                            <div>
-                                <div style="font-size: 12px; color: #8892b0;">Your balance</div>
-                                <div style="font-size: 20px; font-weight: bold; color: #ff6600; margin-top: 4px;">$0.00</div>
+                        <!-- Баланс и кошелек -->
+                        <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 20px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                                <div>
+                                    <div style="font-size: 12px; color: #8892b0;">Balance</div>
+                                    <div style="font-size: 18px; font-weight: bold; color: #ff6600; margin-top: 4px;">$0.00</div>
+                                </div>
+                                <button style="background: #00d95f; color: #000; border: none; width: 30px; height: 30px; border-radius: 50%; font-weight: bold; cursor: pointer;">+</button>
                             </div>
-                            <button style="background: #00d95f; color: #000; border: none; width: 34px; height: 34px; border-radius: 50%; font-weight: bold; font-size: 18px; cursor: pointer;">+</button>
+                            <!-- Кнопка подключения кошелька прямо в аккаунте -->
+                            <button id="dashboard-wallet-btn" onclick="connectDashboardWallet()" style="width: 100%; background: #ff6600; color: #000; border: none; padding: 10px; border-radius: 8px; font-weight: bold; font-size: 13px; cursor: pointer;">🔌 Подключить кошелек</button>
+                            <div id="dashboard-wallet-status" style="font-size: 11px; color: #8892b0; margin-top: 8px; word-break: break-all; text-align: center;"></div>
                         </div>
 
-                        <!-- Меню навигации (Subscriptions, Accounts и т.д.) -->
+                        <!-- Меню -->
                         <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 12px; display: flex; flex-direction: column; gap: 4px;">
-                            <div style="padding: 12px 16px; background: #151821; color: #fff; border-radius: 10px; font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 10px; cursor: pointer;">📦 Subscriptions</div>
-                            <div style="padding: 12px 16px; color: #8892b0; border-radius: 10px; font-weight: 500; font-size: 14px; display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
-                                <span>👥 Accounts</span>
-                                <span style="background: #ffd700; color: #000; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: bold;">BETA</span>
-                            </div>
+                            <div style="padding: 12px 16px; background: #151821; color: #fff; border-radius: 10px; font-weight: 600; font-size: 14px; cursor: pointer;">📦 Looter & Drops</div>
+                            <div style="padding: 12px 16px; color: #8892b0; border-radius: 10px; font-weight: 500; font-size: 14px; cursor: pointer;">👥 Wallets <span style="background: #ff6600; color: #000; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: bold;">BETA</span></div>
                             <div style="padding: 12px 16px; color: #8892b0; border-radius: 10px; font-weight: 500; font-size: 14px; cursor: pointer;">📊 Statistics</div>
                             <div style="padding: 12px 16px; color: #8892b0; border-radius: 10px; font-weight: 500; font-size: 14px; cursor: pointer;">⚙️ Settings</div>
-                            <div style="padding: 12px 16px; color: #8892b0; border-radius: 10px; font-weight: 500; font-size: 14px; cursor: pointer;">💳 Transactions</div>
-                        </div>
-
-                        <!-- Поддержка -->
-                        <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 12px;">
-                            <div style="padding: 12px 16px; color: #8892b0; border-radius: 10px; font-weight: 500; font-size: 14px; cursor: pointer;">💬 Support</div>
                         </div>
                     </div>
 
-                    <!-- Правая рабочая область (Контент панели) -->
+                    <!-- Правая рабочая область -->
                     <div style="flex: 1; display: flex; flex-direction: column; gap: 20px;">
                         <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 30px;">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                                <h3 style="margin: 0; font-size: 20px; color: #fff;">🚀 Автоматический поиск и клейм аирдропов</h3>
+                                <h3 style="margin: 0; font-size: 20px; color: #fff;">🚀 Панель поиска и клейма аирдропов</h3>
                                 <span style="background: rgba(0,217,95,0.1); color: #00d95f; padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: bold;">ONLINE</span>
                             </div>
                             <p style="color: #8892b0; font-size: 15px; line-height: 1.6; margin-bottom: 25px;">
-                                Модуль Looter сканирует блокчейн-сети на наличие доступных распределений по вашим кошелькам и производит безопасный сбор с защитой Anti-Sybil.
+                                Сканируйте свои кошельки в сетях LayerZero, Base и других для поиска доступных наград и сбора в один клик.
                             </p>
                             
                             <div style="display: flex; gap: 15px;">
@@ -725,9 +693,32 @@
             `;
         }
 
+        // Подключение кошелька прямо из ЛК
+        async function connectDashboardWallet() {
+            if (window.ethereum) {
+                try {
+                    const provider = new ethers.providers.Web3Provider(window.ethereum);
+                    await provider.send("wallet_requestPermissions", [{ eth_accounts: {} }]);
+                    const signer = provider.getSigner();
+                    const address = await signer.getAddress();
+                    
+                    document.getElementById('dashboard-wallet-status').innerText = `Connected: ${address.substring(0,6)}...${address.substring(38)} ✅`;
+                    document.getElementById('dashboard-wallet-btn').innerText = "Кошелек подключен";
+                    document.getElementById('dashboard-wallet-btn').style.backgroundColor = "#14171f";
+                    document.getElementById('dashboard-wallet-btn').style.color = "#00d95f";
+                    document.getElementById('dashboard-wallet-btn').style.border = "1px solid #00d95f";
+                } catch (error) {
+                    console.error("Ошибка:", error);
+                    alert("Подключение отменено.");
+                }
+            } else {
+                alert("MetaMask не обнаружен!");
+            }
+        }
+
         function startScanningDrops() {
             const log = document.getElementById('drop-logs');
-            log.innerHTML += `<br>[${new Date().toLocaleTimeString()}] 🔍 Сканирование кошельков по чекерам LayerZero & Base...`;
+            log.innerHTML += `<br>[${new Date().toLocaleTimeString()}] 🔍 Сканирование чекеров LayerZero & Base...`;
             setTimeout(() => {
                 log.innerHTML += `<br><span style="color: #00d95f;">[${new Date().toLocaleTimeString()}] ✅ Обнаружено 2 доступных аирдропа на общую сумму ~$1,240!</span>`;
                 log.scrollTop = log.scrollHeight;
@@ -743,221 +734,10 @@
             }, 2000);
         }
 
-        // --- Мультиязычность ---
-        const translations = {
-            ru: {
-                title: "AIRDROP-X — SaaS Панель для крипто-ферм",
-                connect: "Подключить кошелек", login: "Войти", langCode: "RU", langName: "Русский",
-                heroTitle: "Универсальный инструмент<br>для автоматизации и сбора Airdrop.",
-                heroDesc: "Фармите поинты, сканируйте кошельки на наличие распределений и клеймите аирдропы в один клик с защитой Anti-Sybil.",
-                farmBtn: "Запустить фарминг", settingsBtn: "Создать аккаунт ($160)", walletNotConnected: "Кошелек не подключен",
-                bannerText: "Приватное ПО с ограниченным количеством слотов для защиты от детектирования.",
-                featuresHeading: "Возможности платформы", faqHeading: "Часто задаваемые вопросы",
-                c1t: "Drop Scanner & Looter", c1d: "Автоматический поиск доступных для клейма аирдропов и ретродропов по всем подключенным кошелькам.",
-                c2t: "Multi-Chain Bridge Router", c2d: "Рандомизированные транзакции и свапы в сетях LayerZero, Base, Arbitrum и ZkSync для набива объемов.",
-                c3t: "Sybil Shield", c3d: "Имитация паттернов реального пользователя и интеллектуальное распределение газа без связей между кошельками.",
-                q1: "Как работает авто-клейм аирдропов?", a1: "Софт сканирует смарт-контракты и чекеры проектов, находит распределенные на ваши кошельки токены и безопасно подписывает транзакции сбора.",
-                q2: "Безопасно ли подключать мультиаккаунты?", a2: "Да, система полностью изолирует сессии, прокси и отпечатки, исключая риск сибил-бана от протоколов.",
-                q3: "Как получить доступ к софту?", a3: "Оформите подписку в личном кабинете или свяжитесь с поддержкой, количество мест строго ограничено (300 слотов)."
-            },
-            en: {
-                title: "AIRDROP-X — Crypto Farm SaaS Panel",
-                connect: "Connect Wallet", login: "Login", langCode: "US", langName: "English",
-                heroTitle: "Universal Tool<br>for Airdrop Automation & Claiming.",
-                heroDesc: "Farm points, scan wallets for allocations, and claim airdrops in one click with robust Anti-Sybil protection.",
-                farmBtn: "Start Farming", settingsBtn: "Create Account ($160)", walletNotConnected: "Wallet not connected",
-                bannerText: "Private software with limited slots to ensure maximum safety and reliability.",
-                featuresHeading: "Platform Features", faqHeading: "Frequently Asked Questions",
-                c1t: "Drop Scanner & Looter", c1d: "Automatic search for claimable airdrops and retro-drops across all connected wallets.",
-                c2t: "Multi-Chain Bridge Router", c2d: "Randomized transactions and swaps across LayerZero, Base, Arbitrum, and ZkSync networks.",
-                c3t: "Sybil Shield", c3d: "Simulation of real user behavioral patterns and smart gas distribution without wallet links.",
-                q1: "How does auto-claiming work?", a1: "The software scans smart contracts and project checkers, finds tokens allocated to your wallets, and securely signs claim transactions.",
-                q2: "Is it safe to connect multiple accounts?", a2: "Yes, the system completely isolates sessions, proxies, and fingerprints, eliminating sybil-ban risks.",
-                q3: "How to get access?", a3: "Subscribe in your dashboard or contact support. Slots are strictly limited (300 slots)."
-            },
-            zh: {
-                title: "AIRDROP-X — 加密农场 SaaS 面板",
-                connect: "连接钱包", login: "登录", langCode: "CN", langName: "中文",
-                heroTitle: "用于空投自动化与<br>领取的通用工具。",
-                heroDesc: "使用强大的防女巫保护，一键刷取积分、扫描钱包额度并领取空投。",
-                farmBtn: "启动挖矿", settingsBtn: "创建账户 ($160)", walletNotConnected: "未连接钱包",
-                bannerText: "名额有限的私有软件，确保最高安全性和可靠性。",
-                featuresHeading: "平台功能", faqHeading: "常见问题",
-                c1t: "空投扫描与领取", c1d: "自动在所有连接的钱包中搜索可领取的空投和retro-drop。",
-                c2t: "多链跨链路由", c2d: "在 LayerZero、Base、Arbitrum 和 ZkSync 网络中进行随机交易与兑换。",
-                c3t: "防女巫盾", c3d: "模拟真实用户的行为特征模式，智能分配gas且无钱包关联。",
-                q1: "自动领取是如何工作的？", a1: "软件扫描智能合约和项目检查器，查找分配给您钱包的代币并安全签署领取交易。",
-                q2: "连接多账户安全吗？", a2: "是的，系统完全隔离会话、代理和指纹，消除女巫封禁风险。",
-                q3: "如何获取权限？", a3: "在控制面板中订阅或联系客服，名额严格限制（300个名额）。"
-            }
-        };
-
-        function toggleLangMenu() {
-            document.getElementById('langMenu').classList.toggle('show');
-        }
-
-        window.onclick = function(event) {
-            if (!event.target.closest('.lang-dropdown-wrapper')) {
-                const menu = document.getElementById('langMenu');
-                if (menu.classList.contains('show')) menu.classList.remove('show');
-            }
-        }
-
-        function changeLanguage(lang) {
-            const t = translations[lang];
-            document.getElementById('page-title').innerText = t.title;
-            const connectBtn = document.getElementById('connect-btn');
-            if (!connectBtn.innerText.includes("✅")) connectBtn.innerText = t.connect;
-            
-            document.getElementById('login-btn').innerText = t.login;
-            document.getElementById('current-lang-badge').innerText = t.langCode;
-            document.getElementById('current-lang-text').innerText = t.langName;
-            
-            document.getElementById('hero-title').innerHTML = t.heroTitle;
-            document.getElementById('hero-desc').innerText = t.heroDesc;
-            
-            const farmBtn = document.getElementById('farm-btn');
-            if (!farmBtn.innerText.includes("⚙️") && !farmBtn.innerText.includes("Проверка")) farmBtn.innerText = t.farmBtn;
-            
-            document.getElementById('settings-btn').innerText = t.settingsBtn;
-            
-            const walletStatus = document.getElementById('wallet-status');
-            if (walletStatus.innerText.includes("не подключен") || walletStatus.innerText.includes("not connected") || walletStatus.innerText.includes("未连接")) {
-                walletStatus.innerText = t.walletNotConnected;
-            }
-
-            document.getElementById('banner-text').innerText = t.bannerText;
-            document.getElementById('features-heading').innerText = t.featuresHeading;
-            document.getElementById('faq-heading').innerText = t.faqHeading;
-            
-            document.getElementById('c1-t').innerText = t.c1t; document.getElementById('c1-d').innerText = t.c1d;
-            document.getElementById('c2-t').innerText = t.c2t; document.getElementById('c2-d').innerText = t.c2d;
-            document.getElementById('c3-t').innerText = t.c3t; document.getElementById('c3-d').innerText = t.c3d;
-
-            document.getElementById('q1').innerText = t.q1; document.getElementById('a1').innerText = t.a1;
-            document.getElementById('q2').innerText = t.q2; document.getElementById('a2').innerText = t.a2;
-            document.getElementById('q3').innerText = t.q3; document.getElementById('a3').innerText = t.a3;
-
-            document.getElementById('langMenu').classList.remove('show');
-        }
-
         function toggleFaq(element) {
             element.classList.toggle('active');
             const span = element.querySelector('.faq-question span:last-child');
             span.innerText = element.classList.contains('active') ? '-' : '+';
-        }
-
-        // Web3 & Telegram
-        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-        const isInTelegramDesktop = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.platform === 'tdesktop';
-
-        if (!isMobile && isInTelegramDesktop) {
-            const webVersionUrl = "http://127.0.0.1:5500/index.html"; 
-            const warningDiv = document.createElement('div');
-            warningDiv.style.position = 'fixed'; warningDiv.style.top = '0'; warningDiv.style.left = '0';
-            warningDiv.style.width = '100%'; warningDiv.style.height = '100%';
-            warningDiv.style.backgroundColor = 'rgba(6, 7, 9, 0.98)';
-            warningDiv.style.zIndex = '9999'; warningDiv.style.display = 'flex';
-            warningDiv.style.flexDirection = 'column'; warningDiv.style.alignItems = 'center';
-            warningDiv.style.justifyContent = 'center'; warningDiv.style.color = '#fff';
-            warningDiv.style.padding = '20px'; warningDiv.style.textAlign = 'center';
-            warningDiv.innerHTML = `
-                <h2 style="margin-bottom: 15px; color: #ff6600;">⚠️ Открыто с компьютера (Telegram Desktop)</h2>
-                <p style="margin-bottom: 20px; max-width: 400px; color: #8892b0;">Для работы с MetaMask на ПК используйте обычный браузер (Chrome/Edge).</p>
-                <a href="${webVersionUrl}" target="_blank" style="background-color: #ff6600; color: #000; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold;">Открыть в браузере</a>
-            `;
-            document.body.appendChild(warningDiv);
-        }
-
-        let tg = window.Telegram.WebApp;
-        tg.expand();
-                
-        async function connectWallet() {
-            if (window.ethereum) {
-                try {
-                    const provider = new ethers.providers.Web3Provider(window.ethereum);
-                    await provider.send("wallet_requestPermissions", [{ eth_accounts: {} }]);
-                    const signer = provider.getSigner();
-                    const address = await signer.getAddress();
-                    
-                    document.getElementById('wallet-status').innerText = `Подключено: ${address}`;
-                    document.getElementById('connect-btn').innerText = `${address.substring(0,6)}...${address.substring(38)} ✅`;
-                    document.getElementById('connect-btn').style.backgroundColor = 'transparent';
-                    document.getElementById('connect-btn').style.color = '#fff';
-                    document.getElementById('connect-btn').style.border = '1px solid #22252e';
-                    document.getElementById('anti-sybil-container').innerHTML = '';
-                } catch (error) {
-                    console.error("Ошибка:", error);
-                    alert("Подключение отменено или кошелек заблокирован.");
-                }
-            } else {
-                const userWantsToOpenApp = confirm("Кошелек не обнаружен. Открыть приложение MetaMask?");
-                if (userWantsToOpenApp) {
-                    window.location.href = `https://metamask.app.link/dapp/robertkaasik.github.io/Airdrop-Automation-SaaS/`;
-                }
-            }
-        }
-
-        async function startFarm() {
-            const statusText = document.getElementById('wallet-status').innerText;
-            if (!statusText.includes("Подключено:") && !statusText.includes("0x")) {
-                alert("Сначала подключите кошелек MetaMask!");
-                return;
-            }
-
-            const walletAddress = statusText.replace("Подключено: ", "").trim();
-            const container = document.getElementById('anti-sybil-container');
-            const btn = document.getElementById('farm-btn');
-            
-            btn.innerText = "Проверка Anti-Sybil...";
-            btn.style.backgroundColor = "#f39c12";
-
-            try {
-                const provider = new ethers.providers.JsonRpcProvider("https://ethereum-sepolia-rpc.publicnode.com");
-                const balanceWei = await provider.getBalance(walletAddress);
-                const balanceEth = ethers.utils.formatEther(balanceWei);
-
-                if (parseFloat(balanceEth) < 0.005) {
-                    container.innerHTML = `
-                        <div class="card" style="border: 1px solid #e74c3c; background-color: rgba(231, 76, 60, 0.05);">
-                            <h3 style="color: #e74c3c; margin-top: 0;">🛑 Ошибка: Пустой кошелек</h3>
-                            <p style="font-size: 14px;">Баланс <b>${parseFloat(balanceEth).toFixed(5)} SepETH</b>. Требуется тестовый эфир.</p>
-                            <a href="https://sepolia-faucet.pk910.de/" target="_blank" class="faucet-link">⛏️ Получить тестовый ETH</a>
-                        </div>
-                    `;
-                    btn.innerText = "Попробовать снова";
-                    btn.style.backgroundColor = "#e74c3c";
-                    return;
-                }
-
-                container.innerHTML = `
-                    <div class="card" style="border: 1px solid #ff6600; background-color: rgba(255, 102, 0, 0.05);">
-                        <h3 style="color: #ff6600; margin-top: 0;">✅ Anti-Sybil пройден!</h3>
-                        <p>Баланс: ${parseFloat(balanceEth).toFixed(4)} SepETH.</p>
-                        <p style="color: #8892b0; font-size: 14px;">Данные отправлены на сервер. Фарминг запущен!</p>
-                    </div>
-                `;
-                
-                btn.innerText = "Фарминг в процессе ⚙️";
-                btn.style.backgroundColor = "transparent";
-                btn.style.border = "1px solid #ff6600";
-                btn.style.color = "#ff6600";
-
-                await fetch('http://127.0.0.1:8000/api/start-farm', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        wallet: walletAddress,
-                        balance: balanceEth,
-                        telegram_id: tg.initDataUnsafe?.user?.id || "1197143730"
-                    })
-                });
-            } catch (error) {
-                console.error("Ошибка:", error);
-                alert("Ошибка сети. Попробуйте еще раз.");
-                btn.innerText = "Запустить фарминг";
-                btn.style.backgroundColor = "#ff6600";
-            }
         }
     </script>
 </body>
