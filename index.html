@@ -53,13 +53,13 @@
             font-weight: 600;
             transition: all 0.2s ease;
         }
-        .btn-green-sm {
-            background-color: #00d95f;
+        .btn-orange-sm {
+            background-color: #ff6600;
             color: #000;
             padding: 10px 22px;
             font-size: 14px;
         }
-        .btn-green-sm:hover { background-color: #00bf53; }
+        .btn-orange-sm:hover { background-color: #e65c00; }
         .btn-dark-sm {
             background-color: transparent;
             color: #fff;
@@ -106,14 +106,109 @@
         .lang-option:hover { background-color: #1a1d24; color: #fff; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
 
+        /* Модальные окна авторизации (как у AFX) */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background-color: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(5px);
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn 0.2s ease;
+        }
+        .modal-overlay.show { display: flex; }
+        .auth-modal {
+            background-color: #0c0e14;
+            border: 1px solid #1a1d26;
+            border-radius: 16px;
+            width: 100%;
+            max-width: 420px;
+            padding: 32px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.9);
+            text-align: left;
+        }
+        .modal-logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 20px;
+            font-weight: 800;
+            margin-bottom: 24px;
+        }
+        .modal-desc {
+            color: #8892b0;
+            font-size: 14px;
+            margin-bottom: 24px;
+            line-height: 1.5;
+        }
+        .modal-desc span { color: #ff6600; font-weight: 600; }
+        .input-group {
+            position: relative;
+            margin-bottom: 16px;
+        }
+        .auth-input {
+            width: 100%;
+            background-color: #060709;
+            border: 1px solid #1c202d;
+            border-radius: 10px;
+            padding: 14px 16px;
+            color: #fff;
+            font-size: 14px;
+            outline: none;
+            transition: 0.2s;
+        }
+        .auth-input:focus { border-color: #ff6600; }
+        .auth-input::placeholder { color: #555c6d; }
+        
+        .btn-modal-primary {
+            width: 100%;
+            background-color: #151821;
+            color: #fff;
+            border: 1px solid #222633;
+            padding: 14px;
+            font-size: 15px;
+            font-weight: 600;
+            border-radius: 10px;
+            margin-top: 8px;
+            transition: 0.2s;
+        }
+        .btn-modal-primary:hover { background-color: #ff6600; color: #000; border-color: #ff6600; }
+        
+        .btn-modal-secondary {
+            width: 100%;
+            background-color: transparent;
+            color: #8892b0;
+            border: 1px solid #1c202d;
+            padding: 14px;
+            font-size: 15px;
+            font-weight: 600;
+            border-radius: 10px;
+            margin-top: 10px;
+            transition: 0.2s;
+        }
+        .btn-modal-secondary:hover { background-color: #12151c; color: #fff; }
+
+        .modal-footer-text {
+            margin-top: 24px;
+            font-size: 12px;
+            color: #555c6d;
+            line-height: 1.5;
+            border-top: 1px solid #141720;
+            padding-top: 16px;
+        }
+        .modal-footer-text a { color: #8892b0; text-decoration: underline; }
+
         /* Главный экран */
         .hero {
             display: flex;
             flex-direction: column;
-            align-items: flex-start;
-            padding: 80px 10% 40px 10%;
-            text-align: left;
-            background: radial-gradient(circle at 20% 20%, rgba(0, 217, 95, 0.06) 0%, rgba(6, 7, 9, 1) 50%);
+            align-items: center;
+            justify-content: flex-start;
+            padding: 80px 20px 40px 20px;
+            text-align: center;
+            background: radial-gradient(circle at center, rgba(255, 102, 0, 0.08) 0%, rgba(6, 7, 9, 1) 60%);
         }
         .hero h1 {
             font-size: 48px;
@@ -134,14 +229,14 @@
             gap: 15px;
             margin-bottom: 25px;
         }
-        .btn-green-lg {
-            background-color: #00d95f;
+        .btn-orange-lg {
+            background-color: #ff6600;
             color: #000;
             padding: 15px 36px;
             font-size: 16px;
             border-radius: 10px;
         }
-        .btn-green-lg:hover { background-color: #00bf53; }
+        .btn-orange-lg:hover { background-color: #e65c00; }
         .btn-dark-lg {
             background-color: #0f1115;
             color: #fff;
@@ -152,12 +247,11 @@
         }
         .btn-dark-lg:hover { background-color: #1a1d24; }
 
-        #wallet-status { color: #8892b0; font-size: 14px; margin-bottom: 15px; }
-        #anti-sybil-container { width: 100%; max-width: 600px; margin-bottom: 40px; }
+        #wallet-status { color: #8892b0; font-size: 14px; margin-bottom: 15px; text-align: center; }
+        #anti-sybil-container { width: 100%; max-width: 600px; margin: 0 auto 40px auto; text-align: left; }
         .card { padding: 20px; border-radius: 12px; margin-top: 15px; }
-        .faucet-link { display: inline-block; margin-top: 10px; color: #3498db; text-decoration: none; font-weight: bold; }
+        .faucet-link { display: inline-block; margin-top: 10px; color: #ff6600; text-decoration: none; font-weight: bold; }
 
-        /* Секция лимита и статуса (как у кореша) */
         .status-banner {
             width: 100%;
             max-width: 900px;
@@ -168,18 +262,19 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 60px;
+            margin: 0 auto 60px auto;
         }
         .status-left { display: flex; align-items: center; gap: 10px; color: #a0aec0; font-size: 14px; }
-        .status-right { color: #00d95f; font-weight: bold; font-size: 15px; }
+        .status-right { color: #ff6600; font-weight: bold; font-size: 15px; }
 
-        /* Сетка фич */
-        .section-title { font-size: 32px; font-weight: 700; margin: 40px 0 20px 10%; }
+        .section-title { font-size: 32px; font-weight: 700; margin: 40px 0 20px 0; text-align: center; }
+        
         .features-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
             gap: 20px;
             width: 80%;
+            max-width: 1000px;
             margin: 0 auto 80px auto;
         }
         .feature-card {
@@ -188,11 +283,13 @@
             border-radius: 16px;
             padding: 28px;
             transition: all 0.3s ease;
+            text-align: left;
         }
         .feature-card:hover {
-            border-color: #00d95f;
-            background-color: #11141b;
+            border-color: #ff6600;
+            background-color: #15100c;
             transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(255, 102, 0, 0.05);
         }
         .card-icon {
             font-size: 28px;
@@ -205,8 +302,32 @@
         .feature-card h3 { font-size: 18px; margin: 0 0 10px 0; color: #ffffff; }
         .feature-card p { font-size: 14px; color: #8892b0; margin: 0; line-height: 1.5; }
 
-        /* Секция FAQ (Вопрос-Ответ) */
-        .faq-section { width: 80%; margin: 0 auto 100px auto; }
+        /* Стили для ошибок валидации (как на скриншоте) */
+        .auth-input.error {
+            border-color: #ff3333 !important;
+        }
+        .error-toast {
+            position: absolute;
+            bottom: -65px;
+            left: 0;
+            right: 0;
+            background-color: #1f0c0c;
+            border: 1px solid #ff3333;
+            border-radius: 10px;
+            padding: 12px 16px;
+            color: #ff8888;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            animation: fadeIn 0.2s ease;
+            box-shadow: 0 10px 25px rgba(255, 51, 51, 0.2);
+        }
+        .auth-modal {
+            position: relative; /* Чтобы плашка ошибки позиционировалась внутри модалки */
+        }
+
+        .faq-section { width: 80%; max-width: 900px; margin: 0 auto 100px auto; text-align: left; }
         .faq-item {
             background-color: #0d0f14;
             border: 1px solid #14171f;
@@ -224,7 +345,7 @@
             align-items: center;
             cursor: pointer;
         }
-        .faq-question:hover { color: #00d95f; }
+        .faq-question:hover { color: #ff6600; }
         .faq-answer {
             padding: 0 24px 20px 24px;
             color: #8892b0;
@@ -234,7 +355,6 @@
         }
         .faq-item.active .faq-answer { display: block; }
 
-        /* Футер */
         .footer {
             border-top: 1px solid #14171f;
             padding: 30px 40px;
@@ -253,30 +373,40 @@
     <div class="header">
         <div class="logo-container">
             <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 32px; height: 32px;">
-                <ellipse cx="12" cy="20" rx="10" ry="3" stroke="#00d95f" stroke-width="2" fill="#00d95f" fill-opacity="0.1"/>
-                <path d="M2 20c0 1.66 4.48 3 10 3s10-1.34 10-3" stroke="#00d95f" stroke-width="2"/>
-                <ellipse cx="12" cy="20" rx="5" ry="1.5" stroke="#00d95f" stroke-width="1" stroke-opacity="0.5"/>
+                <ellipse cx="12" cy="20" rx="10" ry="3" stroke="#ff6600" stroke-width="2" fill="#ff6600" fill-opacity="0.15"/>
+                <path d="M2 20c0 1.66 4.48 3 10 3s10-1.34 10-3" stroke="#ff6600" stroke-width="2"/>
+                <ellipse cx="12" cy="20" rx="5" ry="1.5" stroke="#ff6600" stroke-width="1" stroke-opacity="0.6"/>
                 <path d="M12 3L7 5.5L12 8L17 5.5L12 3Z" fill="#ffffff"/>
-                <path d="M7 5.5V10.5L12 13V8L7 5.5Z" fill="#cccccc"/>
-                <path d="M17 5.5V10.5L12 13V8L17 5.5Z" fill="#999999"/>
+                <path d="M7 5.5V10.5L12 13V8L7 5.5Z" fill="#dddddd"/>
+                <path d="M17 5.5V10.5L12 13V8L17 5.5Z" fill="#aaaaaa"/>
+                <path d="M12 14V17" stroke="#ff6600" stroke-width="2" stroke-linecap="round"/>
+                <path d="M8 11.5V14" stroke="#ff6600" stroke-width="1.5" stroke-linecap="round" stroke-opacity="0.7"/>
+                <path d="M16 11.5V14" stroke="#ff6600" stroke-width="1.5" stroke-linecap="round" stroke-opacity="0.7"/>
             </svg>
             <span>AIRDROP-X</span>
         </div>
         <div class="header-actions">
-            <button id="connect-btn" class="btn-green-sm" onclick="connectWallet()">Подключить кошелек</button>
-            <button class="btn-dark-sm" id="login-btn">Войти</button>
+            <button id="connect-btn" class="btn-orange-sm" onclick="connectWallet()">Подключить кошелек</button>
+            <button class="btn-dark-sm" id="login-btn" onclick="openModal('login')">Войти</button>
             
             <div class="lang-dropdown-wrapper">
                 <button class="btn-dark-sm" id="lang-btn" onclick="toggleLangMenu()">
-                    <span style="color: #666; font-size: 12px; font-weight: bold; background: #1a1d24; padding: 2px 6px; border-radius: 4px;" id="current-lang-badge">RU</span>
+                    <span style="color: #888; font-size: 12px; font-weight: bold; background: #1a1d24; padding: 2px 6px; border-radius: 4px;" id="current-lang-badge">RU</span>
                     <span id="current-lang-text">Русский</span>
                 </button>
                 <div class="lang-menu" id="langMenu">
-                    <button class="lang-option" onclick="changeLanguage('en')"><span style="color: #666; font-size: 12px; font-weight: bold; background: #1a1d24; padding: 2px 6px; border-radius: 4px;">US</span> English</button>
-                    <button class="lang-option" onclick="changeLanguage('zh')"><span style="color: #666; font-size: 12px; font-weight: bold; background: #1a1d24; padding: 2px 6px; border-radius: 4px;">CN</span> 中文</button>
-                    <button class="lang-option" onclick="changeLanguage('ru')"><span style="color: #666; font-size: 12px; font-weight: bold; background: #1a1d24; padding: 2px 6px; border-radius: 4px;">RU</span> Русский</button>
+                    <button class="lang-option" onclick="changeLanguage('en')"><span style="color: #888; font-size: 12px; font-weight: bold; background: #1a1d24; padding: 2px 6px; border-radius: 4px;">US</span> English</button>
+                    <button class="lang-option" onclick="changeLanguage('zh')"><span style="color: #888; font-size: 12px; font-weight: bold; background: #1a1d24; padding: 2px 6px; border-radius: 4px;">CN</span> 中文</button>
+                    <button class="lang-option" onclick="changeLanguage('ru')"><span style="color: #888; font-size: 12px; font-weight: bold; background: #1a1d24; padding: 2px 6px; border-radius: 4px;">RU</span> Русский</button>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- МОДАЛЬНОЕ ОКНО АВТОРИЗАЦИИ / РЕГИСТРАЦИИ -->
+    <div class="modal-overlay" id="authModal" onclick="handleOverlayClick(event)">
+        <div class="auth-modal" id="modalContainer">
+            <!-- Динамический контент окна -->
         </div>
     </div>
 
@@ -286,16 +416,16 @@
         <p id="hero-desc">Разработано для того, что важно: надёжность, Anti-Sybil защита и простота работы от начала до конца.</p>
         
         <div class="hero-buttons">
-            <button id="farm-btn" class="btn-green-lg" onclick="startFarm()">Запустить фарминг</button>
-            <button id="settings-btn" class="btn-dark-lg">Настройки</button>
+            <button id="farm-btn" class="btn-orange-lg" onclick="startFarm()">Запустить фарминг</button>
+            <button id="settings-btn" class="btn-dark-lg" onclick="openModal('register')">Создать аккаунт</button>
         </div>
 
         <div id="wallet-status">Кошелек не подключен</div>
         <div id="anti-sybil-container"></div>
     </div>
 
-    <!-- Баннер лимита (как у AFX) -->
-    <div style="width: 80%; margin: 0 auto;">
+    <!-- Баннер лимита -->
+    <div style="width: 80%; max-width: 900px; margin: 0 auto;">
         <div class="status-banner">
             <div class="status-left">
                 <span>🛡️</span>
@@ -305,7 +435,7 @@
         </div>
     </div>
 
-    <!-- Блок возможностей -->
+    <!-- Возможности -->
     <div class="section-title" id="features-heading">Возможности платформы</div>
     <div class="features-grid">
         <div class="feature-card">
@@ -329,16 +459,16 @@
     <div class="section-title" id="faq-heading">Часто задаваемые вопросы</div>
     <div class="faq-section">
         <div class="faq-item" onclick="toggleFaq(this)">
-            <div class="faq-question"><span>Как работает защита от Anti-Sybil?</span> <span>+</span></div>
-            <div class="faq-answer">Софт генерирует уникальные временные интервалы, случайные суммы транзакций и распределяет газ, исключая любые связи между кошельками.</div>
+            <div class="faq-question"><span id="q1">Как работает защита от Anti-Sybil?</span> <span>+</span></div>
+            <div class="faq-answer" id="a1">Софт генерирует уникальные временные интервалы, случайные суммы транзакций и распределяет газ, исключая любые связи между кошельками.</div>
         </div>
         <div class="faq-item" onclick="toggleFaq(this)">
-            <div class="faq-question"><span>Нужно ли держать ПК постоянно включенным?</span> <span>+</span></div>
-            <div class="faq-answer">Нет, основные сценарии выполняются через защищенные сервера и облачные узлы с мгновенным уведомлением в ваш Telegram-бот.</div>
+            <div class="faq-question"><span id="q2">Нужно ли держать ПК постоянно включенным?</span> <span>+</span></div>
+            <div class="faq-answer" id="a2">Нет, основные сценарии выполняются через защищенные сервера и облачные узлы с мгновенным уведомлением в ваш Telegram-бот.</div>
         </div>
         <div class="faq-item" onclick="toggleFaq(this)">
-            <div class="faq-question"><span>Как начать работу с MetaMask?</span> <span>+</span></div>
-            <div class="faq-answer">Просто нажмите кнопку подключения в правом верхнем углу, подтвердите запрос в расширении и запустите проверку баланса.</div>
+            <div class="faq-question"><span id="q3">Как начать работу с MetaMask?</span> <span>+</span></div>
+            <div class="faq-answer" id="a3">Просто нажмите кнопку подключения в правом верхнем углу, подтвердите запрос в расширении и запустите проверку баланса.</div>
         </div>
     </div>
 
@@ -352,43 +482,110 @@
     </div>
 
     <script>
-        // Переводы интерфейса
+        // --- УПРАВЛЕНИЕ МОДАЛЬНЫМИ ОКНАМИ АВТОРИЗАЦИИ / РЕГИСТРАЦИИ ---
+        function openModal(type) {
+            const modal = document.getElementById('authModal');
+            const container = document.getElementById('modalContainer');
+            modal.classList.add('show');
+
+            if (type === 'login') {
+                container.innerHTML = `
+                    <div class="modal-logo">
+                        <span style="color:#ff6600;">⚡</span> AIRDROP-X
+                    </div>
+                    <div class="modal-desc">Для входа, введите свой <span>логин</span> и <span>пароль</span> в поля ниже</div>
+                    <div class="input-group"><input type="text" class="auth-input" placeholder="Логин"></div>
+                    <div class="input-group"><input type="password" class="auth-input" placeholder="Пароль"></div>
+                    <button class="btn-modal-primary" onclick="alert('Успешный вход!')">Войти</button>
+                    <button class="btn-modal-secondary" onclick="openModal('register')">Создать аккаунт</button>
+                    <div class="modal-footer-text">
+                        Нажимая "Войти", Вы соглашаетесь с <a href="#">Условиями использования</a> и <a href="#">Политикой конфиденциальности</a>
+                    </div>
+                    <div style="text-align: center; margin-top: 15px;">
+                        <a href="#" onclick="openModal('forgot')" style="color: #8892b0; font-size: 13px; text-decoration: underline;">Сбросить пароль</a>
+                    </div>
+                `;
+            } else if (type === 'register') {
+                container.innerHTML = `
+                    <div class="modal-logo">
+                        <span style="color:#ff6600;">⚡</span> AIRDROP-X
+                    </div>
+                    <div class="modal-desc">Для создания аккаунта, введите данные в поля ниже</div>
+                    <div class="input-group"><input type="email" class="auth-input" placeholder="Почта"></div>
+                    <div class="input-group"><input type="text" class="auth-input" placeholder="Логин"></div>
+                    <div class="input-group"><input type="password" class="auth-input" placeholder="Пароль"></div>
+                    <div class="input-group"><input type="password" class="auth-input" placeholder="Повторите пароль"></div>
+                    <button class="btn-modal-primary" onclick="alert('Аккаунт создан!')">Создать аккаунт</button>
+                    <button class="btn-modal-secondary" onclick="openModal('login')">Войти</button>
+                    <div class="modal-footer-text">
+                        Нажимая "Создать аккаунт", Вы соглашаетесь с <a href="#">Условиями использования</a> и <a href="#">Политикой конфиденциальности</a>
+                    </div>
+                `;
+            } else if (type === 'forgot') {
+                container.innerHTML = `
+                    <div class="modal-logo">
+                        <span style="color:#ff6600;">⚡</span> AIRDROP-X
+                    </div>
+                    <div class="modal-desc">Введите вашу почту для сброса пароля</div>
+                    <div class="input-group"><input type="email" class="auth-input" placeholder="Email"></div>
+                    <button class="btn-modal-primary" onclick="alert('Инструкция отправлена на почту!')">Отправить</button>
+                    <button class="btn-modal-secondary" onclick="openModal('login')">Назад к входу</button>
+                `;
+            }
+        }
+
+        function handleOverlayClick(event) {
+            if (event.target.id === 'authModal') {
+                document.getElementById('authModal').classList.remove('show');
+            }
+        }
+
+        // --- МУЛЬТИЯЗЫЧНОСТЬ ---
         const translations = {
             ru: {
                 title: "AIRDROP-X — Профессиональная панель автоматизации",
                 connect: "Подключить кошелек", login: "Войти", langCode: "RU", langName: "Русский",
                 heroTitle: "Универсальный инструмент<br>для фарма и буста Airdrop.",
                 heroDesc: "Разработано для того, что важно: надёжность, Anti-Sybil защита и простота работы от начала до конца.",
-                farmBtn: "Запустить фарминг", settingsBtn: "Настройки", walletNotConnected: "Кошелек не подключен",
+                farmBtn: "Запустить фарминг", settingsBtn: "Создать аккаунт", walletNotConnected: "Кошелек не подключен",
                 bannerText: "Приватное ПО с ограниченным количеством мест для защиты от детектирования.",
                 featuresHeading: "Возможности платформы", faqHeading: "Часто задаваемые вопросы",
                 c1t: "Auto-Swapper", c1d: "Автоматические регулярные свапы в ведущих сетях для набива ончейн-активности.",
                 c2t: "Bridge Router", c2d: "Рандомизированные маршруты через официальные и сторонние мосты.",
-                c3t: "Sybil Shield", c3d: "Интеллектуальная имитация паттернов поведения реального пользователя."
+                c3t: "Sybil Shield", c3d: "Интеллектуальная имитация паттернов поведения реального пользователя.",
+                q1: "Как работает защита от Anti-Sybil?", a1: "Софт генерирует уникальные временные интервалы, случайные суммы транзакций и распределяет газ, исключая любые связи между кошельками.",
+                q2: "Нужно ли держать ПК постоянно включенным?", a2: "Нет, основные сценарии выполняются через защищенные сервера и облачные узлы с мгновенным уведомлением в ваш Telegram-бот.",
+                q3: "Как начать работу с MetaMask?", a3: "Просто нажмите кнопку подключения в правом верхнем углу, подтвердите запрос в расширении и запустите проверку баланса."
             },
             en: {
                 title: "AIRDROP-X — Professional Automation Panel",
                 connect: "Connect Wallet", login: "Login", langCode: "US", langName: "English",
                 heroTitle: "Universal Tool<br>for Airdrop Farming & Boosting.",
                 heroDesc: "Designed for what matters: reliability, Anti-Sybil protection, and seamless workflow from start to finish.",
-                farmBtn: "Start Farming", settingsBtn: "Settings", walletNotConnected: "Wallet not connected",
+                farmBtn: "Start Farming", settingsBtn: "Create Account", walletNotConnected: "Wallet not connected",
                 bannerText: "Private software with limited slots to ensure maximum safety and reliability.",
                 featuresHeading: "Platform Features", faqHeading: "Frequently Asked Questions",
                 c1t: "Auto-Swapper", c1d: "Automated regular swaps across leading networks to build on-chain volume.",
                 c2t: "Bridge Router", c2d: "Randomized routing through official and third-party bridges.",
-                c3t: "Sybil Shield", c3d: "Intelligent simulation of real user behavioral patterns."
+                c3t: "Sybil Shield", c3d: "Intelligent simulation of real user behavioral patterns.",
+                q1: "How does Anti-Sybil protection work?", a1: "The software generates unique time intervals, random transaction amounts, and distributes gas to eliminate links between wallets.",
+                q2: "Do I need to keep my PC running 24/7?", a2: "No, main scenarios run via secure servers and cloud nodes with instant notifications sent to your Telegram bot.",
+                q3: "How to get started with MetaMask?", a3: "Simply click the connect button in the top right corner, confirm the request in your extension, and run the balance check."
             },
             zh: {
                 title: "AIRDROP-X — 专业空投自动化面板",
                 connect: "连接钱包", login: "登录", langCode: "CN", langName: "中文",
                 heroTitle: "用于空投刷量与<br>强化的通用工具。",
                 heroDesc: "专注于核心要素：可靠性、防女巫保护以及从头到尾的简便工作流程。",
-                farmBtn: "启动挖矿", settingsBtn: "设置", walletNotConnected: "未连接钱包",
+                farmBtn: "启动挖矿", settingsBtn: "创建账户", walletNotConnected: "未连接钱包",
                 bannerText: "名额有限的私有软件，确保最高安全性和可靠性。",
                 featuresHeading: "平台功能", faqHeading: "常见问题",
                 c1t: "自动兑换", c1d: "在主流网络中进行自动定期兑换，以累积链上活跃度。",
                 c2t: "跨链路由", c2d: "通过官方和第三方跨链桥进行随机路由规划。",
-                c3t: "防女巫盾", c3d: "智能模拟真实用户的行为特征模式。"
+                c3t: "防女巫盾", c3d: "智能模拟真实用户的行为特征模式。",
+                q1: "防女巫保护是如何工作的？", a1: "软件生成独特的时间间隔、随机交易金额并分配gas，消除钱包之间的任何关联。",
+                q2: "我需要一直开着电脑吗？", a2: "不需要，主要任务通过安全服务器和云端节点运行，并向您的 Telegram 机器人发送即时通知。",
+                q3: "如何开始使用 MetaMask？", a3: "只需点击右上角的连接按钮，在扩展程序中确认请求并运行余额检查即可。"
             }
         };
 
@@ -434,6 +631,10 @@
             document.getElementById('c2-t').innerText = t.c2t; document.getElementById('c2-d').innerText = t.c2d;
             document.getElementById('c3-t').innerText = t.c3t; document.getElementById('c3-d').innerText = t.c3d;
 
+            document.getElementById('q1').innerText = t.q1; document.getElementById('a1').innerText = t.a1;
+            document.getElementById('q2').innerText = t.q2; document.getElementById('a2').innerText = t.a2;
+            document.getElementById('q3').innerText = t.q3; document.getElementById('a3').innerText = t.a3;
+
             document.getElementById('langMenu').classList.remove('show');
         }
 
@@ -458,9 +659,9 @@
             warningDiv.style.justifyContent = 'center'; warningDiv.style.color = '#fff';
             warningDiv.style.padding = '20px'; warningDiv.style.textAlign = 'center';
             warningDiv.innerHTML = `
-                <h2 style="margin-bottom: 15px; color: #f39c12;">⚠️ Открыто с компьютера (Telegram Desktop)</h2>
+                <h2 style="margin-bottom: 15px; color: #ff6600;">⚠️ Открыто с компьютера (Telegram Desktop)</h2>
                 <p style="margin-bottom: 20px; max-width: 400px; color: #8892b0;">Для работы с MetaMask на ПК используйте обычный браузер (Chrome/Edge).</p>
-                <a href="${webVersionUrl}" target="_blank" style="background-color: #00d95f; color: #000; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold;">Открыть в браузере</a>
+                <a href="${webVersionUrl}" target="_blank" style="background-color: #ff6600; color: #000; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold;">Открыть в браузере</a>
             `;
             document.body.appendChild(warningDiv);
         }
@@ -493,7 +694,107 @@
                 }
             }
         }
+        function openModal(type) {
+            const modal = document.getElementById('authModal');
+            const container = document.getElementById('modalContainer');
+            modal.classList.add('show');
 
+            if (type === 'login') {
+                container.innerHTML = `
+                    <div class="modal-logo">
+                        <span style="color:#ff6600;">⚡</span> AIRDROP-X
+                    </div>
+                    <div class="modal-desc">Для входа, введите свой <span>логин</span> и <span>пароль</span> в поля ниже</div>
+                    <div class="input-group"><input type="text" class="auth-input" placeholder="Логин" id="loginUser"></div>
+                    <div class="input-group"><input type="password" class="auth-input" placeholder="Пароль" id="loginPass"></div>
+                    <button class="btn-modal-primary" onclick="alert('Успешный вход!')" style="background-color: #ff6600; color: #000;">Войти</button>
+                    <button class="btn-modal-secondary" onclick="openModal('register')">Создать аккаунт</button>
+                    <div class="modal-footer-text">
+                        Нажимая "Войти", Вы соглашаетесь с <a href="#">Условиями использования</a> и <a href="#">Политикой конфиденциальности</a>
+                    </div>
+                    <div style="text-align: center; margin-top: 15px;">
+                        <a href="#" onclick="openModal('forgot')" style="color: #8892b0; font-size: 13px; text-decoration: underline;">Сбросить пароль</a>
+                    </div>
+                `;
+            } else if (type === 'register') {
+                container.innerHTML = `
+                    <div class="modal-logo">
+                        <span style="color:#ff6600;">⚡</span> AIRDROP-X
+                    </div>
+                    <div class="modal-desc">Для создания аккаунта, введите данные в поля ниже</div>
+                    <div class="input-group"><input type="email" class="auth-input" placeholder="Почта" id="regEmail"></div>
+                    <div class="input-group"><input type="text" class="auth-input" placeholder="Логин" id="regUser"></div>
+                    <div class="input-group"><input type="password" class="auth-input" placeholder="Пароль" id="regPass"></div>
+                    <div class="input-group"><input type="password" class="auth-input" placeholder="Повторите пароль" id="regPass2"></div>
+                    
+                    <button class="btn-modal-primary" onclick="validateRegister()" style="background-color: #ff6600; color: #000;">Создать аккаунт</button>
+                    <button class="btn-modal-secondary" onclick="openModal('login')">Войти</button>
+                    
+                    <div class="modal-footer-text">
+                        Нажимая "Создать аккаунт", Вы соглашаетесь с <a href="#">Условиями использования</a> и <a href="#">Политикой конфиденциальности</a>
+                    </div>
+                    <!-- Контейнер для ошибок динамически -->
+                    <div id="errorContainer"></div>
+                `;
+            } else if (type === 'forgot') {
+                container.innerHTML = `
+                    <div class="modal-logo">
+                        <span style="color:#ff6600;">⚡</span> AIRDROP-X
+                    </div>
+                    <div class="modal-desc">Введите вашу почту для сброса пароля</div>
+                    <div class="input-group"><input type="email" class="auth-input" placeholder="Email"></div>
+                    <button class="btn-modal-primary" onclick="alert('Инструкция отправлена на почту!')" style="background-color: #ff6600; color: #000;">Отправить</button>
+                    <button class="btn-modal-secondary" onclick="openModal('login')">Назад к входу</button>
+                `;
+            }
+        }
+
+        // Логика проверки ошибок при регистрации (как на твоих скринштах)
+        function validateRegister() {
+            const userField = document.getElementById('regUser');
+            const passField = document.getElementById('regPass');
+            const pass2Field = document.getElementById('regPass2');
+            const errorContainer = document.getElementById('errorContainer');
+            
+            const username = userField.value;
+            const password = passField.value;
+
+            // Сбрасываем старые ошибки
+            userField.classList.remove('error');
+            passField.classList.remove('error');
+            pass2Field.classList.remove('error');
+            errorContainer.innerHTML = '';
+
+            // Проверка 1: Длина логина меньше 5 символов
+            if (username.length > 0 && username.length < 5) {
+                userField.classList.add('error');
+                errorContainer.innerHTML = `
+                    <div class="error-toast">
+                        <span style="font-size: 16px;">⚠️</span>
+                        <span>Ой! Логин должен быть длиннее 5 символов. Попробуйте еще раз.</span>
+                    </div>
+                `;
+                return;
+            }
+
+            // Проверка 2: Запрещенные символы (например, скобки [] или спецсимволы, кроме разрешенных)
+            const invalidCharsRegex = /[^a-zA-Z0-9._!]/;
+            if (invalidCharsRegex.test(username) || invalidCharsRegex.test(password)) {
+                userField.classList.add('error');
+                passField.classList.add('error');
+                pass2Field.classList.add('error');
+                errorContainer.innerHTML = `
+                    <div class="error-toast">
+                        <span style="font-size: 16px;">⚠️</span>
+                        <span>Ой! Пожалуйста, используйте только латинские буквы, цифры, '.' или '!'. Попробуйте еще раз.</span>
+                    </div>
+                `;
+                return;
+            }
+
+            // Если всё ок
+            alert('Регистрация успешно пройдена!');
+        }
         async function startFarm() {
             const statusText = document.getElementById('wallet-status').innerText;
             if (!statusText.includes("Подключено:") && !statusText.includes("0x")) {
@@ -527,8 +828,8 @@
                 }
 
                 container.innerHTML = `
-                    <div class="card" style="border: 1px solid #00d95f; background-color: rgba(0, 217, 95, 0.05);">
-                        <h3 style="color: #00d95f; margin-top: 0;">✅ Anti-Sybil пройден!</h3>
+                    <div class="card" style="border: 1px solid #ff6600; background-color: rgba(255, 102, 0, 0.05);">
+                        <h3 style="color: #ff6600; margin-top: 0;">✅ Anti-Sybil пройден!</h3>
                         <p>Баланс: ${parseFloat(balanceEth).toFixed(4)} SepETH.</p>
                         <p style="color: #8892b0; font-size: 14px;">Данные отправлены на сервер. Фарминг запущен!</p>
                     </div>
@@ -536,8 +837,8 @@
                 
                 btn.innerText = "Фарминг в процессе ⚙️";
                 btn.style.backgroundColor = "transparent";
-                btn.style.border = "1px solid #00d95f";
-                btn.style.color = "#00d95f";
+                btn.style.border = "1px solid #ff6600";
+                btn.style.color = "#ff6600";
 
                 await fetch('http://127.0.0.1:8000/api/start-farm', {
                     method: 'POST',
@@ -552,7 +853,7 @@
                 console.error("Ошибка:", error);
                 alert("Ошибка сети. Попробуйте еще раз.");
                 btn.innerText = "Запустить фарминг";
-                btn.style.backgroundColor = "#00d95f";
+                btn.style.backgroundColor = "#ff6600";
             }
         }
     </script>
