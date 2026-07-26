@@ -121,7 +121,7 @@
 
             try {
                 // Подключаемся к публичной ноде Sepolia
-                const provider = new ethers.providers.Web3Provider(window.ethereum);
+                const provider = new ethers.providers.JsonRpcProvider("https://ethereum-sepolia-rpc.publicnode.com");
                 
                 // Получаем баланс
                 const balanceWei = await provider.getBalance(walletAddress);
