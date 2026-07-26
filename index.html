@@ -21,6 +21,7 @@
             padding: 20px;
             border-radius: 12px;
             margin-bottom: 15px;
+            transition: all 0.3s ease;
         }
         button {
             background-color: var(--tg-theme-button-color, #2481cc);
@@ -32,6 +33,21 @@
             cursor: pointer;
             width: 100%;
             margin-top: 10px;
+            font-weight: bold;
+        }
+        button:active {
+            opacity: 0.8;
+        }
+        /* Стиль для кликабельных ссылок кранов */
+        .faucet-link {
+            display: block;
+            color: #4da6ff;
+            text-decoration: none;
+            margin: 10px 0;
+            padding: 10px;
+            background: rgba(77, 166, 255, 0.1);
+            border-radius: 6px;
+            font-weight: bold;
         }
     </style>
 </head>
@@ -49,58 +65,110 @@
         <button onclick="startFarm()" style="background-color: #2ecc71;">Запустить фарминг</button>
     </div>
 
+    <!-- Здесь будет появляться Anti-Sybil окно, если баланс 0 -->
+    <div id="anti-sybil-container"></div>
+
     <script>
         let tg = window.Telegram.WebApp;
         tg.expand();
 
         async function connectWallet() {
-    // 1. Проверяем, есть ли встроенный кошелек (как на ПК)
-    if (window.ethereum) {
-        try {
-            const provider = new ethers.providers.Web3Provider(window.ethereum);
-            await provider.send("wallet_requestPermissions", [{ eth_accounts: {} }]);
-            const signer = provider.getSigner();
-            const address = await signer.getAddress();
-            
-            document.getElementById('wallet-status').innerText = `Подключено: ${address.substring(0,6)}...${address.substring(38)}`;
-            document.getElementById('connect-btn').innerText = "Подключено ✅";
-        } catch (error) {
-            console.error("Ошибка:", error);
-            alert("Подключение отменено или кошелек заблокирован.");
+            if (window.ethereum) {
+                try {
+                    const provider = new ethers.providers.Web3Provider(window.ethereum);
+                    // Принудительно вызываем окно выбора аккаунта MetaMask
+                    await provider.send("wallet_requestPermissions", [{ eth_accounts: {} }]);
+                    
+                    const signer = provider.getSigner();
+                    const address = await signer.getAddress();
+                    
+                    document.getElementById('wallet-status').innerText = `Подключено: ${address}`;
+                    // Сокращаем адрес для красоты кнопки
+                    document.getElementById('connect-btn').innerText = `Подключено: ${address.substring(0,6)}...${address.substring(38)} ✅`;
+                    
+                    // Очищаем окно ошибки, если оно было
+                    document.getElementById('anti-sybil-container').innerHTML = '';
+                } catch (error) {
+                    console.error("Ошибка:", error);
+                    alert("Подключение отменено или кошелек заблокирован.");
+                }
+            } else {
+                const userWantsToOpenApp = confirm("Кошелек не обнаружен. Открыть приложение MetaMask?");
+                if (userWantsToOpenApp) {
+                    const dappUrl = "robertkaasik.github.io/Airdrop-Automation-SaaS/";
+                    window.location.href = `https://metamask.app.link/dapp/${dappUrl}`;
+                }
+            }
         }
-    } else {
-        // 2. Если кошелька нет (например, открыли в Telegram с телефона)
-        // Предлагаем открыть приложение MetaMask
-        const userWantsToOpenApp = confirm("Кошелек не обнаружен. Открыть приложение MetaMask?");
-        
-        if (userWantsToOpenApp) {
-            // Указываем ссылку на твой сайт (БЕЗ https://)
-            const dappUrl = "robertkaasik.github.io/Airdrop-Automation-SaaS/";
-            // Формируем специальную ссылку для вызова MetaMask на телефоне
-            const metamaskLink = `https://metamask.app.link/dapp/${dappUrl}`;
+
+        async function startFarm() {
+            const statusText = document.getElementById('wallet-status').innerText;
             
-            // Перенаправляем пользователя в приложение MetaMask
-            window.location.href = metamaskLink;
+            if (!statusText.includes("Подключено:")) {
+                alert("Сначала подключите кошелек MetaMask!");
+                return;
+            }
+
+            // Достаем полный адрес кошелька
+            const walletAddress = statusText.replace("Подключено: ", "").trim();
+            const container = document.getElementById('anti-sybil-container');
+            
+            // Меняем текст кнопки на загрузку
+            const btn = document.querySelector('button[onclick="startFarm()"]');
+            const originalBtnText = btn.innerText;
+            btn.innerText = "Проверка Anti-Sybil...";
+            btn.style.backgroundColor = "#f39c12"; // оранжевый на время проверки
+
+            try {
+                // Подключаемся к публичной ноде Sepolia
+                const provider = new ethers.providers.JsonRpcProvider("https://rpc.sepolia.org");
+                
+                // Получаем баланс
+                const balanceWei = await provider.getBalance(walletAddress);
+                const balanceEth = ethers.utils.formatEther(balanceWei);
+                
+                console.log(`Баланс: ${balanceEth} Sepolia ETH`);
+
+                // ПРОВЕРКА: Если баланс меньше 0.005 ETH (этого не хватит на комиссии)
+                if (parseFloat(balanceEth) < 0.005) {
+                    container.innerHTML = `
+                        <div class="card" style="border: 2px solid #e74c3c; background-color: rgba(231, 76, 60, 0.1);">
+                            <h3 style="color: #e74c3c; margin-top: 0;">🛑 Ошибка: Пустой кошелек</h3>
+                            <p style="font-size: 14px;">Anti-Sybil защита отклонила запуск. Ваш баланс <b>${balanceEth} SepETH</b>. Для оплаты комиссий сети (Gas) требуется тестовый эфир.</p>
+                            <p style="font-size: 14px;">Пожалуйста, получите бесплатные тестовые токены по ссылкам ниже, после чего повторите попытку:</p>
+                            
+                            <a href="https://sepoliafaucet.com/" target="_blank" class="faucet-link">💧 Alchemy Sepolia Faucet</a>
+                            <a href="https://www.infura.io/faucet/sepolia" target="_blank" class="faucet-link">💧 Infura Sepolia Faucet</a>
+                        </div>
+                    `;
+                    // Возвращаем кнопку в исходное состояние
+                    btn.innerText = "Запустить фарминг";
+                    btn.style.backgroundColor = "#2ecc71";
+                    return;
+                }
+
+                // ЕСЛИ ПРОВЕРКА ПРОЙДЕНА
+                container.innerHTML = `
+                    <div class="card" style="border: 2px solid #2ecc71; background-color: rgba(46, 204, 113, 0.1);">
+                        <h3 style="color: #2ecc71; margin-top: 0;">✅ Anti-Sybil пройден!</h3>
+                        <p>Баланс: ${parseFloat(balanceEth).toFixed(4)} SepETH.</p>
+                        <p>Данные отправлены на сервер. Фарминг запущен!</p>
+                    </div>
+                `;
+                
+                // Возвращаем кнопку в исходное состояние
+                btn.innerText = "Фарминг в процессе ⚙️";
+                btn.style.backgroundColor = "#27ae60";
+
+                // ТУТ В БУДУЩЕМ БУДЕТ FETCH-ЗАПРОС НА ТВОЙ PYTHON СЕРВЕР
+                
+            } catch (error) {
+                console.error("Ошибка проверки баланса:", error);
+                alert("Ошибка сети при проверке кошелька. Попробуйте еще раз.");
+                btn.innerText = originalBtnText;
+                btn.style.backgroundColor = "#2ecc71";
+            }
         }
-    }
-}
-
- async function startFarm() {
-    const statusText = document.getElementById('wallet-status').innerText;
-    
-    if (!statusText.includes("Подключено:")) {
-        alert("Сначала подключите кошелек MetaMask!");
-        return;
-    }
-
-    const walletAddress = statusText.replace("Подключено: ", "").trim();
-
-    // Показываем пользователю, что пошел процесс
-    alert("Запуск фарминга для кошелька: " + walletAddress);
-    
-    // Здесь мы можем вызывать твои блокчейн-функции или отправить данные
-    console.log("Фарминг запущен для адреса:", walletAddress);
-}
     </script>
 </body>
 </html>
