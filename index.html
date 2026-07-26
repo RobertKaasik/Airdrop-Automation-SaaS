@@ -3,15 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Smart Anti-Sybil Panel</title>
+    <title id="page-title">AIRDROP-X — Панель управления фармом</title>
     <!-- Официальный скрипт Telegram Mini Apps -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <!-- Подключаем ethers.js -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
     <style>
-        /* Скопированный премиум-стиль AFX */
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background-color: #0a0a0a;
             color: #ffffff;
             margin: 0;
@@ -20,64 +19,6 @@
             flex-direction: column;
             min-height: 100vh;
         }
-        /* Сетка карточек в стиле AFX */
-        .features-grid {
-            display: flex;
-            gap: 20px;
-            margin-top: 50px;
-            width: 100%;
-            max-width: 800px;
-            flex-wrap: wrap;
-        }
-
-        .feature-card {
-            background-color: #0d0d0d;
-            border: 1px solid #1a1a1a;
-            border-radius: 16px;
-            padding: 24px;
-            flex: 1;
-            min-width: 220px;
-            transition: all 0.3s ease;
-            cursor: pointer;
-            position: relative;
-            overflow: hidden;
-        }
-
-        /* Эффект свечения при наведении, как в дорогих софтах */
-        .feature-card:hover {
-            border-color: #00d95f;
-            background-color: #121513;
-            transform: translateY(-5px);
-            box-shadow: 0 10px 30px rgba(0, 217, 95, 0.05);
-        }
-
-        .card-icon {
-            font-size: 28px;
-            margin-bottom: 16px;
-            display: inline-block;
-            background: #1a1a1a;
-            padding: 10px;
-            border-radius: 12px;
-        }
-
-        .feature-card:hover .card-icon {
-            background: rgba(0, 217, 95, 0.1);
-        }
-
-        .feature-card h3 {
-            font-size: 18px;
-            font-weight: 600;
-            margin: 0 0 10px 0;
-            color: #ffffff;
-        }
-
-        .feature-card p {
-            font-size: 14px;
-            color: #6c757d;
-            margin: 0;
-            line-height: 1.5;
-        }
-        /* Шапка (Header) */
         .header {
             display: flex;
             justify-content: space-between;
@@ -85,7 +26,6 @@
             padding: 15px 30px;
             border-bottom: 1px solid #1f1f1f;
         }
-
         .logo-container {
             display: flex;
             align-items: center;
@@ -94,13 +34,10 @@
             font-weight: 800;
             letter-spacing: 1px;
         }
-
         .header-actions {
             display: flex;
             gap: 10px;
         }
-
-        /* Общие стили кнопок */
         button {
             cursor: pointer;
             border: none;
@@ -108,7 +45,6 @@
             font-weight: 600;
             transition: all 0.2s ease;
         }
-
         .btn-green-sm {
             background-color: #00d95f;
             color: #000;
@@ -116,7 +52,6 @@
             font-size: 14px;
         }
         .btn-green-sm:hover { background-color: #00bf53; }
-
         .btn-dark-sm {
             background-color: transparent;
             color: #fff;
@@ -125,19 +60,16 @@
             font-size: 14px;
         }
         .btn-dark-sm:hover { background-color: #1a1a1a; }
-
-        /* Главный экран (Hero) - Выравнивание по левому краю */
         .hero {
             flex: 1;
             display: flex;
             flex-direction: column;
-            align-items: flex-start; /* Смещаем весь контент влево */
+            align-items: flex-start;
             justify-content: flex-start;
-            padding: 80px 10% 0 10%; /* Добавляем отступы по краям */
-            text-align: left; /* Выравниваем сам текст */
+            padding: 80px 10% 0 10%;
+            text-align: left;
             background: radial-gradient(circle at 20% 40%, rgba(0, 217, 95, 0.08) 0%, rgba(10, 10, 10, 1) 60%);
         }
-
         .hero h1 {
             font-size: 46px;
             font-weight: 700;
@@ -145,7 +77,6 @@
             line-height: 1.2;
             max-width: 800px;
         }
-
         .hero p {
             color: #8892b0;
             font-size: 18px;
@@ -153,13 +84,11 @@
             max-width: 600px;
             line-height: 1.5;
         }
-
         .hero-buttons {
             display: flex;
             gap: 15px;
             margin-bottom: 20px;
         }
-
         .btn-green-lg {
             background-color: #00d95f;
             color: #000;
@@ -168,7 +97,6 @@
             border-radius: 8px;
         }
         .btn-green-lg:hover { background-color: #00bf53; }
-
         .btn-dark-lg {
             background-color: #0f0f0f;
             color: #fff;
@@ -178,34 +106,71 @@
             border-radius: 8px;
         }
         .btn-dark-lg:hover { background-color: #1a1a1a; }
-
-        /* Контейнер статуса - сдвинут влево */
         #wallet-status {
             color: #8892b0;
             font-size: 14px;
             margin-bottom: 20px;
             text-align: left;
         }
-
         #anti-sybil-container {
             width: 100%;
             max-width: 600px;
-            margin: 0; /* Убрано авто-центрирование */
+            margin: 0;
             text-align: left;
         }
-        
         .card {
             padding: 20px;
             border-radius: 12px;
             margin-top: 20px;
         }
-        
         .faucet-link {
             display: inline-block;
             margin-top: 10px;
             color: #3498db;
             text-decoration: none;
             font-weight: bold;
+        }
+        .features-grid {
+            display: flex;
+            gap: 20px;
+            margin-top: 50px;
+            width: 100%;
+            max-width: 800px;
+            flex-wrap: wrap;
+            margin-bottom: 50px;
+        }
+        .feature-card {
+            background-color: #0d0d0d;
+            border: 1px solid #1a1a1a;
+            border-radius: 16px;
+            padding: 24px;
+            flex: 1;
+            min-width: 220px;
+            transition: all 0.3s ease;
+        }
+        .feature-card:hover {
+            border-color: #00d95f;
+            background-color: #121513;
+            transform: translateY(-5px);
+        }
+        .card-icon {
+            font-size: 28px;
+            margin-bottom: 16px;
+            display: inline-block;
+            background: #1a1a1a;
+            padding: 10px;
+            border-radius: 12px;
+        }
+        .feature-card h3 {
+            font-size: 18px;
+            margin: 0 0 10px 0;
+            color: #ffffff;
+        }
+        .feature-card p {
+            font-size: 14px;
+            color: #6c757d;
+            margin: 0;
+            line-height: 1.5;
         }
     </style>
 </head>
@@ -214,113 +179,176 @@
     <!-- Шапка интерфейса -->
     <div class="header">
         <div class="logo-container">
-            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="background: transparent; width: 32px; height: 32px; flex-shrink: 0;">
-                <!-- Лежащая монета (изометрия) -->
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 32px; height: 32px;">
                 <ellipse cx="12" cy="20" rx="10" ry="3" stroke="#00d95f" stroke-width="2" fill="#00d95f" fill-opacity="0.1"/>
                 <path d="M2 20c0 1.66 4.48 3 10 3s10-1.34 10-3" stroke="#00d95f" stroke-width="2"/>
-                <!-- Внутреннее свечение монеты -->
                 <ellipse cx="12" cy="20" rx="5" ry="1.5" stroke="#00d95f" stroke-width="1" stroke-opacity="0.5"/>
-                
-                <!-- Падающий аирдроп (изометрический куб) -->
                 <path d="M12 3L7 5.5L12 8L17 5.5L12 3Z" fill="#ffffff"/>
                 <path d="M7 5.5V10.5L12 13V8L7 5.5Z" fill="#cccccc"/>
                 <path d="M17 5.5V10.5L12 13V8L17 5.5Z" fill="#999999"/>
-                
-                <!-- Линии скорости (эффект падения) -->
-                <path d="M12 14V17" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/>
-                <path d="M8 11.5V14" stroke="#00d95f" stroke-width="1.5" stroke-linecap="round" stroke-opacity="0.7"/>
-                <path d="M16 11.5V14" stroke="#00d95f" stroke-width="1.5" stroke-linecap="round" stroke-opacity="0.7"/>
             </svg>
             <span>AIRDROP-X</span>
         </div>
         <div class="header-actions">
-            <!-- Кнопка подключения кошелька -->
             <button id="connect-btn" class="btn-green-sm" onclick="connectWallet()">Подключить кошелек</button>
-            <button class="btn-dark-sm">Войти</button>
-            <button class="btn-dark-sm">RU 🇷🇺</button>
+            <button class="btn-dark-sm" id="login-btn">Войти</button>
+            <!-- Кнопка переключения языков -->
+            <button class="btn-dark-sm" id="lang-btn" onclick="toggleLanguage()">RU 🇷🇺</button>
         </div>
     </div>
 
     <!-- Главный контент -->
     <div class="hero">
-        <h1>Мощный инструмент<br>для фарма и буста Airdrop</h1>
-        <p>Фармите поинты, прогревайте кошельки и набивайте транзакции — с надёжной защитой от Anti-Sybil алгоритмов и минимальным риском бритья.</p>
+        <h1 id="hero-title">Мощный инструмент<br>для фарма и буста Airdrop</h1>
+        <p id="hero-desc">Фармите поинты, прогревайте кошельки и набивайте транзакции — с защитой от Anti-Sybil и минимальным риском бритья.</p>
         
         <div class="hero-buttons">
-            <!-- Кнопка запуска -->
             <button id="farm-btn" class="btn-green-lg" onclick="startFarm()">Получить доступ (Запуск)</button>
-            <button class="btn-dark-lg">Настройки</button>
+            <button id="settings-btn" class="btn-dark-lg">Настройки</button>
         </div>
 
         <div id="wallet-status">Кошелек не подключен</div>
         <div id="anti-sybil-container"></div>
-        <!-- Блок с карточками модулей -->
+
+        <!-- Карточки модулей -->
         <div class="features-grid">
-            
             <div class="feature-card">
                 <div class="card-icon">🔄</div>
-                <h3>Auto-Swapper</h3>
-                <p>Автоматические обмены токенов на DEX для набива объема и смарт-контрактов.</p>
+                <h3 id="card1-title">Auto-Swapper</h3>
+                <p id="card1-desc">Автообмены на DEX для набива объема.</p>
             </div>
-
             <div class="feature-card">
                 <div class="card-icon">🌉</div>
-                <h3>Bridge Router</h3>
-                <p>Случайные переводы через мосты (Orbiter, Stargate) для прогрева сетей.</p>
+                <h3 id="card2-title">Bridge Router</h3>
+                <p id="card2-desc">Рандомные переводы через мосты.</p>
             </div>
-
             <div class="feature-card">
                 <div class="card-icon">🛡️</div>
-                <h3>Sybil Shield</h3>
-                <p>Имитация поведения реального человека с задержками и случайными суммами.</p>
+                <h3 id="card3-title">Sybil Shield</h3>
+                <p id="card3-desc">Имитация живого пользователя.</p>
             </div>
-
         </div>
     </div>
 
     <script>
-        // 1. Проверка на открытие с ПК в Telegram Desktop
+        // Перевод интерфейса (RU -> EN -> ZH)
+        const translations = {
+            ru: {
+                title: "AIRDROP-X — Панель управления фармом",
+                connect: "Подключить кошелек",
+                login: "Войти",
+                lang: "RU 🇷🇺",
+                heroTitle: "Мощный инструмент<br>для фарма и буста Airdrop",
+                heroDesc: "Фармите поинты, прогревайте кошельки и набивайте транзакции — с защитой от Anti-Sybil и минимальным риском бритья.",
+                farmBtn: "Получить доступ (Запуск)",
+                settingsBtn: "Настройки",
+                walletNotConnected: "Кошелек не подключен",
+                c1Title: "Auto-Swapper", c1Desc: "Автообмены на DEX для набива объема.",
+                c2Title: "Bridge Router", c2Desc: "Рандомные переводы через мосты.",
+                c3Title: "Sybil Shield", c3Desc: "Имитация живого пользователя."
+            },
+            en: {
+                title: "AIRDROP-X — Farming Automation Panel",
+                connect: "Connect Wallet",
+                login: "Login",
+                lang: "EN 🇬🇧",
+                heroTitle: "Powerful Tool<br>for Airdrop Farming & Boosting",
+                heroDesc: "Farm points, warm up wallets, and grind transactions with robust Anti-Sybil protection and minimal risk.",
+                farmBtn: "Get Access (Run)",
+                settingsBtn: "Settings",
+                walletNotConnected: "Wallet not connected",
+                c1Title: "Auto-Swapper", c1Desc: "Automated DEX swaps to build volume.",
+                c2Title: "Bridge Router", c2Desc: "Randomized cross-chain bridging.",
+                c3Title: "Sybil Shield", c3Desc: "Human-like behavior simulation."
+            },
+            zh: {
+                title: "AIRDROP-X — 空投自动化面板",
+                connect: "连接钱包",
+                login: "登录",
+                lang: "ZH 🇨🇳",
+                heroTitle: "用于空投刷量与<br>强化的强大工具",
+                heroDesc: "通过防女巫(Anti-Sybil)保护和极低的被 ban 风险，轻松刷取积分、养号并完成链上交互。",
+                farmBtn: "获取权限 (运行)",
+                settingsBtn: "设置",
+                walletNotConnected: "未连接钱包",
+                c1Title: "自动兑换", c1Desc: "DEX 自动交易以刷取交易量。",
+                c2Title: "跨链路由", c2Desc: "跨链桥随机转账与养号。",
+                c3Title: "防女巫盾", c3Desc: "模拟真实用户的行为特征。"
+            }
+        };
+
+        let currentLang = 'ru';
+
+        function toggleLanguage() {
+            if (currentLang === 'ru') currentLang = 'en';
+            else if (currentLang === 'en') currentLang = 'zh';
+            else currentLang = 'ru';
+
+            const t = translations[currentLang];
+            document.getElementById('page-title').innerText = t.title;
+            
+            // Меняем текст на кнопке подключения только если кошелек не подключен
+            const connectBtn = document.getElementById('connect-btn');
+            if (!connectBtn.innerText.includes("✅")) {
+                connectBtn.innerText = t.connect;
+            }
+            
+            document.getElementById('login-btn').innerText = t.login;
+            document.getElementById('lang-btn').innerText = t.lang;
+            document.getElementById('hero-title').innerHTML = t.heroTitle;
+            document.getElementById('hero-desc').innerText = t.heroDesc;
+            
+            const farmBtn = document.getElementById('farm-btn');
+            if (!farmBtn.innerText.includes("⚙️") && !farmBtn.innerText.includes("Проверка")) {
+                farmBtn.innerText = t.farmBtn;
+            }
+            
+            document.getElementById('settings-btn').innerText = t.settingsBtn;
+            
+            const walletStatus = document.getElementById('wallet-status');
+            if (walletStatus.innerText.includes("не подключен") || walletStatus.innerText.includes("not connected") || walletStatus.innerText.includes("未连接")) {
+                walletStatus.innerText = t.walletNotConnected;
+            }
+
+            document.getElementById('card1-title').innerText = t.c1Title;
+            document.getElementById('card1-desc').innerText = t.c1Desc;
+            document.getElementById('card2-title').innerText = t.c2Title;
+            document.getElementById('card2-desc').innerText = t.c2Desc;
+            document.getElementById('card3-title').innerText = t.c3Title;
+            document.getElementById('card3-desc').innerText = t.c3Desc;
+        }
+
+        // Telegram Desktop ПК проверка
         const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
         const isInTelegramDesktop = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.platform === 'tdesktop';
 
         if (!isMobile && isInTelegramDesktop) {
             const webVersionUrl = "http://127.0.0.1:5500/index.html"; 
-            
             const warningDiv = document.createElement('div');
             warningDiv.style.position = 'fixed';
-            warningDiv.style.top = '0';
-            warningDiv.style.left = '0';
-            warningDiv.style.width = '100%';
-            warningDiv.style.height = '100%';
+            warningDiv.style.top = '0'; warningDiv.style.left = '0';
+            warningDiv.style.width = '100%'; warningDiv.style.height = '100%';
             warningDiv.style.backgroundColor = 'rgba(10, 10, 10, 0.98)';
-            warningDiv.style.zIndex = '9999';
-            warningDiv.style.display = 'flex';
-            warningDiv.style.flexDirection = 'column';
-            warningDiv.style.alignItems = 'center';
-            warningDiv.style.justifyContent = 'center';
-            warningDiv.style.color = '#fff';
-            warningDiv.style.padding = '20px';
-            warningDiv.style.textAlign = 'center';
-            
+            warningDiv.style.zIndex = '9999'; warningDiv.style.display = 'flex';
+            warningDiv.style.flexDirection = 'column'; warningDiv.style.alignItems = 'center';
+            warningDiv.style.justifyContent = 'center'; warningDiv.style.color = '#fff';
+            warningDiv.style.padding = '20px'; warningDiv.style.textAlign = 'center';
             warningDiv.innerHTML = `
                 <h2 style="margin-bottom: 15px; color: #f39c12;">⚠️ Открыто с компьютера (Telegram Desktop)</h2>
-                <p style="margin-bottom: 20px; max-width: 400px; color: #8892b0;">Для работы с MetaMask на ПК лучше использовать обычный браузер (Chrome), так как во встроенном окне Telegram расширения не поддерживаются.</p>
+                <p style="margin-bottom: 20px; max-width: 400px; color: #8892b0;">Для работы с MetaMask на ПК используйте обычный браузер (Chrome/Edge).</p>
                 <a href="${webVersionUrl}" target="_blank" style="background-color: #00d95f; color: #000; padding: 12px 24px; border-radius: 8px; text-decoration: none; font-weight: bold;">Открыть в браузере</a>
             `;
             document.body.appendChild(warningDiv);
         }
 
-        // 2. Инициализация Telegram WebApp
         let tg = window.Telegram.WebApp;
         tg.expand();
                 
-        // 3. Функция подключения MetaMask
         async function connectWallet() {
             if (window.ethereum) {
                 try {
                     const provider = new ethers.providers.Web3Provider(window.ethereum);
                     await provider.send("wallet_requestPermissions", [{ eth_accounts: {} }]);
-                    
                     const signer = provider.getSigner();
                     const address = await signer.getAddress();
                     
@@ -329,7 +357,6 @@
                     document.getElementById('connect-btn').style.backgroundColor = 'transparent';
                     document.getElementById('connect-btn').style.color = '#fff';
                     document.getElementById('connect-btn').style.border = '1px solid #333';
-                    
                     document.getElementById('anti-sybil-container').innerHTML = '';
                 } catch (error) {
                     console.error("Ошибка:", error);
@@ -338,17 +365,14 @@
             } else {
                 const userWantsToOpenApp = confirm("Кошелек не обнаружен. Открыть приложение MetaMask?");
                 if (userWantsToOpenApp) {
-                    const dappUrl = "robertkaasik.github.io/Airdrop-Automation-SaaS/";
-                    window.location.href = `https://metamask.app.link/dapp/${dappUrl}`;
+                    window.location.href = `https://metamask.app.link/dapp/robertkaasik.github.io/Airdrop-Automation-SaaS/`;
                 }
             }
         }
 
-        // 4. Функция запуска фарминга
         async function startFarm() {
             const statusText = document.getElementById('wallet-status').innerText;
-            
-            if (!statusText.includes("Подключено:")) {
+            if (!statusText.includes("Подключено:") && !statusText.includes("0x")) {
                 alert("Сначала подключите кошелек MetaMask!");
                 return;
             }
@@ -357,11 +381,8 @@
             const container = document.getElementById('anti-sybil-container');
             const btn = document.getElementById('farm-btn');
             
-            const originalBtnText = btn.innerText;
             btn.innerText = "Проверка Anti-Sybil...";
             btn.style.backgroundColor = "#f39c12";
-            btn.style.border = "none";
-            btn.style.color = "#000";
 
             try {
                 const provider = new ethers.providers.JsonRpcProvider("https://ethereum-sepolia-rpc.publicnode.com");
@@ -372,7 +393,7 @@
                     container.innerHTML = `
                         <div class="card" style="border: 1px solid #e74c3c; background-color: rgba(231, 76, 60, 0.05);">
                             <h3 style="color: #e74c3c; margin-top: 0;">🛑 Ошибка: Пустой кошелек</h3>
-                            <p style="font-size: 14px;">Anti-Sybil защита отклонила запуск. Ваш баланс <b>${parseFloat(balanceEth).toFixed(5)} SepETH</b>.</p>
+                            <p style="font-size: 14px;">Баланс <b>${parseFloat(balanceEth).toFixed(5)} SepETH</b>. Требуется тестовый эфир.</p>
                             <a href="https://sepolia-faucet.pk910.de/" target="_blank" class="faucet-link">⛏️ Получить тестовый ETH</a>
                         </div>
                     `;
@@ -394,27 +415,20 @@
                 btn.style.border = "1px solid #00d95f";
                 btn.style.color = "#00d95f";
 
-                try {
-                    const response = await fetch('http://127.0.0.1:8000/api/start-farm', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            wallet: walletAddress,
-                            balance: balanceEth,
-                            telegram_id: tg.initDataUnsafe?.user?.id || "unknown"
-                        })
-                    });
-                } catch (serverError) {
-                    console.error("Ошибка отправки на сервер:", serverError);
-                }
-                
+                await fetch('http://127.0.0.1:8000/api/start-farm', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        wallet: walletAddress,
+                        balance: balanceEth,
+                        telegram_id: tg.initDataUnsafe?.user?.id || "1197143730"
+                    })
+                });
             } catch (error) {
-                console.error("Ошибка проверки баланса:", error);
+                console.error("Ошибка:", error);
                 alert("Ошибка сети. Попробуйте еще раз.");
-                btn.innerText = originalBtnText;
+                btn.innerText = "Получить доступ (Запуск)";
                 btn.style.backgroundColor = "#00d95f";
-                btn.style.color = "#000";
-                btn.style.border = "none";
             }
         }
     </script>
