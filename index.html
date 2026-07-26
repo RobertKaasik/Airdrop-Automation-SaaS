@@ -228,35 +228,35 @@
 <body>
 
     <!-- Шапка интерфейса -->
-    <div class="header">
-        <div class="logo-container">
-            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 32px; height: 32px;">
-                <ellipse cx="12" cy="20" rx="10" ry="3" stroke="#00d95f" stroke-width="2" fill="#00d95f" fill-opacity="0.1"/>
-                <path d="M2 20c0 1.66 4.48 3 10 3s10-1.34 10-3" stroke="#00d95f" stroke-width="2"/>
-                <ellipse cx="12" cy="20" rx="5" ry="1.5" stroke="#00d95f" stroke-width="1" stroke-opacity="0.5"/>
-                <path d="M12 3L7 5.5L12 8L17 5.5L12 3Z" fill="#ffffff"/>
-                <path d="M7 5.5V10.5L12 13V8L7 5.5Z" fill="#cccccc"/>
-                <path d="M17 5.5V10.5L12 13V8L17 5.5Z" fill="#999999"/>
-            </svg>
-            <span>AIRDROP-X</span>
-        </div>
-        <div class="header-actions">
-            <button id="connect-btn" class="btn-green-sm" onclick="connectWallet()">Подключить кошелек</button>
-            <button class="btn-dark-sm" id="login-btn">Войти</button>
-            
-            <!-- Выпадающее меню языков с флагами -->
-            <div class="lang-dropdown-wrapper">
-                <button class="btn-dark-sm" id="lang-btn" onclick="toggleLangMenu()">
-                    <span id="current-lang-text">RU</span> 🇷🇺
-                </button>
-                <div class="lang-menu" id="langMenu">
-                    <button class="lang-option" onclick="changeLanguage('en')">🇺🇸 English</button>
-                    <button class="lang-option" onclick="changeLanguage('zh')">🇨🇳 中文</button>
-                    <button class="lang-option" onclick="changeLanguage('ru')">🇷🇺 Русский</button>
+        <div class="header">
+            <div class="logo-container">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 32px; height: 32px;">
+                    <ellipse cx="12" cy="20" rx="10" ry="3" stroke="#00d95f" stroke-width="2" fill="#00d95f" fill-opacity="0.1"/>
+                    <path d="M2 20c0 1.66 4.48 3 10 3s10-1.34 10-3" stroke="#00d95f" stroke-width="2"/>
+                    <ellipse cx="12" cy="20" rx="5" ry="1.5" stroke="#00d95f" stroke-width="1" stroke-opacity="0.5"/>
+                    <path d="M12 3L7 5.5L12 8L17 5.5L12 3Z" fill="#ffffff"/>
+                    <path d="M7 5.5V10.5L12 13V8L7 5.5Z" fill="#cccccc"/>
+                    <path d="M17 5.5V10.5L12 13V8L17 5.5Z" fill="#999999"/>
+                </svg>
+                <span>AIRDROP-X</span>
+            </div>
+            <div class="header-actions">
+                <button id="connect-btn" class="btn-green-sm" onclick="connectWallet()">Подключить кошелек</button>
+                <button class="btn-dark-sm" id="login-btn">Войти</button>
+                
+                <!-- Меню выбора языка с текстовыми бейджами -->
+                <div class="lang-dropdown-wrapper">
+                    <button class="btn-dark-sm" id="lang-btn" onclick="toggleLangMenu()">
+                        <span id="current-lang-text">RU</span>
+                    </button>
+                    <div class="lang-menu" id="langMenu">
+                        <button class="lang-option" onclick="changeLanguage('en')"><span style="color: #666; font-size: 12px; font-weight: bold; background: #1a1a1a; padding: 2px 6px; border-radius: 4px;">US</span> English</button>
+                        <button class="lang-option" onclick="changeLanguage('zh')"><span style="color: #666; font-size: 12px; font-weight: bold; background: #1a1a1a; padding: 2px 6px; border-radius: 4px;">CN</span> 中文</button>
+                        <button class="lang-option" onclick="changeLanguage('ru')"><span style="color: #666; font-size: 12px; font-weight: bold; background: #1a1a1a; padding: 2px 6px; border-radius: 4px;">RU</span> Русский</button>
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
 
     <!-- Главный контент -->
     <div class="hero">
