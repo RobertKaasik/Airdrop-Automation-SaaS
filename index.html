@@ -54,63 +54,52 @@
         tg.expand();
 
         async function connectWallet() {
-            // Проверяем наличие ethereum в окне или мобильном браузере
-            const providerEth = window.ethereum || (window.avalanche && window.avalanche);
+    // 1. Проверяем, есть ли встроенный кошелек (как на ПК)
+    if (window.ethereum) {
+        try {
+            const provider = new ethers.providers.Web3Provider(window.ethereum);
+            await provider.send("eth_requestAccounts", []);
+            const signer = provider.getSigner();
+            const address = await signer.getAddress();
             
-            if (!providerEth) {
-                alert("Провайдер кошелька не найден! Откройте сайт в браузере с поддержкой MetaMask (например, встроенном браузере приложения MetaMask).");
-                return;
-            }
-
-            try {
-                const provider = new ethers.providers.Web3Provider(providerEth);
-                // Запрашиваем доступ к аккаунтам
-                await provider.send("eth_requestAccounts", []);
-                const signer = provider.getSigner();
-                const address = await signer.getAddress();
-                
-                document.getElementById('wallet-status').innerText = `Подключено: ${address.substring(0,6)}...${address.substring(38)}`;
-                document.getElementById('connect-btn').innerText = "Подключено ✅";
-                tg.showAlert(`Кошелек успешно привязан: ${address}`);
-            } catch (error) {
-                console.error("Connection error:", error);
-                alert("Не удалось подключить кошелек. Убедитесь, что разблокировали MetaMask.");
-            }
+            document.getElementById('wallet-status').innerText = `Подключено: ${address.substring(0,6)}...${address.substring(38)}`;
+            document.getElementById('connect-btn').innerText = "Подключено ✅";
+        } catch (error) {
+            console.error("Ошибка:", error);
+            alert("Подключение отменено или кошелек заблокирован.");
         }
+    } else {
+        // 2. Если кошелька нет (например, открыли в Telegram с телефона)
+        // Предлагаем открыть приложение MetaMask
+        const userWantsToOpenApp = confirm("Кошелек не обнаружен. Открыть приложение MetaMask?");
+        
+        if (userWantsToOpenApp) {
+            // Указываем ссылку на твой сайт (БЕЗ https://)
+            const dappUrl = "robertkaasik.github.io/Airdrop-Automation-SaaS/";
+            // Формируем специальную ссылку для вызова MetaMask на телефоне
+            const metamaskLink = `https://metamask.app.link/dapp/${dappUrl}`;
+            
+            // Перенаправляем пользователя в приложение MetaMask
+            window.location.href = metamaskLink;
+        }
+    }
+}
 
-        async function startFarm() {
+ async function startFarm() {
     const statusText = document.getElementById('wallet-status').innerText;
     
-    // Проверяем, подключен ли кошелек перед запуском
     if (!statusText.includes("Подключено:")) {
         alert("Сначала подключите кошелек MetaMask!");
         return;
     }
 
-    // Достаем адрес кошелька из текста статуса
-    const walletAddress = statusText.replace("Подключено: ", "");
+    const walletAddress = statusText.replace("Подключено: ", "").trim();
 
-    try {
-        // Отправляем запрос на твой локальный сервер (или бэкенд)
-        const response = await fetch('http://127.0.0.1:8000/api/start-farm', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                wallet_address: walletAddress,
-                action: "start_farming"
-            })
-        });
-
-        const result = await response.json();
-        alert(result.message || "Фарминг запущен!");
-    } catch (error) {
-        console.error("Ошибка отправки:", error);
-        // Если сервер не запущен, просто отправляем данные в Telegram боту
-        tg.sendData(JSON.stringify({ action: "start_farming", wallet: walletAddress }));
-        tg.close();
-    }
+    // Показываем пользователю, что пошел процесс
+    alert("Запуск фарминга для кошелька: " + walletAddress);
+    
+    // Здесь мы можем вызывать твои блокчейн-функции или отправить данные
+    console.log("Фарминг запущен для адреса:", walletAddress);
 }
     </script>
 </body>
