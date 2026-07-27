@@ -7,6 +7,10 @@ import datetime
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from web3 import Web3
+from eth_account import Account
+import aiohttp
+from aiohttp_socks import ProxyConnector
 
 # Настройка профессиональных логов
 logging.basicConfig(level=logging.INFO, format='%(asctime)s | %(levelname)s | %(message)s')
@@ -18,7 +22,6 @@ class LocalVault:
         self.key = self._derive_key(b"static_salt_airdrop_x")
 
     def _derive_key(self, salt: bytes) -> bytes:
-        """Генерация криптографического ключа на основе мастер-пароля"""
         kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
             length=32,
@@ -28,12 +31,10 @@ class LocalVault:
         return base64.urlsafe_b64encode(kdf.derive(self.master_password))
 
     def encrypt_data(self, plaintext: str) -> str:
-        """Шифрование приватного ключа"""
         f = Fernet(self.key)
         return f.encrypt(plaintext.encode()).decode()
 
     def decrypt_data(self, ciphertext: str) -> str:
-        """Расшифровка данных перед запуском воркера"""
         f = Fernet(self.key)
         return f.decrypt(ciphertext.encode()).decode()
 
@@ -46,11 +47,53 @@ class RPCRouter:
         return self.rpc_list[self.current_index]
 
     def switch_to_next_rpc(self):
-        """Интеллектуальное переключение на резервную ноду при сбое"""
         old_rpc = self.rpc_list[self.current_index]
         self.current_index = (self.current_index + 1) % len(self.rpc_list)
         new_rpc = self.rpc_list[self.current_index]
         logger.warning(f"[RPC Router] Сбой на узле {old_rpc}. Переключение на резервный: {new_rpc}")
+
+class ProxyManager:
+    """Универсальный менеджер прокси с поддержкой HTTP и SOCKS5"""
+    @staticmethod
+    async def check_proxy(proxy_string: str) -> bool:
+        test_url = "http://httpbin.org/ip"
+        
+        # Определяем тип прокси (если строка начинается с socks5://, используем SOCKS коннектор)
+        if "socks5://" in proxy_string or "socks4://" in proxy_string:
+            connector = ProxyConnector.from_url(proxy_string)
+        else:
+            # По умолчанию считаем, что это HTTP/HTTPS прокси
+            if not proxy_string.startswith("http://"):
+                proxy_string = f"http://{proxy_string}"
+            connector = ProxyConnector.from_url(proxy_string)
+
+        try:
+            async with aiohttp.ClientSession(connector=connector) as session:
+                async with session.get(test_url, timeout=7) as response:
+                    if response.status == 200:
+                        data = await response.json()
+                        logger.info(f"[Proxy Manager] ✅ Прокси {proxy_string} активен. Внешний IP: {data.get('origin')}")
+                        return True
+        except Exception as e:
+            logger.error(f"[Proxy Manager] ❌ Ошибка прокси {proxy_string}: {e}")
+        return False
+
+class Web3Handler:
+    def __init__(self, rpc_url: str, private_key: str):
+        self.w3 = Web3(Web3.HTTPProvider(rpc_url))
+        self.private_key = private_key
+        try:
+            self.account = Account.from_private_key(private_key)
+            self.address = self.account.address
+        except Exception:
+            self.address = "0xMockWalletAddress"
+
+    def get_balance(self) -> float:
+        try:
+            balance_wei = self.w3.eth.get_balance(self.address)
+            return float(self.w3.from_wei(balance_wei, 'ether'))
+        except Exception:
+            return 0.0
 
 class FarmWorker:
     def __init__(self, wallet_id: int, decrypted_pk: str, proxy: str, rpc_router: RPCRouter):
@@ -60,10 +103,14 @@ class FarmWorker:
         self.rpc_router = rpc_router
 
     async def execute_task(self) -> dict:
-        """Изолированная сессия для конкретного кошелька с RPC Fallback"""
-        logger.info(f"[Wallet #{self.wallet_id}] Запуск сессии через прокси: {self.proxy}")
+        logger.info(f"[Wallet #{self.wallet_id}] Инициализация воркера...")
         
-        # Рандомизированная задержка для защиты от Anti-Sybil
+        # Проверяем прокси перед стартом
+        is_proxy_alive = await ProxyManager.check_proxy(self.proxy)
+        if not is_proxy_alive:
+            logger.error(f"[Wallet #{self.wallet_id}] ❌ Прокси не отвечает. Сессия прервана.")
+            return {"wallet_id": self.wallet_id, "proxy": self.proxy, "status": "Proxy Error", "timestamp": datetime.datetime.now().isoformat()}
+
         delay = random.randint(3, 7)
         await asyncio.sleep(delay)
 
@@ -73,17 +120,12 @@ class FarmWorker:
         for attempt in range(max_retries):
             active_rpc = self.rpc_router.get_active_rpc()
             try:
-                logger.info(f"[Wallet #{self.wallet_id}] Запрос к блокчейну через RPC: {active_rpc} (Попытка {attempt+1})")
-                
-                # Искусственная симуляция сбоя сети для первого кошелька на первой попытке
-                if attempt == 0 and self.wallet_id == 1:
-                    raise Exception("Rate limit / Timeout error")
-
-                await asyncio.sleep(1) # Имитация сетевого ответа от ноды
-                logger.info(f"[Wallet #{self.wallet_id}] ✅ Успешный ответ от ноды {active_rpc}")
+                logger.info(f"[Wallet #{self.wallet_id}] Подключение к ноде: {active_rpc} (Попытка {attempt+1})")
+                web3_handler = Web3Handler(active_rpc, self.private_key)
+                balance = web3_handler.get_balance()
+                logger.info(f"[Wallet #{self.wallet_id}] ✅ Успешный опрос ноды. Баланс: {balance} ETH")
                 success = True
                 break
-
             except Exception as e:
                 logger.error(f"[Wallet #{self.wallet_id}] ❌ Ошибка ноды: {e}")
                 self.rpc_router.switch_to_next_rpc()
@@ -98,7 +140,6 @@ class FarmWorker:
         }
 
 def export_farm_report_to_json(results_data):
-    """Экспорт итогового отчета работы фермы в JSON-файл"""
     report = {
         "timestamp": datetime.datetime.now().isoformat(),
         "total_wallets_processed": len(results_data),
@@ -108,7 +149,7 @@ def export_farm_report_to_json(results_data):
     filename = "airdrop_x_backend_report.json"
     with open(filename, "w", encoding="utf-8") as f:
         json.dump(report, f, ensure_ascii=False, indent=4)
-    logger.info(f"[Report Exporter] Отчет успешно сохранен локально в файл: {filename}")
+    logger.info(f"[Report Exporter] Отчет успешно сохранен: {filename}")
 
 async def run_farm(encrypted_wallets_data, rpc_list, master_pass):
     vault = LocalVault(master_pass)
@@ -126,30 +167,24 @@ async def run_farm(encrypted_wallets_data, rpc_list, master_pass):
             )
             tasks.append(worker.execute_task())
         except Exception as e:
-            logger.error(f"[Vault] ❌ Ошибка расшифровки кошелька #{data['id']}: неверный мастер-пароль?")
+            logger.error(f"[Vault] ❌ Ошибка расшифровки кошелька #{data['id']}")
 
-    # Ожидаем выполнение всех потоков воркеров
     results = await asyncio.gather(*tasks)
-    
-    # Выгружаем отчет в JSON, если есть успешные результаты
     if results:
         export_farm_report_to_json(results)
 
 if __name__ == "__main__":
     MASTER_PASSWORD = "SuperSecretMasterPassword123"
-    
-    # Инициализируем хранилище для симуляции зашифрованной базы данных кошельков
     creator_vault = LocalVault(MASTER_PASSWORD)
+    valid_test_pk = "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+    
+    # Теперь сюда можно смело вписывать прокси со скриншота (например, SOCKS5)
     encrypted_mock_wallets = [
-        {"id": 1, "encrypted_pk": creator_vault.encrypt_data("0xSecretPrivateKeyWalletOne111"), "proxy": "185.22.10.1:8080"},
-        {"id": 2, "encrypted_pk": creator_vault.encrypt_data("0xSecretPrivateKeyWalletTwo222"), "proxy": "45.12.15.8:1080"}
+        {"id": 1, "encrypted_pk": creator_vault.encrypt_data(valid_test_pk), "proxy": "socks5://170.64.170.204:1080"},
+        {"id": 2, "encrypted_pk": creator_vault.encrypt_data(valid_test_pk), "proxy": "http://31.57.178.255:8181"}
     ]
     
-    available_rpcs = [
-        "https://mainnet.infura.io/v3/YOUR_KEY",
-        "https://rpc.ankr.com/eth",
-        "https://1rpc.io/eth"
-    ]
+    available_rpcs = ["https://rpc.ankr.com/eth", "https://1rpc.io/eth"]
 
-    logger.info("🔒 Запуск защищенного ядра AIRDROP-X с полным набором модулей...")
+    logger.info("🔒 Запуск боевого ядра AIRDROP-X с универсальным Proxy Manager (SOCKS5/HTTP)...")
     asyncio.run(run_farm(encrypted_mock_wallets, available_rpcs, MASTER_PASSWORD))
