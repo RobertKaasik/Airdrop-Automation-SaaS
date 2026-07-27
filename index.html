@@ -356,6 +356,28 @@
             font-size: 14px;
             margin-top: auto;
         }
+
+        /* Стили для левого меню дашборда */
+        .sidebar-menu-item {
+            padding: 12px 16px;
+            color: #8892b0;
+            border-radius: 10px;
+            font-weight: 500;
+            font-size: 14px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            transition: 0.2s;
+        }
+        .sidebar-menu-item:hover {
+            background: #1a1d24;
+            color: #fff;
+        }
+        .sidebar-menu-item.active {
+            background: #151821;
+            color: #fff;
+            font-weight: 600;
+        }
     </style>
 </head>
 <body>
@@ -393,76 +415,83 @@
         </div>
     </div>
 
-    <!-- Модальное окно -->
+    <!-- Модальное окно (Контейнер) -->
     <div class="modal-overlay" id="authModal" onclick="handleOverlayClick(event)">
         <div class="auth-modal" id="modalContainer"></div>
     </div>
 
     <!-- Главный экран -->
-    <div class="hero">
-        <h1 id="hero-title">Универсальный инструмент<br>для автоматизации и сбора Airdrop.</h1>
-        <p id="hero-desc">Фармите поинты, сканируйте кошельки на наличие распределений и клеймите аирдропы в один клик с защитой Anti-Sybil.</p>
-        
-        <div class="hero-buttons">
-            <button id="farm-btn" class="btn-orange-lg" onclick="openModal('register')">Получить доступ ($160)</button>
-            <button id="settings-btn" class="btn-dark-lg" onclick="scrollToFeatures()">Подробнее</button>
-        </div>
-    </div>
-
-    <!-- Баннер лимита -->
-    <div style="width: 80%; max-width: 900px; margin: 0 auto;">
-        <div class="status-banner">
-            <div class="status-left">
-                <span>🛡️</span>
-                <span id="banner-text">Приватное ПО с ограниченным количеством слотов для защиты от детектирования.</span>
+    <div id="main-content">
+        <div class="hero">
+            <h1 id="hero-title">Универсальный инструмент<br>для автоматизации и сбора Airdrop.</h1>
+            <p id="hero-desc">Фармите поинты, сканируйте кошельки на наличие распределений и клеймите аирдропы в один клик с защитой Anti-Sybil.</p>
+            
+            <div class="hero-buttons">
+                <button id="farm-btn" class="btn-orange-lg" onclick="openModal('register')">Получить доступ ($160)</button>
+                <button id="settings-btn" class="btn-dark-lg" onclick="scrollToFeatures()">Подробнее</button>
             </div>
-            <div class="status-right">284 / 300 SLOTS</div>
+        </div>
+
+        <!-- Баннер лимита -->
+        <div style="width: 80%; max-width: 900px; margin: 0 auto;">
+            <div class="status-banner">
+                <div class="status-left">
+                    <span>🛡️</span>
+                    <span id="banner-text">Приватное ПО с ограниченным количеством слотов для защиты от детектирования.</span>
+                </div>
+                <div class="status-right">284 / 300 SLOTS</div>
+            </div>
+        </div>
+
+        <!-- Возможности платформы -->
+        <div id="features-section" class="section-title">Возможности платформы</div>
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="card-icon">🔍</div>
+                <h3 id="c1-t">Drop Scanner & Looter</h3>
+                <p id="c1-d">Автоматический поиск доступных для клейма аирдропов и ретродропов по всем подключенным кошелькам.</p>
+            </div>
+            <div class="feature-card">
+                <div class="card-icon">⚡</div>
+                <h3 id="c2-t">Multi-Chain Bridge Router</h3>
+                <p id="c2-d">Рандомизированные транзакции и свапы в сетях LayerZero, Base, Arbitrum и ZkSync для набива объемов.</p>
+            </div>
+            <div class="feature-card">
+                <div class="card-icon">🛡️</div>
+                <h3 id="c3-t">Sybil Shield</h3>
+                <p id="c3-d">Имитация паттернов реального пользователя и интеллектуальное распределение газа без связей между кошельками.</p>
+            </div>
+        </div>
+
+        <!-- Секция FAQ -->
+        <div id="faq-heading" class="section-title">Часто задаваемые вопросы</div>
+        <div class="faq-section">
+            <div class="faq-item" onclick="toggleFaq(this)">
+                <div class="faq-question"><span id="q1">Как работает авто-клейм аирдропов?</span> <span>+</span></div>
+                <div class="faq-answer" id="a1">Софт сканирует смарт-контракты и чекеры проектов, находит распределенные на ваши кошельки токены и безопасно подписывает транзакции сбора.</div>
+            </div>
+            <div class="faq-item" onclick="toggleFaq(this)">
+                <div class="faq-question"><span id="q2">Безопасно ли подключать мультиаккаунты?</span> <span>+</span></div>
+                <div class="faq-answer" id="a2">Да, система полностью изолирует сессии, прокси и отпечатки, исключая риск сибил-бана от протоколов.</div>
+            </div>
+            <div class="faq-item" onclick="toggleFaq(this)">
+                <div class="faq-question"><span id="q3">Нужно ли настраивать прокси для каждого кошелька?</span> <span>+</span></div>
+                <div class="faq-answer" id="a3">Да, софт поддерживает привязку индивидуальных HTTP/Socks5 прокси к каждому адресу, чтобы антифрод-системы не связывали ваши кошельки между собой.</div>
+            </div>
+            <div class="faq-item" onclick="toggleFaq(this)">
+                <div class="faq-question"><span id="q4">Как оптимизируются расходы на газ при клейме?</span> <span>+</span></div>
+                <div class="faq-answer" id="a4">Встроенный модуль Anti-Sybil автоматически рандомизирует время отправки транзакций и подбирает оптимальный Gwei, экономя ваши средства на комиссиях сети.</div>
+            </div>
+            <div class="faq-item" onclick="toggleFaq(this)">
+                <div class="faq-question"><span id="q5">Как получить доступ к софту?</span> <span>+</span></div>
+                <div class="faq-answer" id="a5">Оформите подписку в личном кабинете или свяжитесь с поддержкой, количество мест строго ограничено (300 слотов).</div>
+            </div>
         </div>
     </div>
 
-    <!-- Возможности платформы -->
-    <div id="features-section" class="section-title">Возможности платформы</div>
-    <div class="features-grid">
-        <div class="feature-card">
-            <div class="card-icon">🔍</div>
-            <h3 id="c1-t">Drop Scanner & Looter</h3>
-            <p id="c1-d">Автоматический поиск доступных для клейма аирдропов и ретродропов по всем подключенным кошелькам.</p>
-        </div>
-        <div class="feature-card">
-            <div class="card-icon">⚡</div>
-            <h3 id="c2-t">Multi-Chain Bridge Router</h3>
-            <p id="c2-d">Рандомизированные транзакции и свапы в сетях LayerZero, Base, Arbitrum и ZkSync для набива объемов.</p>
-        </div>
-        <div class="feature-card">
-            <div class="card-icon">🛡️</div>
-            <h3 id="c3-t">Sybil Shield</h3>
-            <p id="c3-d">Имитация паттернов реального пользователя и интеллектуальное распределение газа без связей между кошельками.</p>
-        </div>
-    </div>
-
-    <!-- Секция FAQ -->
-    <div id="faq-heading" class="section-title">Часто задаваемые вопросы</div>
-    <div class="faq-section">
-        <div class="faq-item" onclick="toggleFaq(this)">
-            <div class="faq-question"><span id="q1">Как работает авто-клейм аирдропов?</span> <span>+</span></div>
-            <div class="faq-answer" id="a1">Софт сканирует смарт-контракты и чекеры проектов, находит распределенные на ваши кошельки токены и безопасно подписывает транзакции сбора.</div>
-        </div>
-        <div class="faq-item" onclick="toggleFaq(this)">
-            <div class="faq-question"><span id="q2">Безопасно ли подключать мультиаккаунты?</span> <span>+</span></div>
-            <div class="faq-answer" id="a2">Да, система полностью изолирует сессии, прокси и отпечатки, исключая риск сибил-бана от протоколов.</div>
-        </div>
-        <div class="faq-item" onclick="toggleFaq(this)">
-            <div class="faq-question"><span id="q3">Нужно ли настраивать прокси для каждого кошелька?</span> <span>+</span></div>
-            <div class="faq-answer" id="a3">Да, софт поддерживает привязку индивидуальных HTTP/Socks5 прокси к каждому адресу, чтобы антифрод-системы не связывали ваши кошельки между собой.</div>
-        </div>
-        <div class="faq-item" onclick="toggleFaq(this)">
-            <div class="faq-question"><span id="q4">Как оптимизируются расходы на газ при клейме?</span> <span>+</span></div>
-            <div class="faq-answer" id="a4">Встроенный модуль Anti-Sybil автоматически рандомизирует время отправки транзакций и подбирает оптимальный Gwei, экономя ваши средства на комиссиях сети.</div>
-        </div>
-        <div class="faq-item" onclick="toggleFaq(this)">
-            <div class="faq-question"><span id="q5">Как получить доступ к софту?</span> <span>+</span></div>
-            <div class="faq-answer" id="a5">Оформите подписку в личном кабинете или свяжитесь с поддержкой, количество мест строго ограничено (300 слотов).</div>
-        </div>
+    <!-- Дашборд (скрыт по умолчанию) -->
+    <div id="dashboard-content" style="display: none; max-width: 1400px; width: 100%; margin: 30px auto; padding: 0 20px; gap: 30px; flex: 1;">
+        <!-- Будет заполняться через JS -->
     </div>
 
     <!-- Футер -->
@@ -481,11 +510,6 @@
         let provider;
         let signer;
         let userAddress;
-
-        const erc20ABI = [
-            "function balanceOf(address owner) view returns (uint256)",
-            "function symbol() view returns (string)"
-        ];
 
         // --- СЛОВАРЬ ПЕРЕВОДОВ ---
         const translations = {
@@ -668,11 +692,11 @@
             const t = translations[lang];
             if (!t) return;
 
+            document.getElementById('current-lang-badge').innerText = t.langCode;
+            document.getElementById('current-lang-text').innerText = t.langName;
+            
             if (!isLoggedIn) {
                 document.getElementById('page-title').innerText = t.title;
-                document.getElementById('current-lang-badge').innerText = t.langCode;
-                document.getElementById('current-lang-text').innerText = t.langName;
-                
                 const loginBtn = document.getElementById('login-btn');
                 if (loginBtn) loginBtn.innerText = t.login;
                 
@@ -728,6 +752,10 @@
         function openModal(type) {
             const modal = document.getElementById('authModal');
             const container = document.getElementById('modalContainer');
+            
+            // Если модалки вдруг нет (на всякий случай), то отменяем действие
+            if (!modal || !container) return; 
+            
             modal.classList.add('show');
             const t = translations[currentLang];
 
@@ -811,6 +839,19 @@
         function handleLoginSuccess() {
             isLoggedIn = true;
             document.getElementById('authModal').classList.remove('show');
+            
+            // Скрываем лендинг, показываем дашборд вместо полной замены body!
+            document.getElementById('main-content').style.display = 'none';
+            document.getElementById('dashboard-content').style.display = 'flex';
+            
+            // Меняем кнопку в шапке
+            const t = translations[currentLang];
+            const loginBtn = document.getElementById('login-btn');
+            loginBtn.innerText = t.logout;
+            loginBtn.style.borderColor = "#ff3333";
+            loginBtn.style.color = "#ff3333";
+            loginBtn.onclick = function() { isLoggedIn = false; location.reload(); };
+            
             renderDashboard();
         }
 
@@ -819,6 +860,7 @@
             const t = translations[currentLang];
             const modal = document.getElementById('authModal');
             const container = document.getElementById('modalContainer');
+            
             modal.classList.add('show');
 
             container.innerHTML = `
@@ -845,7 +887,13 @@
             `;
         }
 
-        function switchMenu(sectionName) {
+        function switchMenu(element, sectionName) {
+            // Убираем подсветку со всех кнопок
+            const items = document.querySelectorAll('.sidebar-menu-item');
+            items.forEach(item => item.classList.remove('active'));
+            // Добавляем нажатой
+            element.classList.add('active');
+
             const log = document.getElementById('drop-logs');
             if (log) {
                 log.innerHTML += `<br><span style="color: #ff6600;">[Navigation] Переход в раздел: ${sectionName}</span>`;
@@ -875,103 +923,72 @@
         // --- ОТРИСОВКА ДАШБОРДА ---
         function renderDashboard() {
             const t = translations[currentLang];
-            document.body.innerHTML = `
-                <div class="header">
-                    <div class="logo-container" onclick="isLoggedIn = false; location.reload()">
-                        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 32px; height: 32px;">
-                            <ellipse cx="12" cy="20" rx="10" ry="3" stroke="#ff6600" stroke-width="2" fill="#ff6600" fill-opacity="0.15"/>
-                            <path d="M2 20c0 1.66 4.48 3 10 3s10-1.34 10-3" stroke="#ff6600" stroke-width="2"/>
-                            <ellipse cx="12" cy="20" rx="5" ry="1.5" stroke="#ff6600" stroke-width="1" stroke-opacity="0.6"/>
-                            <path d="M12 3L7 5.5L12 8L17 5.5L12 3Z" fill="#ffffff"/>
-                            <path d="M7 5.5V10.5L12 13V8L7 5.5Z" fill="#dddddd"/>
-                            <path d="M17 5.5V10.5L12 13V8L17 5.5Z" fill="#aaaaaa"/>
-                            <path d="M12 14V17" stroke="#ff6600" stroke-width="2" stroke-linecap="round"/>
-                            <path d="M8 11.5V14" stroke="#ff6600" stroke-width="1.5" stroke-linecap="round" stroke-opacity="0.7"/>
-                            <path d="M16 11.5V14" stroke="#ff6600" stroke-width="1.5" stroke-linecap="round" stroke-opacity="0.7"/>
-                        </svg>
-                        <span>AIRDROP-X</span>
-                    </div>
-                    <div class="header-actions">
-                        <div class="lang-dropdown-wrapper">
-                            <button class="btn-dark-sm" id="lang-btn" onclick="toggleLangMenu(event)">
-                                <span style="color: #888; font-size: 12px; font-weight: bold; background: #1a1d24; padding: 2px 6px; border-radius: 4px;" id="current-lang-badge">${t.langCode}</span>
-                                <span id="current-lang-text">${t.langName}</span>
-                            </button>
-                            <div class="lang-menu" id="langMenu">
-                                <button class="lang-option" onclick="changeLanguage('en')"><span style="color: #888; font-size: 12px; font-weight: bold; background: #1a1d24; padding: 2px 6px; border-radius: 4px;">US</span> English</button>
-                                <button class="lang-option" onclick="changeLanguage('zh')"><span style="color: #888; font-size: 12px; font-weight: bold; background: #1a1d24; padding: 2px 6px; border-radius: 4px;">CN</span> 中文</button>
-                                <button class="lang-option" onclick="changeLanguage('ru')"><span style="color: #888; font-size: 12px; font-weight: bold; background: #1a1d24; padding: 2px 6px; border-radius: 4px;">RU</span> Русский</button>
-                            </div>
+            const dashboardContent = document.getElementById('dashboard-content');
+            
+            dashboardContent.innerHTML = `
+                <div style="width: 300px; display: flex; flex-direction: column; gap: 15px;">
+                    <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 20px; display: flex; align-items: center; gap: 15px;">
+                        <div style="width: 45px; height: 45px; background: linear-gradient(135deg, #ff6600, #993d00); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 18px; color: #000;">R</div>
+                        <div>
+                            <div style="font-weight: 700; font-size: 15px; color: #fff;">Ruby1</div>
+                            <div style="font-size: 12px; color: #8892b0;">${t.joinedText}</div>
                         </div>
-                        <button class="btn-dark-sm" onclick="isLoggedIn = false; location.reload()" style="border-color: #ff3333; color: #ff3333;">${t.logout}</button>
+                    </div>
+
+                    <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 20px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                            <div>
+                                <div style="font-size: 12px; color: #8892b0;">${t.balanceText}</div>
+                                <div id="dashboard-balance-value" style="font-size: 18px; font-weight: bold; color: #ff6600; margin-top: 4px;">$0.00</div>
+                            </div>
+                            <button style="background: #00d95f; color: #000; border: none; width: 30px; height: 30px; border-radius: 50%; font-weight: bold; cursor: pointer;">+</button>
+                        </div>
+                        <button id="dashboard-wallet-btn" onclick="connectDashboardWallet()" style="width: 100%; background: #ff6600; color: #000; border: none; padding: 10px; border-radius: 8px; font-weight: bold; font-size: 13px; cursor: pointer;">${t.connectWalletBtn}</button>
+                        <div id="dashboard-wallet-status" style="font-size: 11px; color: #8892b0; margin-top: 8px; word-break: break-all; text-align: center;"></div>
+                    </div>
+
+                    <!-- ЛЕВОЕ МЕНЮ С ПОДСВЕТКОЙ -->
+                    <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 12px; display: flex; flex-direction: column; gap: 4px;">
+                        <div class="sidebar-menu-item active" onclick="switchMenu(this, 'Looter & Drops')">📦 ${t.looterMenu}</div>
+                        <div class="sidebar-menu-item" onclick="openFarmingModal()">🌾 ${t.farmTabBtn}</div>
+                        <div class="sidebar-menu-item" onclick="switchMenu(this, 'Wallets')">👥 ${t.walletsMenu} <span style="background: #ff6600; color: #000; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: bold; margin-left: 5px;">BETA</span></div>
+                        <div class="sidebar-menu-item" onclick="switchMenu(this, 'Statistics')">📊 ${t.statsMenu}</div>
+                        <div class="sidebar-menu-item" onclick="switchMenu(this, 'Settings')">⚙️ ${t.settingsMenu}</div>
                     </div>
                 </div>
 
-                <div style="display: flex; max-width: 1400px; width: 100%; margin: 30px auto; padding: 0 20px; gap: 30px; flex: 1;">
-                    <div style="width: 300px; display: flex; flex-direction: column; gap: 15px;">
-                        <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 20px; display: flex; align-items: center; gap: 15px;">
-                            <div style="width: 45px; height: 45px; background: linear-gradient(135deg, #ff6600, #993d00); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 18px; color: #000;">R</div>
-                            <div>
-                                <div style="font-weight: 700; font-size: 15px; color: #fff;">Ruby1</div>
-                                <div style="font-size: 12px; color: #8892b0;">${t.joinedText}</div>
-                            </div>
+                <div style="flex: 1; display: flex; flex-direction: column; gap: 20px;">
+                    <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 30px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                            <h3 style="margin: 0; font-size: 20px; color: #fff;">🚀 ${t.dashTitle}</h3>
+                            <span style="background: rgba(0,217,95,0.1); color: #00d95f; padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: bold;">ONLINE</span>
+                        </div>
+                        <p style="color: #8892b0; font-size: 15px; line-height: 1.6; margin-bottom: 25px;">${t.dashDesc}</p>
+                        
+                        <!-- ФИЛЬТРЫ -->
+                        <div style="margin-bottom: 20px; padding: 15px; background: #060709; border: 1px solid #1c202d; border-radius: 10px; display: flex; gap: 20px; flex-wrap: wrap;">
+                            <label style="color: #8892b0; font-size: 13px; display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                <input type="checkbox" id="filter-tier1" checked style="accent-color: #ff6600; width: 16px; height: 16px;"> 
+                                ${t.filterTier1}
+                            </label>
+                            <label style="color: #8892b0; font-size: 13px; display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                <input type="checkbox" id="filter-micro" checked style="accent-color: #ff6600; width: 16px; height: 16px;"> 
+                                ${t.filterMicro}
+                            </label>
+                            <label style="color: #8892b0; font-size: 13px; display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                <input type="checkbox" id="filter-refunds" checked style="accent-color: #ff6600; width: 16px; height: 16px;"> 
+                                ${t.filterRefunds}
+                            </label>
                         </div>
 
-                        <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 20px;">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                                <div>
-                                    <div style="font-size: 12px; color: #8892b0;">${t.balanceText}</div>
-                                    <div id="dashboard-balance-value" style="font-size: 18px; font-weight: bold; color: #ff6600; margin-top: 4px;">$0.00</div>
-                                </div>
-                                <button style="background: #00d95f; color: #000; border: none; width: 30px; height: 30px; border-radius: 50%; font-weight: bold; cursor: pointer;">+</button>
-                            </div>
-                            <button id="dashboard-wallet-btn" onclick="connectDashboardWallet()" style="width: 100%; background: #ff6600; color: #000; border: none; padding: 10px; border-radius: 8px; font-weight: bold; font-size: 13px; cursor: pointer;">${t.connectWalletBtn}</button>
-                            <div id="dashboard-wallet-status" style="font-size: 11px; color: #8892b0; margin-top: 8px; word-break: break-all; text-align: center;"></div>
+                        <div style="display: flex; gap: 15px;">
+                            <button onclick="startScanningDrops()" style="background-color: #ff6600; color: #000; border: none; padding: 14px 28px; border-radius: 10px; font-weight: bold; font-size: 14px; cursor: pointer;">🔍 ${t.scanBtn}</button>
+                            <button onclick="claimFoundDrops()" style="background-color: #151821; color: #fff; border: 1px solid #222633; padding: 14px 28px; border-radius: 10px; font-weight: bold; font-size: 14px; cursor: pointer;">⚡ ${t.claimBtn}</button>
+                            <button onclick="openFarmingModal()" style="background-color: rgba(255,102,0,0.1); color: #ff6600; border: 1px solid #ff6600; padding: 14px 28px; border-radius: 10px; font-weight: bold; font-size: 14px; cursor: pointer;">🌾 ${t.farmTabBtn}</button>
                         </div>
 
-                        <!-- ЛЕВОЕ МЕНЮ -->
-                        <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 12px; display: flex; flex-direction: column; gap: 4px;">
-                            <div style="padding: 12px 16px; background: #151821; color: #fff; border-radius: 10px; font-weight: 600; font-size: 14px; cursor: pointer;" onclick="switchMenu('Looter & Drops')">📦 ${t.looterMenu}</div>
-                            <div style="padding: 12px 16px; color: #8892b0; border-radius: 10px; font-weight: 500; font-size: 14px; cursor: pointer; display: flex; align-items: center;" onclick="openFarmingModal()">🌾 ${t.farmTabBtn}</div>
-                            <div style="padding: 12px 16px; color: #8892b0; border-radius: 10px; font-weight: 500; font-size: 14px; cursor: pointer;" onclick="switchMenu('Wallets')">👥 ${t.walletsMenu} <span style="background: #ff6600; color: #000; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: bold;">BETA</span></div>
-                            <div style="padding: 12px 16px; color: #8892b0; border-radius: 10px; font-weight: 500; font-size: 14px; cursor: pointer;" onclick="switchMenu('Statistics')">📊 ${t.statsMenu}</div>
-                            <div style="padding: 12px 16px; color: #8892b0; border-radius: 10px; font-weight: 500; font-size: 14px; cursor: pointer;" onclick="switchMenu('Settings')">⚙️ ${t.settingsMenu}</div>
-                        </div>
-                    </div>
-
-                    <div style="flex: 1; display: flex; flex-direction: column; gap: 20px;">
-                        <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 30px;">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                                <h3 style="margin: 0; font-size: 20px; color: #fff;">🚀 ${t.dashTitle}</h3>
-                                <span style="background: rgba(0,217,95,0.1); color: #00d95f; padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: bold;">ONLINE</span>
-                            </div>
-                            <p style="color: #8892b0; font-size: 15px; line-height: 1.6; margin-bottom: 25px;">${t.dashDesc}</p>
-                            
-                            <!-- ФИЛЬТРЫ -->
-                            <div style="margin-bottom: 20px; padding: 15px; background: #060709; border: 1px solid #1c202d; border-radius: 10px; display: flex; gap: 20px; flex-wrap: wrap;">
-                                <label style="color: #8892b0; font-size: 13px; display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                                    <input type="checkbox" id="filter-tier1" checked style="accent-color: #ff6600; width: 16px; height: 16px;"> 
-                                    ${t.filterTier1}
-                                </label>
-                                <label style="color: #8892b0; font-size: 13px; display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                                    <input type="checkbox" id="filter-micro" checked style="accent-color: #ff6600; width: 16px; height: 16px;"> 
-                                    ${t.filterMicro}
-                                </label>
-                                <label style="color: #8892b0; font-size: 13px; display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                                    <input type="checkbox" id="filter-refunds" checked style="accent-color: #ff6600; width: 16px; height: 16px;"> 
-                                    ${t.filterRefunds}
-                                </label>
-                            </div>
-
-                            <div style="display: flex; gap: 15px;">
-                                <button onclick="startScanningDrops()" style="background-color: #ff6600; color: #000; border: none; padding: 14px 28px; border-radius: 10px; font-weight: bold; font-size: 14px; cursor: pointer;">🔍 ${t.scanBtn}</button>
-                                <button onclick="claimFoundDrops()" style="background-color: #151821; color: #fff; border: 1px solid #222633; padding: 14px 28px; border-radius: 10px; font-weight: bold; font-size: 14px; cursor: pointer;">⚡ ${t.claimBtn}</button>
-                                <button onclick="openFarmingModal()" style="background-color: rgba(255,102,0,0.1); color: #ff6600; border: 1px solid #ff6600; padding: 14px 28px; border-radius: 10px; font-weight: bold; font-size: 14px; cursor: pointer;">🌾 ${t.farmTabBtn}</button>
-                            </div>
-
-                            <div id="drop-logs" style="margin-top: 25px; background-color: #060709; border: 1px solid #14171f; padding: 20px; border-radius: 10px; font-family: monospace; font-size: 13px; color: #8892b0; max-height: 200px; overflow-y: auto;">
-                                ${t.logInit}
-                            </div>
+                        <div id="drop-logs" style="margin-top: 25px; background-color: #060709; border: 1px solid #14171f; padding: 20px; border-radius: 10px; font-family: monospace; font-size: 13px; color: #8892b0; max-height: 200px; overflow-y: auto;">
+                            ${t.logInit}
                         </div>
                     </div>
                 </div>
