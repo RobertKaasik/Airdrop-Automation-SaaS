@@ -429,7 +429,7 @@
             margin-top: auto;
         }
 
-        /* Мобильная панель навигации (Floating / Bottom Sheet Menu) */
+        /* Мобильная панель навигации */
         .mobile-nav-bar {
             display: none;
             position: fixed;
@@ -682,6 +682,10 @@
             <span class="icon">🌾</span>
             <span id="mn-farm">Фарм</span>
         </button>
+        <button class="mobile-nav-item" onclick="switchMobileNav('Tasks', this)">
+            <span class="icon">⚡</span>
+            <span id="mn-tasks">Задачи</span>
+        </button>
         <button class="mobile-nav-item" onclick="switchMobileNav('Wallets', this)">
             <span class="icon">👥</span>
             <span id="mn-wallets">Кошельки</span>
@@ -719,6 +723,7 @@
         let signer;
         let userAddress;
         let currentSection = 'Looter';
+        let telegramLinked = false;
 
         const translations = {
             ru: {
@@ -745,27 +750,30 @@
                 dashTitle: "Панель поиска и клейма аирдропов",
                 dashDesc: "Сканируйте свои кошельки на наличие незабранных наград и запускайте авто-фарминг объема.",
                 scanBtn: "Сканировать кошельки", claimBtn: "Клеймить всё",
-                farmTabBtn: "Авто-Фарминг",
+                farmTabBtn: "Авто-Фарминг", tasksTabBtn: "Активные задачи",
                 balanceText: "Баланс", connectWalletBtn: "🔌 Подключить кошелек",
                 walletConnectedText: "Кошелек подключен",
-                looterMenu: "Looter & Drops", farmMenu: "Авто-Фарминг", walletsMenu: "Кошельки", statsMenu: "Статистика", billingMenu: "Биллинг и Подписка", settingsMenu: "Настройки",
+                looterMenu: "Looter & Drops", farmMenu: "Авто-Фарминг", tasksMenu: "Активные задачи", walletsMenu: "Кошельки", statsMenu: "Статистика", billingMenu: "Биллинг и Подписка", settingsMenu: "Настройки",
                 joinedText: "зарегистрирован 26 июля 2026",
                 logInit: "[System] Личный кабинет инициализирован. Все модули прокси и безопасности активированы...",
-                logScanning: "🔍 Сканирование смарт-контрактов...",
-                logClaiming: "⚡ Запуск Anti-Sybil модуля: рандомизация времени и оптимальный Gwei...",
-                logSuccess: "🚀 Успешно! Все найденные токены получены и распределены.",
                 
                 filterTier1: "Крупные аирдропы",
                 filterMicro: "Микро-дропы (<$10)",
                 filterRefunds: "Рефанды газа",
-                logFoundResult: "✅ Обнаружено:",
-                logTotal: "Итого:",
                 
                 farmTitle: "🌾 Авто-Фарминг объемов (Multi-Route)",
                 farmDesc: "Комплексная настройка взаимодействия смарт-контрактов для накрутки объемов и транзакций.",
                 netSelectLabel: "Целевая сеть для фарма:",
                 delayLabel: "Рандомная задержка (сек):",
                 startFarmBtn: "Запустить фарминг",
+                
+                tasksTitle: "⚡ Очередь активных задач (Live Queue)",
+                tasksDesc: "Мониторинг запущенных скриптов накрутки объемов и клейма по кошелькам.",
+                
+                tgLinkTitle: "🤖 Telegram Уведомления",
+                tgLinkDesc: "Получайте мгновенные пуш-уведомления в Telegram, когда софт находит жирный дроп или завершает сессию.",
+                tgConnectBtn: "Привязать Telegram Bot",
+                tgConnectedText: "Telegram успешно привязан (@RubyFarmer_bot) ✅",
                 
                 tipClaims: "<b>Клейм (Claim)</b> — процесс безопасного извлечения распределенных токенов (аирдропа) из смарт-контракта на ваш кошелек.",
                 tipGas: "<b>Газ (Gas)</b> — комиссия сети блокчейна. Софт автоматически ждет снижения газа, чтобы вы не переплачивали за транзакции.",
@@ -801,27 +809,30 @@
                 dashTitle: "Airdrop Search & Claim Dashboard",
                 dashDesc: "Scan your wallets for unclaimed rewards and launch automated volume farming.",
                 scanBtn: "Scan Wallets", claimBtn: "Claim All",
-                farmTabBtn: "Auto-Farming",
+                farmTabBtn: "Auto-Farming", tasksTabBtn: "Active Tasks",
                 balanceText: "Balance", connectWalletBtn: "🔌 Connect Wallet",
                 walletConnectedText: "Wallet Connected",
-                looterMenu: "Looter & Drops", farmMenu: "Auto-Farming", walletsMenu: "Wallets", statsMenu: "Statistics", billingMenu: "Billing & Subscription", settingsMenu: "Settings",
+                looterMenu: "Looter & Drops", farmMenu: "Auto-Farming", tasksMenu: "Active Tasks", walletsMenu: "Wallets", statsMenu: "Statistics", billingMenu: "Billing & Subscription", settingsMenu: "Settings",
                 joinedText: "joined July 26, 2026",
                 logInit: "[System] Dashboard initialized. Proxy & security modules active...",
-                logScanning: "🔍 Scanning smart contracts...",
-                logClaiming: "⚡ Running Anti-Sybil module: randomizing timing & picking optimal Gwei...",
-                logSuccess: "🚀 Success! All found tokens claimed and distributed.",
                 
                 filterTier1: "Tier-1 Airdrops",
                 filterMicro: "Micro-drops (<$10)",
                 filterRefunds: "Gas Refunds",
-                logFoundResult: "✅ Found:",
-                logTotal: "Total:",
                 
                 farmTitle: "🌾 Auto-Farming (Multi-Route)",
                 farmDesc: "Complex smart-contract interaction setup for generating volume and transactions.",
                 netSelectLabel: "Target Network:",
                 delayLabel: "Random Delay (sec):",
                 startFarmBtn: "Start Farming",
+                
+                tasksTitle: "⚡ Live Task Queue",
+                tasksDesc: "Monitoring running volume generation scripts and claims across wallets.",
+                
+                tgLinkTitle: "🤖 Telegram Notifications",
+                tgLinkDesc: "Receive instant push notifications in Telegram when software finds a lucrative drop or finishes a session.",
+                tgConnectBtn: "Link Telegram Bot",
+                tgConnectedText: "Telegram successfully linked (@RubyFarmer_bot) ✅",
                 
                 tipClaims: "<b>Claim</b> — the process of securely withdrawing allocated airdrop tokens from a smart contract to your wallet.",
                 tipGas: "<b>Gas</b> — the blockchain network fee. The software automatically waits for low gas so you don't overpay.",
@@ -857,27 +868,30 @@
                 dashTitle: "空投搜索与领取面板",
                 dashDesc: "扫描您的钱包以查找未认领的奖励并启动自动化刷量农场。",
                 scanBtn: "扫描钱包", claimBtn: "全部领取",
-                farmTabBtn: "自动刷量",
+                farmTabBtn: "自动刷量", tasksTabBtn: "活动任务",
                 balanceText: "余额", connectWalletBtn: "🔌 连接钱包",
                 walletConnectedText: "钱包已连接",
-                looterMenu: "Looter & Drops", farmMenu: "自动刷量", walletsMenu: "钱包管理", statsMenu: "数据统计", billingMenu: "账单与订阅", settingsMenu: "系统设置",
+                looterMenu: "Looter & Drops", farmMenu: "自动刷量", tasksMenu: "活动任务", walletsMenu: "钱包管理", statsMenu: "数据统计", billingMenu: "账单与订阅", settingsMenu: "系统设置",
                 joinedText: "加入于 2026年7月26日",
                 logInit: "[System] 控制面板已初始化。代理与安全模块已就绪...",
-                logScanning: "🔍 正在扫描智能合约...",
-                logClaiming: "⚡ 正在启动反女巫模块：随机化时间并选择最佳 Gwei...",
-                logSuccess: "🚀 成功！所有找到的代币已成功领取并分发。",
                 
                 filterTier1: "顶级空投",
                 filterMicro: "微型空投 (<$10)",
                 filterRefunds: "Gas 退款",
-                logFoundResult: "✅ 发现：",
-                logTotal: "总计：",
                 
                 farmTitle: "🌾 自动刷量 (多路由)",
                 farmDesc: "复杂的智能合约交互设置，用于生成交易量和活跃度。",
                 netSelectLabel: "目标网络：",
                 delayLabel: "随机延迟 (秒)：",
                 startFarmBtn: "启动刷量",
+                
+                tasksTitle: "⚡ 实时任务队列",
+                tasksDesc: "监控各钱包正在运行的刷量脚本和领取状态。",
+                
+                tgLinkTitle: "🤖 Telegram 通知",
+                tgLinkDesc: "当软件发现大额空投或完成会话时，在 Telegram 中接收即时推送通知。",
+                tgConnectBtn: "绑定 Telegram 机器人",
+                tgConnectedText: "Telegram 绑定成功 (@RubyFarmer_bot) ✅",
                 
                 tipClaims: "<b>领取 (Claim)</b> — 将分配到的空投代币从智能合约安全提取到您的钱包的过程。",
                 tipGas: "<b>Gas (矿工费)</b> — 区块链网络费用。软件会自动等待低矿工费时段，以免您支付过高费用。",
@@ -887,7 +901,7 @@
                 tipVolume: "<b>目标交易量 ($)</b> — 软件在钱包上完成任务前需要生成的总交易额（美元）。",
                 tipSwap: "<b>DEX Swaps (DEX 兑换)</b> — 在去中心化交易所上自动兑换代币以建立交易量。",
                 tipMint: "<b>NFT Mints (NFT 铸造)</b> — 自动铸造免费或廉价的 NFT 以模拟真实用户活动。",
-                tipPool: "<b>Liquidity Pools (流动性池)</b> — 在协议池中添加和移除流动性以获取最多空投积分。"
+                tipPool: "<b>Liquidity Pools (流动性池)</b> — 在协议池中添加和移除流动性以获取最多空投积分."
             }
         };
 
@@ -1052,6 +1066,7 @@
             container.innerHTML = `
                 <div class="sheet-menu-item ${currentSection === 'Looter' ? 'active' : ''}" onclick="selectSheetMenu('Looter')">📦 ${t.looterMenu}</div>
                 <div class="sheet-menu-item ${currentSection === 'Farming' ? 'active' : ''}" onclick="selectSheetMenu('Farming')">🌾 ${t.farmTabBtn}</div>
+                <div class="sheet-menu-item ${currentSection === 'Tasks' ? 'active' : ''}" onclick="selectSheetMenu('Tasks')">⚡ ${t.tasksTabBtn}</div>
                 <div class="sheet-menu-item ${currentSection === 'Wallets' ? 'active' : ''}" onclick="selectSheetMenu('Wallets')">👥 ${t.walletsMenu}</div>
                 <div class="sheet-menu-item ${currentSection === 'Statistics' ? 'active' : ''}" onclick="selectSheetMenu('Statistics')">📊 ${t.statsMenu}</div>
                 <div class="sheet-menu-item ${currentSection === 'Billing' ? 'active' : ''}" onclick="selectSheetMenu('Billing')">💳 ${t.billingMenu}</div>
@@ -1143,14 +1158,23 @@
             const log = document.getElementById('drop-logs');
             
             if (log) {
-                log.innerHTML += `<br><span style="color: #ff6600;">[Auto-Farm] Запуск модулей в сети ${network} (Задержка: ${delay}с, Прокси активны)...</span>`;
+                const randomHash = '0x' + Array.from({length: 8}, () => Math.floor(Math.random()*16).toString(16)).join('');
+                log.innerHTML += `<br><span style="color: #ff6600;">[${new Date().toLocaleTimeString()}] [Auto-Farm] Запуск в сети ${network} | Tx: <b style="color:#aaa;">${randomHash}...</b></span>`;
                 log.scrollTop = log.scrollHeight;
                 
                 setTimeout(() => {
-                    log.innerHTML += `<br><span style="color: #00d95f;">[Auto-Farm] Транзакции отправлены в очередь ${network}! Сибил-защита пройдена.</span>`;
+                    log.innerHTML += `<br><span style="color: #00d95f;">[${new Date().toLocaleTimeString()}] [Success] Очередь ${network} обработана. Сибил-защита пройдена успешно.</span>`;
                     log.scrollTop = log.scrollHeight;
+                    if(telegramLinked) {
+                        alert("[Telegram Push Bot] 🚀 Фарминг в сети " + network + " успешно завершен!");
+                    }
                 }, 3000);
             }
+        }
+
+        function toggleTelegramBot() {
+            telegramLinked = !telegramLinked;
+            renderDashboardContent('Settings');
         }
 
         function renderDashboard(activeTab) {
@@ -1190,6 +1214,7 @@
                             <button onclick="claimFoundDrops()" style="background-color: #151821; color: #fff; border: 1px solid #222633; padding: 13px 20px; border-radius: 10px; font-weight: bold; font-size: 14px; cursor: pointer; width: 100%;">⚡ ${t.claimBtn}</button>
                         </div>
 
+                        <!-- Живой терминал логов -->
                         <div id="drop-logs" style="margin-top: 20px; background-color: #060709; border: 1px solid #14171f; padding: 16px; border-radius: 10px; font-family: monospace; font-size: 12px; color: #8892b0; max-height: 180px; overflow-y: auto;">
                             ${t.logInit}
                         </div>
@@ -1232,26 +1257,48 @@
                                 <input type="number" class="auth-input" value="5000" placeholder="Общая сумма сделок">
                             </div>
                         </div>
-                        
-                        <div style="margin: 16px 0; background: #060709; padding: 14px; border-radius: 10px; border: 1px solid #1c202d;">
-                            <div style="color: #fff; font-size: 13px; margin-bottom: 10px;">Включить модули набива:</div>
-                            <div style="display: flex; gap: 14px; flex-wrap: wrap;">
-                                <label style="color: #8892b0; font-size: 12px; display: flex; align-items: center; gap: 6px; cursor: pointer;">
-                                    <input type="checkbox" checked style="accent-color: #ff6600;"> <span class="term-tooltip">DEX Swaps<div class="tooltip-box">${t.tipSwap}</div></span>
-                                </label>
-                                <label style="color: #8892b0; font-size: 12px; display: flex; align-items: center; gap: 6px; cursor: pointer;">
-                                    <input type="checkbox" checked style="accent-color: #ff6600;"> <span class="term-tooltip">NFT Mints<div class="tooltip-box">${t.tipMint}</div></span>
-                                </label>
-                                <label style="color: #8892b0; font-size: 12px; display: flex; align-items: center; gap: 6px; cursor: pointer;">
-                                    <input type="checkbox" checked style="accent-color: #ff6600;"> <span class="term-tooltip">Liquidity Pools<div class="tooltip-box">${t.tipPool}</div></span>
-                                </label>
-                            </div>
-                        </div>
 
-                        <button onclick="startAutoFarming()" style="background-color: #ff6600; color: #000; border: none; padding: 13px 20px; border-radius: 10px; font-weight: bold; font-size: 14px; cursor: pointer; width: 100%;">Запустить фарминг</button>
+                        <button onclick="startAutoFarming()" style="background-color: #ff6600; color: #000; border: none; padding: 13px 20px; border-radius: 10px; font-weight: bold; font-size: 14px; cursor: pointer; width: 100%; margin-top: 10px;">${t.startFarmBtn}</button>
 
                         <div id="drop-logs" style="margin-top: 20px; background-color: #060709; border: 1px solid #14171f; padding: 14px; border-radius: 10px; font-family: monospace; font-size: 12px; color: #8892b0; max-height: 140px; overflow-y: auto;">
                             [Farm Engine] Готов к запуску. Прокси изолированы.
+                        </div>
+                    </div>
+                `;
+            } else if (section === 'Tasks') {
+                centerHtml = `
+                    <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 20px; width: 100%;">
+                        <h3 style="margin-top: 0; color: #fff; font-size: 18px;">${t.tasksTitle}</h3>
+                        <p style="color: #8892b0; font-size: 13px;">${t.tasksDesc}</p>
+                        
+                        <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 16px;">
+                            <div style="background: #060709; padding: 14px; border-radius: 12px; border: 1px solid #1c202d;">
+                                <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: bold; margin-bottom: 6px;">
+                                    <span style="color: #ff6600;">#1 Ruby-Main (Base L2)</span>
+                                    <span style="color: #00d95f;">Выполнение 78%</span>
+                                </div>
+                                <div style="width: 100%; background: #14171f; height: 6px; border-radius: 3px; overflow: hidden;">
+                                    <div style="width: 78%; background: #ff6600; height: 100%;"></div>
+                                </div>
+                                <div style="font-size: 11px; color: #8892b0; margin-top: 6px; display: flex; justify-content: space-between;">
+                                    <span>Сделки: 14 / 18 DEX Swaps</span>
+                                    <span>Tx: 0x4f8a...3b21</span>
+                                </div>
+                            </div>
+
+                            <div style="background: #060709; padding: 14px; border-radius: 12px; border: 1px solid #1c202d;">
+                                <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: bold; margin-bottom: 6px;">
+                                    <span style="color: #ff6600;">#2 Farm-Sub1 (ZkSync Era)</span>
+                                    <span style="color: #3b82f6;">Ожидание газа (Gwei: 28)</span>
+                                </div>
+                                <div style="width: 100%; background: #14171f; height: 6px; border-radius: 3px; overflow: hidden;">
+                                    <div style="width: 34%; background: #3b82f6; height: 100%;"></div>
+                                </div>
+                                <div style="font-size: 11px; color: #8892b0; margin-top: 6px; display: flex; justify-content: space-between;">
+                                    <span>Сделки: 5 / 15 DEX Swaps</span>
+                                    <span>Tx: 0x9c12...f8aa</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 `;
@@ -1341,6 +1388,16 @@
                     <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 20px; width: 100%;">
                         <h3 style="margin-top: 0; color: #fff; font-size: 18px;">⚙️ Системные настройки</h3>
                         <p style="color: #8892b0; font-size: 13px;">Глобальные параметры автоматизации.</p>
+                        
+                        <!-- Блок интеграции Telegram -->
+                        <div style="margin: 16px 0; background: #060709; padding: 16px; border-radius: 12px; border: 1px solid #1c202d;">
+                            <h4 style="margin: 0 0 6px 0; color: #fff; font-size: 14px;">${t.tgLinkTitle}</h4>
+                            <p style="color: #8892b0; font-size: 12px; margin-bottom: 12px;">${t.tgLinkDesc}</p>
+                            <button onclick="toggleTelegramBot()" style="background: ${telegramLinked ? '#151821' : '#ff6600'}; color: ${telegramLinked ? '#00d95f' : '#000'}; border: ${telegramLinked ? '1px solid #00d95f' : 'none'}; padding: 10px 16px; border-radius: 8px; font-weight: bold; font-size: 13px; cursor: pointer;">
+                                ${telegramLinked ? t.tgConnectedText : t.tgConnectBtn}
+                            </button>
+                        </div>
+
                         <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 16px;">
                             <label style="display: flex; align-items: center; justify-content: space-between; background: #060709; padding: 14px; border-radius: 10px; border: 1px solid #1c202d; cursor: pointer; gap: 10px;">
                                 <span style="font-size: 13px; color: #fff;">Авто-ротация прокси при сбое RPC</span>
@@ -1381,6 +1438,7 @@
                     <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 10px; display: flex; flex-direction: column; gap: 4px;">
                         <div class="sidebar-menu-item ${section === 'Looter' ? 'active' : ''}" data-section="Looter" onclick="switchMenu(this, 'Looter')">📦 ${t.looterMenu}</div>
                         <div class="sidebar-menu-item ${section === 'Farming' ? 'active' : ''}" data-section="Farming" onclick="switchMenu(this, 'Farming')">🌾 ${t.farmTabBtn}</div>
+                        <div class="sidebar-menu-item ${section === 'Tasks' ? 'active' : ''}" data-section="Tasks" onclick="switchMenu(this, 'Tasks')">⚡ ${t.tasksTabBtn}</div>
                         <div class="sidebar-menu-item ${section === 'Wallets' ? 'active' : ''}" data-section="Wallets" onclick="switchMenu(this, 'Wallets')">👥 ${t.walletsMenu} <span style="background: #ff6600; color: #000; font-size: 9px; padding: 2px 5px; border-radius: 4px; font-weight: bold; margin-left: 4px;">PRO</span></div>
                         <div class="sidebar-menu-item ${section === 'Statistics' ? 'active' : ''}" data-section="Statistics" onclick="switchMenu(this, 'Statistics')">📊 ${t.statsMenu}</div>
                         <div class="sidebar-menu-item ${section === 'Billing' ? 'active' : ''}" data-section="Billing" onclick="switchMenu(this, 'Billing')">💳 ${t.billingMenu}</div>
@@ -1413,29 +1471,38 @@
         }
 
         async function startScanningDrops() {
-            const t = translations[currentLang];
             const log = document.getElementById('drop-logs');
             if(!log) return;
-            log.innerHTML += `<br>${t.logScanning}`;
+            const tx1 = '0x' + Array.from({length: 8}, () => Math.floor(Math.random()*16).toString(16)).join('');
+            const tx2 = '0x' + Array.from({length: 8}, () => Math.floor(Math.random()*16).toString(16)).join('');
+            
+            log.innerHTML += `<br><span style="color: #ff6600;">[${new Date().toLocaleTimeString()}] 🔍 Сканирование контрактов через RPC... [Tx: ${tx1}...]</span>`;
             log.scrollTop = log.scrollHeight;
             
             setTimeout(() => {
-                log.innerHTML += `<br><span style="color: #00d95f;">${t.logFoundResult} ZkSync ($24.50), Dust Tokens ($3.10), Gas Refund ($1.80) | ${t.logTotal} ~$29.40</span>`;
+                log.innerHTML += `<br><span style="color: #00d95f;">[${new Date().toLocaleTimeString()}] ✅ Найдено: ZkSync ($24.50), Gas Refund ($1.80) [Tx: ${tx2}...]</span>`;
                 log.scrollTop = log.scrollHeight;
+                if(telegramLinked) {
+                    alert("[Telegram Push Bot] 🎁 Обнаружен новый аирдроп на сумму ~$26.30!");
+                }
             }, 1500);
         }
 
         async function claimFoundDrops() {
-            const t = translations[currentLang];
             const log = document.getElementById('drop-logs');
             if(!log) return;
-            log.innerHTML += `<br><span style="color: #ff6600;">${t.logClaiming}</span>`;
+            const txClaim = '0x' + Array.from({length: 8}, () => Math.floor(Math.random()*16).toString(16)).join('');
+            
+            log.innerHTML += `<br><span style="color: #ff6600;">[${new Date().toLocaleTimeString()}] ⚡ Запуск клейма с Anti-Sybil (Gwei: 14)... [Tx: ${txClaim}...]</span>`;
             log.scrollTop = log.scrollHeight;
             
             setTimeout(() => {
-                log.innerHTML += `<br><span style="color: #00d95f;">${t.logSuccess}</span>`;
+                log.innerHTML += `<br><span style="color: #00d95f;">[${new Date().toLocaleTimeString()}] 🚀 Успешно! Токены распределены по кошелькам.</span>`;
                 log.scrollTop = log.scrollHeight;
-            }, 3500);
+                if(telegramLinked) {
+                    alert("[Telegram Push Bot] 💰 Клейм успешно завершен! Средства зачислены.");
+                }
+            }, 3000);
         }
 
         function toggleFaq(element) {
