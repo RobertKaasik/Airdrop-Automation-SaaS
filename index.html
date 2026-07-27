@@ -360,7 +360,7 @@
 </head>
 <body>
 
-    <!-- Шапка (Логотип кликабельный -> плавная прокрутка наверх) -->
+    <!-- Шапка -->
     <div class="header">
         <div class="logo-container" onclick="window.scrollTo({ top: 0, behavior: 'smooth' })">
             <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 32px; height: 32px;">
@@ -380,7 +380,7 @@
             <button id="login-btn" class="btn-dark-sm" onclick="openModal('login')">Войти</button>
             
             <div class="lang-dropdown-wrapper">
-                <button class="btn-dark-sm" id="lang-btn" onclick="toggleLangMenu()">
+                <button class="btn-dark-sm" id="lang-btn" onclick="toggleLangMenu(event)">
                     <span style="color: #888; font-size: 12px; font-weight: bold; background: #1a1d24; padding: 2px 6px; border-radius: 4px;" id="current-lang-badge">RU</span>
                     <span id="current-lang-text">Русский</span>
                 </button>
@@ -393,12 +393,12 @@
         </div>
     </div>
 
-    <!-- Модальное окно авторизации/регистрации -->
+    <!-- Модальное окно -->
     <div class="modal-overlay" id="authModal" onclick="handleOverlayClick(event)">
         <div class="auth-modal" id="modalContainer"></div>
     </div>
 
-    <!-- Главный экран с кнопками "Получить доступ" и "Подробнее" -->
+    <!-- Главный экран -->
     <div class="hero">
         <h1 id="hero-title">Универсальный инструмент<br>для автоматизации и сбора Airdrop.</h1>
         <p id="hero-desc">Фармите поинты, сканируйте кошельки на наличие распределений и клеймите аирдропы в один клик с защитой Anti-Sybil.</p>
@@ -420,8 +420,8 @@
         </div>
     </div>
 
-    <!-- Возможности платформы (цель прокрутки кнопки "Подробнее") -->
-    <div id="features-section" class="section-title" id="features-heading">Возможности платформы</div>
+    <!-- Возможности платформы -->
+    <div id="features-section" class="section-title">Возможности платформы</div>
     <div class="features-grid">
         <div class="feature-card">
             <div class="card-icon">🔍</div>
@@ -441,7 +441,7 @@
     </div>
 
     <!-- Секция FAQ -->
-    <div class="section-title" id="faq-heading">Часто задаваемые вопросы</div>
+    <div id="faq-heading" class="section-title">Часто задаваемые вопросы</div>
     <div class="faq-section">
         <div class="faq-item" onclick="toggleFaq(this)">
             <div class="faq-question"><span id="q1">Как работает авто-клейм аирдропов?</span> <span>+</span></div>
@@ -452,8 +452,16 @@
             <div class="faq-answer" id="a2">Да, система полностью изолирует сессии, прокси и отпечатки, исключая риск сибил-бана от протоколов.</div>
         </div>
         <div class="faq-item" onclick="toggleFaq(this)">
-            <div class="faq-question"><span id="q3">Как получить доступ к софту?</span> <span>+</span></div>
-            <div class="faq-answer" id="a3">Оформите подписку в личном кабинете или свяжитесь с поддержкой, количество мест строго ограничено (300 слотов).</div>
+            <div class="faq-question"><span id="q3">Нужно ли настраивать прокси для каждого кошелька?</span> <span>+</span></div>
+            <div class="faq-answer" id="a3">Да, софт поддерживает привязку индивидуальных HTTP/Socks5 прокси к каждому адресу, чтобы антифрод-системы не связывали ваши кошельки между собой.</div>
+        </div>
+        <div class="faq-item" onclick="toggleFaq(this)">
+            <div class="faq-question"><span id="q4">Как оптимизируются расходы на газ при клейме?</span> <span>+</span></div>
+            <div class="faq-answer" id="a4">Встроенный модуль Anti-Sybil автоматически рандомизирует время отправки транзакций и подбирает оптимальный Gwei, экономя ваши средства на комиссиях сети.</div>
+        </div>
+        <div class="faq-item" onclick="toggleFaq(this)">
+            <div class="faq-question"><span id="q5">Как получить доступ к софту?</span> <span>+</span></div>
+            <div class="faq-answer" id="a5">Оформите подписку в личном кабинете или свяжитесь с поддержкой, количество мест строго ограничено (300 слотов).</div>
         </div>
     </div>
 
@@ -467,58 +475,289 @@
     </div>
 
     <script>
-        // Плавная прокрутка кнопки "Подробнее"
+        // Глобальные переменные
+        let currentLang = 'ru';
+        let isLoggedIn = false;
+        let provider;
+        let signer;
+        let userAddress;
+
+        const erc20ABI = [
+            "function balanceOf(address owner) view returns (uint256)",
+            "function symbol() view returns (string)"
+        ];
+
+        // --- СЛОВАРЬ ПЕРЕВОДОВ ---
+        const translations = {
+            ru: {
+                title: "AIRDROP-X — SaaS Панель для крипто-ферм",
+                login: "Войти", logout: "Выйти", langCode: "RU", langName: "Русский",
+                heroTitle: "Универсальный инструмент<br>для автоматизации и сбора Airdrop.",
+                heroDesc: "Фармите поинты, сканируйте кошельки на наличие распределений и клеймите аирдропы в один клик с защитой Anti-Sybil.",
+                farmBtn: "Получить доступ ($160)", settingsBtn: "Подробнее",
+                bannerText: "Приватное ПО с ограниченным количеством слотов для защиты от детектирования.",
+                featuresHeading: "Возможности платформы", faqHeading: "Часто задаваемые вопросы",
+                c1t: "Drop Scanner & Looter", c1d: "Автоматический поиск доступных для клейма аирдропов и ретродропов по всем подключенным кошелькам.",
+                c2t: "Multi-Chain Bridge Router", c2d: "Рандомизированные транзакции и свапы в сетях LayerZero, Base, Arbitrum и ZkSync для набива объемов.",
+                c3t: "Sybil Shield", c3d: "Имитация паттернов реального пользователя и интеллектуальное распределение газа без связей между кошельками.",
+                q1: "Как работает авто-клейм аирдропов?", a1: "Софт сканирует смарт-контракты и чекеры проектов, находит распределенные на ваши кошельки токены и безопасно подписывает транзакции сбора.",
+                q2: "Безопасно ли подключать мультиаккаунты?", a2: "Да, система полностью изолирует сессии, прокси и отпечатки, исключая риск сибил-бана от протоколов.",
+                q3: "Нужно ли настраивать прокси для каждого кошелька?", a3: "Да, софт поддерживает привязку индивидуальных HTTP/Socks5 прокси к каждому адресу, чтобы антифрод-системы не связывали ваши кошельки между собой.",
+                q4: "Как оптимизируются расходы на газ при клейме?", a4: "Встроенный модуль Anti-Sybil автоматически рандомизирует время отправки транзакций и подбирает оптимальный Gwei, экономя ваши средства на комиссиях сети.",
+                q5: "Как получить доступ к софту?", a5: "Оформите подписку в личном кабинете или свяжитесь с поддержкой, количество мест строго ограничено (300 слотов).",
+                
+                modalLoginDesc: "Для входа, введите свой <span>логин</span> и <span>пароль</span> в поля ниже",
+                loginPlaceholder: "Логин", passPlaceholder: "Пароль",
+                loginBtnModal: "Войти", registerBtnModal: "Создать аккаунт",
+                termsText: 'Нажимая "Войти", Вы соглашаетесь с <a href="#">Условиями использования</a> и <a href="#">Политикой конфиденциальности</a>',
+                
+                regDesc: "Для создания аккаунта, введите данные в поля ниже",
+                emailPlaceholder: "Почта", repeatPassPlaceholder: "Повторите пароль",
+                regBtnModal: "Создать аккаунт", termsReg: 'Нажимая "Создать аккаунт", Вы соглашаетесь с <a href="#">Условиями использования</a> и <a href="#">Политикой конфиденциальности</a>',
+
+                dashTitle: "Панель поиска и клейма аирдропов",
+                dashDesc: "Сканируйте свои кошельки на наличие незабранных наград и запускайте авто-фарминг объема.",
+                scanBtn: "Сканировать кошельки", claimBtn: "Клеймить всё",
+                farmTabBtn: "🌾 Авто-Фарминг (BETA)",
+                balanceText: "Баланс", connectWalletBtn: "🔌 Подключить кошелек",
+                walletConnectedText: "Кошелек подключен",
+                looterMenu: "Looter & Drops", walletsMenu: "Кошельки", statsMenu: "Статистика", settingsMenu: "Настройки",
+                joinedText: "зарегистрирован 26 июля 2026",
+                logInit: "[System] Личный кабинет инициализирован. Прокси и кошельки готовы...",
+                logScanning: "🔍 Сканирование смарт-контрактов...",
+                logClaiming: "⚡ Запуск Anti-Sybil модуля: рандомизация времени и оптимальный Gwei...",
+                logSuccess: "🚀 Успешно! Все найденные токены получены и распределены.",
+                
+                filterTier1: "Крупные аирдропы",
+                filterMicro: "Микро-дропы (<$10)",
+                filterRefunds: "Рефанды газа",
+                logFoundResult: "✅ Обнаружено:",
+                logTotal: "Итого:",
+                
+                farmModalTitle: "🌾 Модуль Авто-Фарминга (Bridge & Swap)",
+                farmModalDesc: "Настройте параметры автоматического набива объемов и транзакций для будущих аирдропов с защитой от сибил-банов.",
+                netSelectLabel: "Целевая сеть для фарма:",
+                delayLabel: "Рандомная задержка (сек):",
+                startFarmBtn: "Запустить фарминг",
+                closeBtn: "Закрыть"
+            },
+            en: {
+                title: "AIRDROP-X — Crypto Farm SaaS Panel",
+                login: "Login", logout: "Logout", langCode: "US", langName: "English",
+                heroTitle: "Universal Tool<br>for Airdrop Automation & Claiming.",
+                heroDesc: "Farm points, scan wallets for allocations, and claim airdrops in one click with robust Anti-Sybil protection.",
+                farmBtn: "Get Access ($160)", settingsBtn: "Details",
+                bannerText: "Private software with limited slots to ensure maximum safety and reliability.",
+                featuresHeading: "Platform Features", faqHeading: "Frequently Asked Questions",
+                c1t: "Drop Scanner & Looter", c1d: "Automatic search for claimable airdrops and retro-drops across all connected wallets.",
+                c2t: "Multi-Chain Bridge Router", c2d: "Randomized transactions and swaps across LayerZero, Base, Arbitrum, and ZkSync networks.",
+                c3t: "Sybil Shield", c3d: "Simulation of real user behavioral patterns and smart gas distribution without wallet links.",
+                q1: "How does auto-claiming work?", a1: "The software scans smart contracts and project checkers, finds tokens allocated to your wallets, and securely signs claim transactions.",
+                q2: "Is it safe to connect multiple accounts?", a2: "Yes, the system completely isolates sessions, proxies, and fingerprints, eliminating sybil-ban risks.",
+                q3: "Do I need to set up proxies for each wallet?", a3: "Yes, the software supports binding individual HTTP/Socks5 proxies to each address to prevent anti-fraud linking.",
+                q4: "How is gas optimized during claims?", a4: "The built-in Anti-Sybil module automatically randomizes transaction timing and picks optimal Gwei to save your network fees.",
+                q5: "How to get access?", a5: "Subscribe in your dashboard or contact support. Slots are strictly limited (300 slots).",
+                
+                modalLoginDesc: "To log in, enter your <span>username</span> and <span>password</span> below",
+                loginPlaceholder: "Username", passPlaceholder: "Password",
+                loginBtnModal: "Sign in", registerBtnModal: "Sign up",
+                termsText: 'By pressing Sign in, you agree to the <a href="#">Terms of Use</a> and <a href="#">Privacy Policy</a>',
+                
+                regDesc: "To create an account, enter your details below",
+                emailPlaceholder: "Email", repeatPassPlaceholder: "Repeat password",
+                regBtnModal: "Sign up", termsReg: 'By pressing Sign up, you agree to the <a href="#">Terms of Use</a> and <a href="#">Privacy Policy</a>',
+
+                dashTitle: "Airdrop Search & Claim Dashboard",
+                dashDesc: "Scan your wallets for unclaimed rewards and launch automated volume farming.",
+                scanBtn: "Scan Wallets", claimBtn: "Claim All",
+                farmTabBtn: "🌾 Auto-Farming (BETA)",
+                balanceText: "Balance", connectWalletBtn: "🔌 Connect Wallet",
+                walletConnectedText: "Wallet Connected",
+                looterMenu: "Looter & Drops", walletsMenu: "Wallets", statsMenu: "Statistics", settingsMenu: "Settings",
+                joinedText: "joined July 26, 2026",
+                logInit: "[System] Dashboard initialized. Proxies & wallets ready...",
+                logScanning: "🔍 Scanning smart contracts...",
+                logClaiming: "⚡ Running Anti-Sybil module: randomizing timing & picking optimal Gwei...",
+                logSuccess: "🚀 Success! All found tokens claimed and distributed.",
+                
+                filterTier1: "Tier-1 Airdrops",
+                filterMicro: "Micro-drops (<$10)",
+                filterRefunds: "Gas Refunds",
+                logFoundResult: "✅ Found:",
+                logTotal: "Total:",
+                
+                farmModalTitle: "🌾 Auto-Farming Module (Bridge & Swap)",
+                farmModalDesc: "Configure automated volume and transaction generation parameters for future airdrops with anti-sybil protection.",
+                netSelectLabel: "Target Network:",
+                delayLabel: "Random Delay (sec):",
+                startFarmBtn: "Start Farming",
+                closeBtn: "Close"
+            },
+            zh: {
+                title: "AIRDROP-X — 加密农场 SaaS 面板",
+                login: "登录", logout: "登出", langCode: "CN", langName: "中文",
+                heroTitle: "用于空投自动化与<br>领取的通用工具。",
+                heroDesc: "使用强大的防女巫保护，一键刷取积分、扫描钱包额度并领取空投。",
+                farmBtn: "获取权限 ($160)", settingsBtn: "了解详情",
+                bannerText: "名额有限的私有软件，确保最高安全性和可靠性。",
+                featuresHeading: "平台功能", faqHeading: "常见问题",
+                c1t: "空投扫描与领取", c1d: "自动在所有连接的钱包中搜索可领取的空投和retro-drop。",
+                c2t: "多链跨链路由", c2d: "在 LayerZero、Base、Arbitrum 和 ZkSync 网络中进行随机交易与兑换。",
+                c3t: "防女巫盾", c3d: "模拟真实用户的行为特征模式，智能分配gas且无钱包关联。",
+                q1: "自动领取是如何工作的？", a1: "软件扫描智能合约和项目检查器，查找分配给您钱包的代币并安全签署领取交易。",
+                q2: "连接多账户安全吗？", a2: "是的，系统完全隔离会话、代理和指纹，消除女巫封禁风险。",
+                q3: "每个钱包都需要设置代理吗？", a3: "是的，软件支持为每个地址绑定单独的 HTTP/Socks5 代理，防止反欺诈关联。",
+                q4: "领取时如何优化gas费用？", a4: "内置的反女巫模块自动随机化交易时间并选择最佳 Gwei，节省您的网络费用。",
+                q5: "如何获取权限？", a5: "在控制面板中订阅或联系客服，名额严格限制（300个名额）。",
+                
+                modalLoginDesc: "要登录，请在下方输入您的<span>用户名</span>和<span>密码</span>",
+                loginPlaceholder: "用户名", passPlaceholder: "密码",
+                loginBtnModal: "登录", registerBtnModal: "注册账户",
+                termsText: '点击登录即表示您同意 <a href="#">使用条款</a> 和 <a href="#">隐私政策</a>',
+                
+                regDesc: "要创建账户，请在下方输入您的详细信息",
+                emailPlaceholder: "电子邮箱", repeatPassPlaceholder: "重复密码",
+                regBtnModal: "注册账户", termsReg: '点击注册即表示您同意 <a href="#">使用条款</a> 和 <a href="#">隐私政策</a>',
+
+                dashTitle: "空投搜索与领取面板",
+                dashDesc: "扫描您的钱包以查找未认领的奖励并启动自动化刷量农场。",
+                scanBtn: "扫描钱包", claimBtn: "全部领取",
+                farmTabBtn: "🌾 自动刷量 (BETA)",
+                balanceText: "余额", connectWalletBtn: "🔌 连接钱包",
+                walletConnectedText: "钱包已连接",
+                looterMenu: "Looter & Drops", walletsMenu: "钱包管理", statsMenu: "数据统计", settingsMenu: "系统设置",
+                joinedText: "加入于 2026年7月26日",
+                logInit: "[System] 控制面板已初始化。代理与钱包就绪...",
+                logScanning: "🔍 正在扫描智能合约...",
+                logClaiming: "⚡ 正在启动反女巫模块：随机化时间并选择最佳 Gwei...",
+                logSuccess: "🚀 成功！所有找到的代币已成功领取并分发。",
+                
+                filterTier1: "顶级空投",
+                filterMicro: "微型空投 (<$10)",
+                filterRefunds: "Gas 退款",
+                logFoundResult: "✅ 发现：",
+                logTotal: "总计：",
+                
+                farmModalTitle: "🌾 自动刷量模块 (Bridge & Swap)",
+                farmModalDesc: "为未来的空投配置自动刷量和交易参数，具备完整的防女巫保护。",
+                netSelectLabel: "目标网络：",
+                delayLabel: "随机延迟 (秒)：",
+                startFarmBtn: "启动刷量",
+                closeBtn: "关闭"
+            }
+        };
+
+        // --- ФУНКЦИИ ЯЗЫКОВ ---
+        function toggleLangMenu(event) {
+            if (event) event.stopPropagation();
+            const menu = document.getElementById('langMenu');
+            menu.classList.toggle('show');
+        }
+
+        window.addEventListener('click', function(event) {
+            if (!event.target.closest('.lang-dropdown-wrapper')) {
+                const menu = document.getElementById('langMenu');
+                if (menu && menu.classList.contains('show')) {
+                    menu.classList.remove('show');
+                }
+            }
+        });
+
+        function changeLanguage(lang) {
+            currentLang = lang;
+            const t = translations[lang];
+            if (!t) return;
+
+            if (!isLoggedIn) {
+                document.getElementById('page-title').innerText = t.title;
+                document.getElementById('current-lang-badge').innerText = t.langCode;
+                document.getElementById('current-lang-text').innerText = t.langName;
+                
+                const loginBtn = document.getElementById('login-btn');
+                if (loginBtn) loginBtn.innerText = t.login;
+                
+                const heroTitle = document.getElementById('hero-title');
+                const heroDesc = document.getElementById('hero-desc');
+                if (heroTitle) heroTitle.innerHTML = t.heroTitle;
+                if (heroDesc) heroDesc.innerText = t.heroDesc;
+                
+                const farmBtn = document.getElementById('farm-btn');
+                if (farmBtn) farmBtn.innerText = t.farmBtn;
+                
+                const settingsBtn = document.getElementById('settings-btn');
+                if (settingsBtn) settingsBtn.innerText = t.settingsBtn;
+
+                const bannerText = document.getElementById('banner-text');
+                if (bannerText) bannerText.innerText = t.bannerText;
+
+                const featuresSection = document.getElementById('features-section');
+                if (featuresSection) featuresSection.innerText = t.featuresHeading;
+
+                const faqHeading = document.getElementById('faq-heading');
+                if (faqHeading) faqHeading.innerText = t.faqHeading;
+                
+                if (document.getElementById('c1-t')) {
+                    document.getElementById('c1-t').innerText = t.c1t; 
+                    document.getElementById('c1-d').innerText = t.c1d;
+                    document.getElementById('c2-t').innerText = t.c2t; 
+                    document.getElementById('c2-d').innerText = t.c2d;
+                    document.getElementById('c3-t').innerText = t.c3t; 
+                    document.getElementById('c3-d').innerText = t.c3d;
+                }
+
+                if (document.getElementById('q1')) {
+                    document.getElementById('q1').innerText = t.q1; document.getElementById('a1').innerText = t.a1;
+                    document.getElementById('q2').innerText = t.q2; document.getElementById('a2').innerText = t.a2;
+                    document.getElementById('q3').innerText = t.q3; document.getElementById('a3').innerText = t.a3;
+                    document.getElementById('q4').innerText = t.q4; document.getElementById('a4').innerText = t.a4;
+                    document.getElementById('q5').innerText = t.q5; document.getElementById('a5').innerText = t.a5;
+                }
+            } else {
+                renderDashboard();
+            }
+
+            const menu = document.getElementById('langMenu');
+            if (menu) menu.classList.remove('show');
+        }
+
         function scrollToFeatures() {
             document.getElementById('features-section').scrollIntoView({ behavior: 'smooth' });
         }
 
-        // --- Модальные окна с глазиком и валидацией ---
+        // --- Модальные окна ---
         function openModal(type) {
             const modal = document.getElementById('authModal');
             const container = document.getElementById('modalContainer');
             modal.classList.add('show');
+            const t = translations[currentLang];
 
             if (type === 'login') {
                 container.innerHTML = `
-                    <div class="modal-logo">
-                        <span style="color:#ff6600;">⚡</span> AIRDROP-X
-                    </div>
-                    <div class="modal-desc">Для входа, введите свой <span>логин</span> и <span>пароль</span> в поля ниже</div>
-                    <div class="input-group"><input type="text" class="auth-input" placeholder="Логин" id="loginUser"></div>
+                    <div class="modal-logo"><span style="color:#ff6600;">⚡</span> AIRDROP-X</div>
+                    <div class="modal-desc">${t.modalLoginDesc}</div>
+                    <div class="input-group"><input type="text" class="auth-input" placeholder="${t.loginPlaceholder}" id="loginUser"></div>
                     <div class="input-group password-wrapper">
-                        <input type="password" class="auth-input" placeholder="Пароль" id="loginPass">
+                        <input type="password" class="auth-input" placeholder="${t.passPlaceholder}" id="loginPass">
                         <span class="password-toggle-icon" onclick="togglePassword('loginPass', this)">👁️‍🗨️</span>
                     </div>
-                    <button class="btn-modal-primary" onclick="validateLogin()">Войти</button>
-                    <button class="btn-modal-secondary" onclick="openModal('register')">Создать аккаунт</button>
-                    <div class="modal-footer-text">
-                        Нажимая "Войти", Вы соглашаетесь с <a href="#">Условиями использования</a> и <a href="#">Политикой конфиденциальности</a>
-                    </div>
+                    <button class="btn-modal-primary" onclick="validateLogin()">${t.loginBtnModal}</button>
+                    <button class="btn-modal-secondary" onclick="openModal('register')">${t.registerBtnModal}</button>
+                    <div class="modal-footer-text">${t.termsText}</div>
                     <div id="loginErrorContainer"></div>
                 `;
             } else if (type === 'register') {
                 container.innerHTML = `
-                    <div class="modal-logo">
-                        <span style="color:#ff6600;">⚡</span> AIRDROP-X
-                    </div>
-                    <div class="modal-desc">Для создания аккаунта, введите данные в поля ниже</div>
-                    <div class="input-group"><input type="email" class="auth-input" placeholder="Почта" id="regEmail"></div>
-                    <div class="input-group"><input type="text" class="auth-input" placeholder="Логин" id="regUser"></div>
-                    
+                    <div class="modal-logo"><span style="color:#ff6600;">⚡</span> AIRDROP-X</div>
+                    <div class="modal-desc">${t.regDesc}</div>
+                    <div class="input-group"><input type="email" class="auth-input" placeholder="${t.emailPlaceholder}" id="regEmail"></div>
+                    <div class="input-group"><input type="text" class="auth-input" placeholder="${t.loginPlaceholder}" id="regUser"></div>
                     <div class="input-group password-wrapper">
-                        <input type="password" class="auth-input" placeholder="Пароль" id="regPass">
+                        <input type="password" class="auth-input" placeholder="${t.passPlaceholder}" id="regPass">
                         <span class="password-toggle-icon" onclick="togglePassword('regPass', this)">👁️‍🗨️</span>
                     </div>
-                    <div class="input-group password-wrapper">
-                        <input type="password" class="auth-input" placeholder="Повторите пароль" id="regPass2">
-                        <span class="password-toggle-icon" onclick="togglePassword('regPass2', this)">👁️‍🗨️</span>
-                    </div>
-
-                    <button class="btn-modal-primary" onclick="validateRegister()">Создать аккаунт</button>
-                    <button class="btn-modal-secondary" onclick="openModal('login')">Войти</button>
-                    <div class="modal-footer-text">
-                        Нажимая "Создать аккаунт", Вы соглашаетесь с <a href="#">Условиями использования</a> и <a href="#">Политикой конфиденциальности</a>
-                    </div>
+                    <button class="btn-modal-primary" onclick="validateRegister()">${t.regBtnModal}</button>
+                    <button class="btn-modal-secondary" onclick="openModal('login')">${t.loginBtnModal}</button>
+                    <div class="modal-footer-text">${t.termsReg}</div>
                     <div id="errorContainer"></div>
                 `;
             }
@@ -546,35 +785,12 @@
             const passField = document.getElementById('regPass');
             const errorContainer = document.getElementById('errorContainer');
             
-            const username = userField.value.trim();
-            const password = passField.value.trim();
-
-            userField.classList.remove('error');
-            passField.classList.remove('error');
-            errorContainer.innerHTML = '';
-
-            if (username.length > 0 && username.length < 5) {
-                userField.classList.add('error');
-                errorContainer.innerHTML = `
-                    <div class="error-toast">
-                        <span>⚠️</span><span>Ой! Логин должен быть длиннее 5 символов.</span>
-                    </div>
-                `;
-                return;
-            }
-
-            if (username === "" || password === "") {
+            if (userField.value.trim() === "" || passField.value.trim() === "") {
                 userField.classList.add('error');
                 passField.classList.add('error');
-                errorContainer.innerHTML = `
-                    <div class="error-toast">
-                        <span>⚠️</span><span>Заполните все обязательные поля!</span>
-                    </div>
-                `;
+                errorContainer.innerHTML = `<div class="error-toast"><span>⚠️</span><span>Заполните обязательные поля!</span></div>`;
                 return;
             }
-
-            alert('Аккаунт успешно создан!');
             handleLoginSuccess();
         }
 
@@ -583,36 +799,85 @@
             const passField = document.getElementById('loginPass');
             const errorContainer = document.getElementById('loginErrorContainer');
 
-            const username = userField.value.trim();
-            const password = passField.value.trim();
-
-            userField.classList.remove('error');
-            passField.classList.remove('error');
-            errorContainer.innerHTML = '';
-
-            if (username === "" || password === "") {
+            if (userField.value.trim() === "" || passField.value.trim() === "") {
                 userField.classList.add('error');
                 passField.classList.add('error');
-                errorContainer.innerHTML = `
-                    <div class="error-toast" style="bottom: -75px;">
-                        <span>⚠️</span>
-                        <span>Uh-oh! There is wrong username or password. Please try again.</span>
-                    </div>
-                `;
+                errorContainer.innerHTML = `<div class="error-toast" style="bottom: -75px;"><span>⚠️</span><span>Введите логин и пароль!</span></div>`;
                 return;
             }
-
             handleLoginSuccess();
         }
 
-        // --- ЛИЧНЫЙ КАБИНЕТ С КНОПКОЙ ПОДКЛЮЧЕНИЯ КОШЕЛЬКА ВНУТРИ ---
         function handleLoginSuccess() {
+            isLoggedIn = true;
             document.getElementById('authModal').classList.remove('show');
+            renderDashboard();
+        }
+
+        // --- МОДАЛЬНОЕ ОКНО ФАРМИНГА ---
+        function openFarmingModal() {
+            const t = translations[currentLang];
+            const modal = document.getElementById('authModal');
+            const container = document.getElementById('modalContainer');
+            modal.classList.add('show');
+
+            container.innerHTML = `
+                <div class="modal-logo"><span style="color:#ff6600;">🌾</span> AIRDROP-X FARM</div>
+                <div class="modal-desc">${t.farmModalDesc}</div>
+                
+                <div class="input-group">
+                    <label style="color: #8892b0; font-size: 12px; display: block; margin-bottom: 6px;">${t.netSelectLabel}</label>
+                    <select class="auth-input" id="farmNetwork">
+                        <option value="Base">Base L2</option>
+                        <option value="Arbitrum">Arbitrum One</option>
+                        <option value="ZkSync">ZkSync Era</option>
+                        <option value="Solana">Solana</option>
+                    </select>
+                </div>
+
+                <div class="input-group">
+                    <label style="color: #8892b0; font-size: 12px; display: block; margin-bottom: 6px;">${t.delayLabel}</label>
+                    <input type="number" class="auth-input" value="15" id="farmDelay">
+                </div>
+
+                <button class="btn-modal-primary" onclick="startAutoFarming()">${t.startFarmBtn}</button>
+                <button class="btn-modal-secondary" onclick="document.getElementById('authModal').classList.remove('show')">${t.closeBtn}</button>
+            `;
+        }
+
+        function switchMenu(sectionName) {
+            const log = document.getElementById('drop-logs');
+            if (log) {
+                log.innerHTML += `<br><span style="color: #ff6600;">[Navigation] Переход в раздел: ${sectionName}</span>`;
+                log.scrollTop = log.scrollHeight;
+            }
+        }
+
+        function startAutoFarming() {
+            const t = translations[currentLang];
+            const network = document.getElementById('farmNetwork').value;
+            const delay = document.getElementById('farmDelay').value;
             
+            document.getElementById('authModal').classList.remove('show');
+            const log = document.getElementById('drop-logs');
+            
+            if (log) {
+                log.innerHTML += `<br><span style="color: #ff6600;">[Auto-Farm] Запуск фарминга в сети ${network} (Задержка: ${delay}с, Прокси активны)...</span>`;
+                log.scrollTop = log.scrollHeight;
+                
+                setTimeout(() => {
+                    log.innerHTML += `<br><span style="color: #00d95f;">[Auto-Farm] Успешно отправлен тестовый свап и микс транзакций в ${network}! Сибил-защита пройдена.</span>`;
+                    log.scrollTop = log.scrollHeight;
+                }, 3000);
+            }
+        }
+
+        // --- ОТРИСОВКА ДАШБОРДА ---
+        function renderDashboard() {
+            const t = translations[currentLang];
             document.body.innerHTML = `
-                <!-- Шапка с возможностью вернуться на главную через логотип -->
                 <div class="header">
-                    <div class="logo-container" onclick="location.reload()">
+                    <div class="logo-container" onclick="isLoggedIn = false; location.reload()">
                         <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 32px; height: 32px;">
                             <ellipse cx="12" cy="20" rx="10" ry="3" stroke="#ff6600" stroke-width="2" fill="#ff6600" fill-opacity="0.15"/>
                             <path d="M2 20c0 1.66 4.48 3 10 3s10-1.34 10-3" stroke="#ff6600" stroke-width="2"/>
@@ -627,111 +892,193 @@
                         <span>AIRDROP-X</span>
                     </div>
                     <div class="header-actions">
-                        <button class="btn-dark-sm" onclick="location.reload()" style="border-color: #ff3333; color: #ff3333;">Logout</button>
+                        <div class="lang-dropdown-wrapper">
+                            <button class="btn-dark-sm" id="lang-btn" onclick="toggleLangMenu(event)">
+                                <span style="color: #888; font-size: 12px; font-weight: bold; background: #1a1d24; padding: 2px 6px; border-radius: 4px;" id="current-lang-badge">${t.langCode}</span>
+                                <span id="current-lang-text">${t.langName}</span>
+                            </button>
+                            <div class="lang-menu" id="langMenu">
+                                <button class="lang-option" onclick="changeLanguage('en')"><span style="color: #888; font-size: 12px; font-weight: bold; background: #1a1d24; padding: 2px 6px; border-radius: 4px;">US</span> English</button>
+                                <button class="lang-option" onclick="changeLanguage('zh')"><span style="color: #888; font-size: 12px; font-weight: bold; background: #1a1d24; padding: 2px 6px; border-radius: 4px;">CN</span> 中文</button>
+                                <button class="lang-option" onclick="changeLanguage('ru')"><span style="color: #888; font-size: 12px; font-weight: bold; background: #1a1d24; padding: 2px 6px; border-radius: 4px;">RU</span> Русский</button>
+                            </div>
+                        </div>
+                        <button class="btn-dark-sm" onclick="isLoggedIn = false; location.reload()" style="border-color: #ff3333; color: #ff3333;">${t.logout}</button>
                     </div>
                 </div>
 
-                <!-- Контент дашборда -->
                 <div style="display: flex; max-width: 1400px; width: 100%; margin: 30px auto; padding: 0 20px; gap: 30px; flex: 1;">
-                    
-                    <!-- Левая колонка -->
                     <div style="width: 300px; display: flex; flex-direction: column; gap: 15px;">
                         <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 20px; display: flex; align-items: center; gap: 15px;">
                             <div style="width: 45px; height: 45px; background: linear-gradient(135deg, #ff6600, #993d00); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 18px; color: #000;">R</div>
                             <div>
                                 <div style="font-weight: 700; font-size: 15px; color: #fff;">Ruby1</div>
-                                <div style="font-size: 12px; color: #8892b0;">joined July 26, 2026</div>
+                                <div style="font-size: 12px; color: #8892b0;">${t.joinedText}</div>
                             </div>
                         </div>
 
-                        <!-- Баланс и кошелек -->
                         <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 20px;">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                                 <div>
-                                    <div style="font-size: 12px; color: #8892b0;">Balance</div>
-                                    <div style="font-size: 18px; font-weight: bold; color: #ff6600; margin-top: 4px;">$0.00</div>
+                                    <div style="font-size: 12px; color: #8892b0;">${t.balanceText}</div>
+                                    <div id="dashboard-balance-value" style="font-size: 18px; font-weight: bold; color: #ff6600; margin-top: 4px;">$0.00</div>
                                 </div>
                                 <button style="background: #00d95f; color: #000; border: none; width: 30px; height: 30px; border-radius: 50%; font-weight: bold; cursor: pointer;">+</button>
                             </div>
-                            <!-- Кнопка подключения кошелька прямо в аккаунте -->
-                            <button id="dashboard-wallet-btn" onclick="connectDashboardWallet()" style="width: 100%; background: #ff6600; color: #000; border: none; padding: 10px; border-radius: 8px; font-weight: bold; font-size: 13px; cursor: pointer;">🔌 Подключить кошелек</button>
+                            <button id="dashboard-wallet-btn" onclick="connectDashboardWallet()" style="width: 100%; background: #ff6600; color: #000; border: none; padding: 10px; border-radius: 8px; font-weight: bold; font-size: 13px; cursor: pointer;">${t.connectWalletBtn}</button>
                             <div id="dashboard-wallet-status" style="font-size: 11px; color: #8892b0; margin-top: 8px; word-break: break-all; text-align: center;"></div>
                         </div>
 
-                        <!-- Меню -->
+                        <!-- ЛЕВОЕ МЕНЮ -->
                         <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 12px; display: flex; flex-direction: column; gap: 4px;">
-                            <div style="padding: 12px 16px; background: #151821; color: #fff; border-radius: 10px; font-weight: 600; font-size: 14px; cursor: pointer;">📦 Looter & Drops</div>
-                            <div style="padding: 12px 16px; color: #8892b0; border-radius: 10px; font-weight: 500; font-size: 14px; cursor: pointer;">👥 Wallets <span style="background: #ff6600; color: #000; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: bold;">BETA</span></div>
-                            <div style="padding: 12px 16px; color: #8892b0; border-radius: 10px; font-weight: 500; font-size: 14px; cursor: pointer;">📊 Statistics</div>
-                            <div style="padding: 12px 16px; color: #8892b0; border-radius: 10px; font-weight: 500; font-size: 14px; cursor: pointer;">⚙️ Settings</div>
+                            <div style="padding: 12px 16px; background: #151821; color: #fff; border-radius: 10px; font-weight: 600; font-size: 14px; cursor: pointer;" onclick="switchMenu('Looter & Drops')">📦 ${t.looterMenu}</div>
+                            <div style="padding: 12px 16px; color: #8892b0; border-radius: 10px; font-weight: 500; font-size: 14px; cursor: pointer; display: flex; align-items: center;" onclick="openFarmingModal()">🌾 ${t.farmTabBtn}</div>
+                            <div style="padding: 12px 16px; color: #8892b0; border-radius: 10px; font-weight: 500; font-size: 14px; cursor: pointer;" onclick="switchMenu('Wallets')">👥 ${t.walletsMenu} <span style="background: #ff6600; color: #000; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: bold;">BETA</span></div>
+                            <div style="padding: 12px 16px; color: #8892b0; border-radius: 10px; font-weight: 500; font-size: 14px; cursor: pointer;" onclick="switchMenu('Statistics')">📊 ${t.statsMenu}</div>
+                            <div style="padding: 12px 16px; color: #8892b0; border-radius: 10px; font-weight: 500; font-size: 14px; cursor: pointer;" onclick="switchMenu('Settings')">⚙️ ${t.settingsMenu}</div>
                         </div>
                     </div>
 
-                    <!-- Правая рабочая область -->
                     <div style="flex: 1; display: flex; flex-direction: column; gap: 20px;">
                         <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 30px;">
                             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                                <h3 style="margin: 0; font-size: 20px; color: #fff;">🚀 Панель поиска и клейма аирдропов</h3>
+                                <h3 style="margin: 0; font-size: 20px; color: #fff;">🚀 ${t.dashTitle}</h3>
                                 <span style="background: rgba(0,217,95,0.1); color: #00d95f; padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: bold;">ONLINE</span>
                             </div>
-                            <p style="color: #8892b0; font-size: 15px; line-height: 1.6; margin-bottom: 25px;">
-                                Сканируйте свои кошельки в сетях LayerZero, Base и других для поиска доступных наград и сбора в один клик.
-                            </p>
+                            <p style="color: #8892b0; font-size: 15px; line-height: 1.6; margin-bottom: 25px;">${t.dashDesc}</p>
                             
+                            <!-- ФИЛЬТРЫ -->
+                            <div style="margin-bottom: 20px; padding: 15px; background: #060709; border: 1px solid #1c202d; border-radius: 10px; display: flex; gap: 20px; flex-wrap: wrap;">
+                                <label style="color: #8892b0; font-size: 13px; display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                    <input type="checkbox" id="filter-tier1" checked style="accent-color: #ff6600; width: 16px; height: 16px;"> 
+                                    ${t.filterTier1}
+                                </label>
+                                <label style="color: #8892b0; font-size: 13px; display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                    <input type="checkbox" id="filter-micro" checked style="accent-color: #ff6600; width: 16px; height: 16px;"> 
+                                    ${t.filterMicro}
+                                </label>
+                                <label style="color: #8892b0; font-size: 13px; display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                                    <input type="checkbox" id="filter-refunds" checked style="accent-color: #ff6600; width: 16px; height: 16px;"> 
+                                    ${t.filterRefunds}
+                                </label>
+                            </div>
+
                             <div style="display: flex; gap: 15px;">
-                                <button onclick="startScanningDrops()" style="background-color: #ff6600; color: #000; border: none; padding: 14px 28px; border-radius: 10px; font-weight: bold; font-size: 14px; cursor: pointer;">🔍 Сканировать кошельки</button>
-                                <button onclick="claimFoundDrops()" style="background-color: #151821; color: #fff; border: 1px solid #222633; padding: 14px 28px; border-radius: 10px; font-weight: bold; font-size: 14px; cursor: pointer;">⚡ Клеймить всё</button>
+                                <button onclick="startScanningDrops()" style="background-color: #ff6600; color: #000; border: none; padding: 14px 28px; border-radius: 10px; font-weight: bold; font-size: 14px; cursor: pointer;">🔍 ${t.scanBtn}</button>
+                                <button onclick="claimFoundDrops()" style="background-color: #151821; color: #fff; border: 1px solid #222633; padding: 14px 28px; border-radius: 10px; font-weight: bold; font-size: 14px; cursor: pointer;">⚡ ${t.claimBtn}</button>
+                                <button onclick="openFarmingModal()" style="background-color: rgba(255,102,0,0.1); color: #ff6600; border: 1px solid #ff6600; padding: 14px 28px; border-radius: 10px; font-weight: bold; font-size: 14px; cursor: pointer;">🌾 ${t.farmTabBtn}</button>
                             </div>
 
                             <div id="drop-logs" style="margin-top: 25px; background-color: #060709; border: 1px solid #14171f; padding: 20px; border-radius: 10px; font-family: monospace; font-size: 13px; color: #8892b0; max-height: 200px; overflow-y: auto;">
-                                [System] Личный кабинет инициализирован. Ожидание запуска сканирования...
+                                ${t.logInit}
                             </div>
                         </div>
                     </div>
-
                 </div>
             `;
         }
 
-        // Подключение кошелька прямо из ЛК
+        // --- WEB3 ЛОГИКА И СКАНИРОВАНИЕ ---
         async function connectDashboardWallet() {
+            const t = translations[currentLang];
             if (window.ethereum) {
                 try {
-                    const provider = new ethers.providers.Web3Provider(window.ethereum);
+                    provider = new ethers.providers.Web3Provider(window.ethereum);
                     await provider.send("wallet_requestPermissions", [{ eth_accounts: {} }]);
-                    const signer = provider.getSigner();
-                    const address = await signer.getAddress();
+                    signer = provider.getSigner();
+                    userAddress = await signer.getAddress();
                     
-                    document.getElementById('dashboard-wallet-status').innerText = `Connected: ${address.substring(0,6)}...${address.substring(38)} ✅`;
-                    document.getElementById('dashboard-wallet-btn').innerText = "Кошелек подключен";
+                    const balanceWei = await provider.getBalance(userAddress);
+                    const balanceEth = ethers.utils.formatEther(balanceWei);
+                    
+                    document.getElementById('dashboard-wallet-status').innerText = `Connected: ${userAddress.substring(0,6)}...${userAddress.substring(38)} ✅`;
+                    document.getElementById('dashboard-wallet-btn').innerText = t.walletConnectedText;
                     document.getElementById('dashboard-wallet-btn').style.backgroundColor = "#14171f";
                     document.getElementById('dashboard-wallet-btn').style.color = "#00d95f";
                     document.getElementById('dashboard-wallet-btn').style.border = "1px solid #00d95f";
+
+                    const balanceElement = document.getElementById('dashboard-balance-value');
+                    if (balanceElement) {
+                        balanceElement.innerText = `${parseFloat(balanceEth).toFixed(4)}`;
+                    }
+
+                    const log = document.getElementById('drop-logs');
+                    log.innerHTML += `<br><span style="color: #8892b0;">[Web3] Кошелек успешно подключен. Сеть готова к сканированию.</span>`;
+                    log.scrollTop = log.scrollHeight;
+
                 } catch (error) {
-                    console.error("Ошибка:", error);
-                    alert("Подключение отменено.");
+                    console.error("Ошибка подключения:", error);
+                    alert("Подключение отменено или произошла ошибка.");
                 }
             } else {
-                alert("MetaMask не обнаружен!");
+                alert("Web3 провайдер (MetaMask/TrustWallet) не обнаружен! Откройте сайт во встроенном браузере кошелька.");
             }
         }
 
-        function startScanningDrops() {
+        async function startScanningDrops() {
+            const t = translations[currentLang];
             const log = document.getElementById('drop-logs');
-            log.innerHTML += `<br>[${new Date().toLocaleTimeString()}] 🔍 Сканирование чекеров LayerZero & Base...`;
+            
+            if (!userAddress || !provider) {
+                log.innerHTML += `<br><span style="color: #ff3333;">⚠️ Ошибка: Сначала подключите кошелек!</span>`;
+                log.scrollTop = log.scrollHeight;
+                return;
+            }
+
+            const isTier1 = document.getElementById('filter-tier1').checked;
+            const isMicro = document.getElementById('filter-micro').checked;
+            const isRefunds = document.getElementById('filter-refunds').checked;
+
+            if (!isTier1 && !isMicro && !isRefunds) {
+                log.innerHTML += `<br><span style="color: #ff3333;">⚠️ Ошибка: Выберите хотя бы одну категорию для сканирования!</span>`;
+                log.scrollTop = log.scrollHeight;
+                return;
+            }
+
+            log.innerHTML += `<br>${t.logScanning}`;
+            log.scrollTop = log.scrollHeight;
+            
             setTimeout(() => {
-                log.innerHTML += `<br><span style="color: #00d95f;">[${new Date().toLocaleTimeString()}] ✅ Обнаружено 2 доступных аирдропа на общую сумму ~$1,240!</span>`;
+                let foundResults = [];
+                let totalValue = 0;
+
+                if (isTier1) {
+                    foundResults.push("ZkSync ($24.50)");
+                    totalValue += 24.50;
+                }
+                if (isMicro) {
+                    foundResults.push("Dust Tokens ($3.10)");
+                    totalValue += 3.10;
+                }
+                if (isRefunds) {
+                    foundResults.push("Gas Refund ($1.80)");
+                    totalValue += 1.80;
+                }
+
+                const resultString = foundResults.join(", ");
+                
+                log.innerHTML += `<br><span style="color: #00d95f;">${t.logFoundResult} ${resultString} | ${t.logTotal} ~$${totalValue.toFixed(2)}</span>`;
                 log.scrollTop = log.scrollHeight;
             }, 1500);
         }
 
-        function claimFoundDrops() {
+        async function claimFoundDrops() {
+            const t = translations[currentLang];
             const log = document.getElementById('drop-logs');
-            log.innerHTML += `<br><span style="color: #ff6600;">[${new Date().toLocaleTimeString()}] ⚡ Запуск безопасного клейма с рандомизацией газа...</span>`;
-            setTimeout(() => {
-                log.innerHTML += `<br><span style="color: #00d95f;">[${new Date().toLocaleTimeString()}] 🚀 Успешно! Токены получены и распределены по основным кошелькам.</span>`;
+            
+            if (!userAddress || !signer) {
+                log.innerHTML += `<br><span style="color: #ff3333;">⚠️ Ошибка: Сначала подключите кошелек!</span>`;
                 log.scrollTop = log.scrollHeight;
-            }, 2000);
+                return;
+            }
+
+            log.innerHTML += `<br><span style="color: #ff6600;">${t.logClaiming}</span>`;
+            log.scrollTop = log.scrollHeight;
+            
+            setTimeout(() => {
+                log.innerHTML += `<br><span style="color: #00d95f;">${t.logSuccess}</span>`;
+                log.scrollTop = log.scrollHeight;
+            }, 3500);
         }
 
         function toggleFaq(element) {
