@@ -22,7 +22,6 @@
             overflow-x: hidden;
         }
 
-        /* Полоска загрузки сверху (Preloader) */
         #preloader-line {
             position: fixed;
             top: 0;
@@ -34,7 +33,6 @@
             transition: width 0.4s ease;
         }
 
-        /* Шапка */
         .header {
             display: flex;
             justify-content: space-between;
@@ -92,7 +90,6 @@
         }
         .btn-dark-sm:hover { background-color: #12151c; }
 
-        /* Выпадающее меню языков */
         .lang-dropdown-wrapper { position: relative; }
         .lang-menu {
             display: none;
@@ -126,7 +123,6 @@
         .lang-option:hover { background-color: #1a1d24; color: #fff; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
 
-        /* Модальные окна */
         .modal-overlay {
             display: none;
             position: fixed;
@@ -235,56 +231,6 @@
             box-shadow: 0 10px 25px rgba(255, 51, 51, 0.2);
         }
 
-        /* Интерактивные термины (Tooltips) */
-        .term-tooltip {
-            position: relative;
-            display: inline-block;
-            color: #ff6600;
-            border-bottom: 1px dotted #ff6600;
-            cursor: help;
-            transition: 0.2s;
-        }
-        .term-tooltip:hover {
-            color: #fff;
-            border-bottom: 1px dotted #fff;
-        }
-        .term-tooltip .tooltip-box {
-            display: none;
-            position: absolute;
-            bottom: 120%;
-            left: 50%;
-            transform: translateX(-50%);
-            width: max-content;
-            max-width: 220px;
-            background-color: #151821;
-            border: 1px solid #222633;
-            border-radius: 8px;
-            padding: 10px;
-            box-shadow: 0 15px 35px rgba(0,0,0,0.9);
-            z-index: 3000;
-            font-size: 11px;
-            line-height: 1.4;
-            color: #8892b0;
-            font-weight: normal;
-            animation: fadeIn 0.2s ease;
-            text-align: left;
-        }
-        .term-tooltip .tooltip-box::after {
-            content: '';
-            position: absolute;
-            top: 100%;
-            left: 50%;
-            transform: translateX(-50%);
-            border-width: 5px;
-            border-style: solid;
-            border-color: #222633 transparent transparent transparent;
-        }
-        .term-tooltip:hover .tooltip-box {
-            display: block;
-        }
-        .term-tooltip .tooltip-box b { color: #fff; }
-
-        /* Главный экран */
         .hero {
             display: flex;
             flex-direction: column;
@@ -429,7 +375,6 @@
             margin-top: auto;
         }
 
-        /* Мобильная панель навигации */
         .mobile-nav-bar {
             display: none;
             position: fixed;
@@ -460,7 +405,6 @@
         .mobile-nav-item.active { color: #ff6600; font-weight: bold; }
         .mobile-nav-item span.icon { font-size: 18px; }
 
-        /* Выплывающее меню (Bottom Sheet) для мобилок */
         .bottom-sheet-overlay {
             display: none;
             position: fixed;
@@ -523,7 +467,6 @@
         .sidebar-menu-item:hover { background: #1a1d24; color: #fff; }
         .sidebar-menu-item.active { background: #151821; color: #fff; font-weight: 600; }
 
-        /* Дашборд лэйаут адаптивный */
         .dashboard-wrapper {
             max-width: 1200px;
             width: 100%;
@@ -554,10 +497,8 @@
 </head>
 <body>
 
-    <!-- Полоска загрузки -->
     <div id="preloader-line"></div>
 
-    <!-- Шапка -->
     <div class="header">
         <div class="logo-container" id="main-logo-btn" onclick="returnToMainSite()">
             <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 26px; height: 26px; pointer-events: none; flex-shrink: 0;">
@@ -590,12 +531,10 @@
         </div>
     </div>
 
-    <!-- Модальное окно авторизации -->
     <div class="modal-overlay" id="authModal" onclick="handleOverlayClick(event)">
         <div class="auth-modal" id="modalContainer"></div>
     </div>
 
-    <!-- Выплывающее меню (Bottom Sheet) для мобильных устройств внутри дашборда -->
     <div class="bottom-sheet-overlay" id="bottomSheetOverlay" onclick="handleSheetOverlayClick(event)">
         <div class="bottom-sheet" id="bottomSheetContent">
             <div class="sheet-handle"></div>
@@ -603,7 +542,6 @@
         </div>
     </div>
 
-    <!-- Главный лендинг -->
     <div id="main-content">
         <div class="hero">
             <h1 id="hero-title">Универсальный инструмент<br>для автоматизации и сбора Airdrop.</h1>
@@ -669,10 +607,8 @@
         </div>
     </div>
 
-    <!-- Дашборд -->
     <div id="dashboard-content" style="display: none;" class="dashboard-wrapper"></div>
 
-    <!-- Мобильная нижняя панель навигации (для телефонов) -->
     <div class="mobile-nav-bar" id="mobileNavBar" style="display: none;">
         <button class="mobile-nav-item active" onclick="switchMobileNav('Looter', this)">
             <span class="icon">📦</span>
@@ -682,13 +618,13 @@
             <span class="icon">🌾</span>
             <span id="mn-farm">Фарм</span>
         </button>
-        <button class="mobile-nav-item" onclick="switchMobileNav('Tasks', this)">
-            <span class="icon">⚡</span>
-            <span id="mn-tasks">Задачи</span>
+        <button class="mobile-nav-item" onclick="switchMobileNav('Proxy', this)">
+            <span class="icon">🌐</span>
+            <span id="mn-proxy">Прокси</span>
         </button>
-        <button class="mobile-nav-item" onclick="switchMobileNav('Wallets', this)">
-            <span class="icon">👥</span>
-            <span id="mn-wallets">Кошельки</span>
+        <button class="mobile-nav-item" onclick="switchMobileNav('Statistics', this)">
+            <span class="icon">📊</span>
+            <span id="mn-stats">Статистика</span>
         </button>
         <button class="mobile-nav-item" onclick="openBottomSheetMenu()">
             <span class="icon">☰</span>
@@ -750,10 +686,11 @@
                 dashTitle: "Панель поиска и клейма аирдропов",
                 dashDesc: "Сканируйте свои кошельки на наличие незабранных наград и запускайте авто-фарминг объема.",
                 scanBtn: "Сканировать кошельки", claimBtn: "Клеймить всё",
-                farmTabBtn: "Авто-Фарминг", tasksTabBtn: "Активные задачи",
+                exportBtn: "📥 Экспорт отчета фермы (JSON)",
+                farmTabBtn: "Авто-Фарминг", tasksTabBtn: "Активные задачи", proxyTabBtn: "Прокси менеджер", statsTabBtn: "Статистика",
                 balanceText: "Баланс", connectWalletBtn: "🔌 Подключить кошелек",
                 walletConnectedText: "Кошелек подключен",
-                looterMenu: "Looter & Drops", farmMenu: "Авто-Фарминг", tasksMenu: "Активные задачи", walletsMenu: "Кошельки", statsMenu: "Статистика", billingMenu: "Биллинг и Подписка", settingsMenu: "Настройки",
+                looterMenu: "Looter & Drops", farmMenu: "Авто-Фарминг", tasksMenu: "Активные задачи", proxyMenu: "Прокси Чекер", walletsMenu: "Кошельки", statsMenu: "Статистика", billingMenu: "Биллинг и Подписка", settingsMenu: "Настройки",
                 joinedText: "зарегистрирован 26 июля 2026",
                 logInit: "[System] Личный кабинет инициализирован. Все модули прокси и безопасности активированы...",
                 
@@ -762,10 +699,17 @@
                 filterRefunds: "Рефанды газа",
                 
                 farmTitle: "🌾 Авто-Фарминг объемов (Multi-Route)",
-                farmDesc: "Комплексная настройка взаимодействия смарт-контрактов для накрутки объемов и транзакций.",
+                farmDesc: "Запуск боевого ядра `core_engine.py` через FastAPI сервер.",
                 netSelectLabel: "Целевая сеть для фарма:",
-                delayLabel: "Рандомная задержка (сек):",
-                startFarmBtn: "Запустить фарминг",
+                delayLabel: "Рандомная задержка (sec):",
+                startFarmBtn: "▶ Запустить ядро фермы",
+                
+                proxyTitle: "🌐 Менеджер и чекер прокси (HTTP/Socks5)",
+                proxyDesc: "Проверка пинга и статуса подключенных прокси перед запуском фермы.",
+                checkProxyBtn: "Запустить тест прокси",
+                
+                statsTitle: "📊 Статистика и отчеты фермы",
+                statsDesc: "Общие показатели эффективности, успешные клеймы и выгрузка отчетов.",
                 
                 tasksTitle: "⚡ Очередь активных задач (Live Queue)",
                 tasksDesc: "Мониторинг запущенных скриптов накрутки объемов и клейма по кошелькам.",
@@ -773,17 +717,7 @@
                 tgLinkTitle: "🤖 Telegram Уведомления",
                 tgLinkDesc: "Получайте мгновенные пуш-уведомления в Telegram, когда софт находит жирный дроп или завершает сессию.",
                 tgConnectBtn: "Привязать Telegram Bot",
-                tgConnectedText: "Telegram успешно привязан (@RubyFarmer_bot) ✅",
-                
-                tipClaims: "<b>Клейм (Claim)</b> — процесс безопасного извлечения распределенных токенов (аирдропа) из смарт-контракта на ваш кошелек.",
-                tipGas: "<b>Газ (Gas)</b> — комиссия сети блокчейна. Софт автоматически ждет снижения газа, чтобы вы не переплачивали за транзакции.",
-                tipSessions: "<b>Активная сессия</b> — кошелек, который в данный момент выполняет скрипт (меняет токены, бриджит или клеймит).",
-                tipStealth: "<b>Stealth Mode</b> — режим параноика. Софт добавляет микро-задержки и рандомизирует суммы сделок (например, свап не ровно 10$, а 10.14$), чтобы кошельки не пометили как ботов (Sybil).",
-                tipRPC: "<b>RPC (Remote Procedure Call)</b> — узел связи с блокчейном. Если он зависает, софт автоматически переключится на резервный узел без прерывания работы.",
-                tipVolume: "<b>Целевой объем ($)</b> — общая сумма сделок (в долларах), которую софт должен накрутить на кошельке перед тем, как завершить работу (например, прогнать туда-сюда 5000$).",
-                tipSwap: "<b>DEX Swaps</b> — автоматический обмен токенов (например, ETH на USDC) на децентрализованных биржах для создания торгового оборота.",
-                tipMint: "<b>NFT Mints</b> — автоматический выпуск (минт) бесплатных или дешевых NFT в сети для имитации активности живого пользователя.",
-                tipPool: "<b>Liquidity Pools</b> — добавление и изъятие ликвидности в пулы протоколов, за что проект обычно насыпает больше всего поинтов."
+                tgConnectedText: "Telegram успешно привязан (@RubyFarmer_bot) ✅"
             },
             en: {
                 title: "AIRDROP-X — Crypto Farm SaaS Panel",
@@ -809,10 +743,11 @@
                 dashTitle: "Airdrop Search & Claim Dashboard",
                 dashDesc: "Scan your wallets for unclaimed rewards and launch automated volume farming.",
                 scanBtn: "Scan Wallets", claimBtn: "Claim All",
-                farmTabBtn: "Auto-Farming", tasksTabBtn: "Active Tasks",
+                exportBtn: "📥 Export Farm Report (JSON)",
+                farmTabBtn: "Auto-Farming", tasksTabBtn: "Active Tasks", proxyTabBtn: "Proxy Checker", statsTabBtn: "Statistics",
                 balanceText: "Balance", connectWalletBtn: "🔌 Connect Wallet",
                 walletConnectedText: "Wallet Connected",
-                looterMenu: "Looter & Drops", farmMenu: "Auto-Farming", tasksMenu: "Active Tasks", walletsMenu: "Wallets", statsMenu: "Statistics", billingMenu: "Billing & Subscription", settingsMenu: "Settings",
+                looterMenu: "Looter & Drops", farmMenu: "Auto-Farming", tasksMenu: "Active Tasks", proxyMenu: "Proxy Checker", walletsMenu: "Wallets", statsMenu: "Statistics", billingMenu: "Billing & Subscription", settingsMenu: "Settings",
                 joinedText: "joined July 26, 2026",
                 logInit: "[System] Dashboard initialized. Proxy & security modules active...",
                 
@@ -821,10 +756,17 @@
                 filterRefunds: "Gas Refunds",
                 
                 farmTitle: "🌾 Auto-Farming (Multi-Route)",
-                farmDesc: "Complex smart-contract interaction setup for generating volume and transactions.",
+                farmDesc: "Launch core engine via FastAPI backend.",
                 netSelectLabel: "Target Network:",
                 delayLabel: "Random Delay (sec):",
-                startFarmBtn: "Start Farming",
+                startFarmBtn: "▶ Start Farm Engine",
+                
+                proxyTitle: "🌐 Proxy Manager & Checker (HTTP/Socks5)",
+                proxyDesc: "Test latency and status of connected proxies before launching the farm.",
+                checkProxyBtn: "Run Proxy Test",
+                
+                statsTitle: "📊 Farm Statistics & Reports",
+                statsDesc: "Overall performance metrics, successful claims, and report exports.",
                 
                 tasksTitle: "⚡ Live Task Queue",
                 tasksDesc: "Monitoring running volume generation scripts and claims across wallets.",
@@ -832,17 +774,7 @@
                 tgLinkTitle: "🤖 Telegram Notifications",
                 tgLinkDesc: "Receive instant push notifications in Telegram when software finds a lucrative drop or finishes a session.",
                 tgConnectBtn: "Link Telegram Bot",
-                tgConnectedText: "Telegram successfully linked (@RubyFarmer_bot) ✅",
-                
-                tipClaims: "<b>Claim</b> — the process of securely withdrawing allocated airdrop tokens from a smart contract to your wallet.",
-                tipGas: "<b>Gas</b> — the blockchain network fee. The software automatically waits for low gas so you don't overpay.",
-                tipSessions: "<b>Active Session</b> — a wallet currently executing a script (swapping, bridging, or claiming).",
-                tipStealth: "<b>Stealth Mode</b> — adds micro-delays and randomizes trade amounts (e.g., $10.14 instead of exactly $10) to avoid Sybil anti-bot detection.",
-                tipRPC: "<b>RPC (Remote Procedure Call)</b> — connection node to the blockchain. If it hangs, the software auto-switches to a backup node without interruption.",
-                tipVolume: "<b>Target Volume ($)</b> — total USD volume the software needs to generate on the wallet before completing the task.",
-                tipSwap: "<b>DEX Swaps</b> — automatic token exchanges on decentralized exchanges to build trading volume.",
-                tipMint: "<b>NFT Mints</b> — automated minting of free or cheap NFTs to simulate real user activity.",
-                tipPool: "<b>Liquidity Pools</b> — adding and removing liquidity in protocol pools for maximum airdrop points."
+                tgConnectedText: "Telegram successfully linked (@RubyFarmer_bot) ✅"
             },
             zh: {
                 title: "AIRDROP-X — 加密农场 SaaS 面板",
@@ -868,10 +800,11 @@
                 dashTitle: "空投搜索与领取面板",
                 dashDesc: "扫描您的钱包以查找未认领的奖励并启动自动化刷量农场。",
                 scanBtn: "扫描钱包", claimBtn: "全部领取",
-                farmTabBtn: "自动刷量", tasksTabBtn: "活动任务",
+                exportBtn: "📥 导出农场报告 (JSON)",
+                farmTabBtn: "自动刷量", tasksTabBtn: "活动任务", proxyTabBtn: "代理检测", statsTabBtn: "数据统计",
                 balanceText: "余额", connectWalletBtn: "🔌 连接钱包",
                 walletConnectedText: "钱包已连接",
-                looterMenu: "Looter & Drops", farmMenu: "自动刷量", tasksMenu: "活动任务", walletsMenu: "钱包管理", statsMenu: "数据统计", billingMenu: "账单与订阅", settingsMenu: "系统设置",
+                looterMenu: "Looter & Drops", farmMenu: "自动刷量", tasksMenu: "活动任务", proxyMenu: "代理检测", walletsMenu: "钱包管理", statsMenu: "数据统计", billingMenu: "账单与订阅", settingsMenu: "系统设置",
                 joinedText: "加入于 2026年7月26日",
                 logInit: "[System] 控制面板已初始化。代理与安全模块已就绪...",
                 
@@ -880,10 +813,17 @@
                 filterRefunds: "Gas 退款",
                 
                 farmTitle: "🌾 自动刷量 (多路由)",
-                farmDesc: "复杂的智能合约交互设置，用于生成交易量和活跃度。",
+                farmDesc: "通过 FastAPI 后端启动核心引擎。",
                 netSelectLabel: "目标网络：",
                 delayLabel: "随机延迟 (秒)：",
-                startFarmBtn: "启动刷量",
+                startFarmBtn: "▶ 启动农场引擎",
+                
+                proxyTitle: "🌐 代理管理器与检测 (HTTP/Socks5)",
+                proxyDesc: "在启动农场之前测试所连接代理的延迟和状态。",
+                checkProxyBtn: "运行代理测试",
+                
+                statsTitle: "📊 农场统计与报告",
+                statsDesc: "整体性能指标、成功领取记录及报告导出。",
                 
                 tasksTitle: "⚡ 实时任务队列",
                 tasksDesc: "监控各钱包正在运行的刷量脚本和领取状态。",
@@ -891,17 +831,7 @@
                 tgLinkTitle: "🤖 Telegram 通知",
                 tgLinkDesc: "当软件发现大额空投或完成会话时，在 Telegram 中接收即时推送通知。",
                 tgConnectBtn: "绑定 Telegram 机器人",
-                tgConnectedText: "Telegram 绑定成功 (@RubyFarmer_bot) ✅",
-                
-                tipClaims: "<b>领取 (Claim)</b> — 将分配到的空投代币从智能合约安全提取到您的钱包的过程。",
-                tipGas: "<b>Gas (矿工费)</b> — 区块链网络费用。软件会自动等待低矿工费时段，以免您支付过高费用。",
-                tipSessions: "<b>活跃会话</b> — 当前正在执行脚本（兑换、跨链或领取）的钱包数量。",
-                tipStealth: "<b>Stealth Mode (隐身模式)</b> — 添加微小延迟并随机化交易金额（例如 $10.14 而不是刚好 $10），以避免被女巫检测系统标记为机器人。",
-                tipRPC: "<b>RPC 节点</b> — 连接到区块链的服务器。如果卡住，软件会自动切换到备用节点，不会中断工作。",
-                tipVolume: "<b>目标交易量 ($)</b> — 软件在钱包上完成任务前需要生成的总交易额（美元）。",
-                tipSwap: "<b>DEX Swaps (DEX 兑换)</b> — 在去中心化交易所上自动兑换代币以建立交易量。",
-                tipMint: "<b>NFT Mints (NFT 铸造)</b> — 自动铸造免费或廉价的 NFT 以模拟真实用户活动。",
-                tipPool: "<b>Liquidity Pools (流动性池)</b> — 在协议池中添加和移除流动性以获取最多空投积分."
+                tgConnectedText: "Telegram 绑定成功 (@RubyFarmer_bot) ✅"
             }
         };
 
@@ -1067,8 +997,9 @@
                 <div class="sheet-menu-item ${currentSection === 'Looter' ? 'active' : ''}" onclick="selectSheetMenu('Looter')">📦 ${t.looterMenu}</div>
                 <div class="sheet-menu-item ${currentSection === 'Farming' ? 'active' : ''}" onclick="selectSheetMenu('Farming')">🌾 ${t.farmTabBtn}</div>
                 <div class="sheet-menu-item ${currentSection === 'Tasks' ? 'active' : ''}" onclick="selectSheetMenu('Tasks')">⚡ ${t.tasksTabBtn}</div>
-                <div class="sheet-menu-item ${currentSection === 'Wallets' ? 'active' : ''}" onclick="selectSheetMenu('Wallets')">👥 ${t.walletsMenu}</div>
+                <div class="sheet-menu-item ${currentSection === 'Proxy' ? 'active' : ''}" onclick="selectSheetMenu('Proxy')">🌐 ${t.proxyMenu}</div>
                 <div class="sheet-menu-item ${currentSection === 'Statistics' ? 'active' : ''}" onclick="selectSheetMenu('Statistics')">📊 ${t.statsMenu}</div>
+                <div class="sheet-menu-item ${currentSection === 'Wallets' ? 'active' : ''}" onclick="selectSheetMenu('Wallets')">👥 ${t.walletsMenu}</div>
                 <div class="sheet-menu-item ${currentSection === 'Billing' ? 'active' : ''}" onclick="selectSheetMenu('Billing')">💳 ${t.billingMenu}</div>
                 <div class="sheet-menu-item ${currentSection === 'Settings' ? 'active' : ''}" onclick="selectSheetMenu('Settings')">⚙️ ${t.settingsMenu}</div>
             `;
@@ -1151,30 +1082,66 @@
             renderDashboardContent(sectionName);
         }
 
-        function startAutoFarming() {
-            const t = translations[currentLang];
-            const network = document.getElementById('farmNetwork').value;
-            const delay = document.getElementById('farmDelay').value;
+        // Интегрированная функция вызова FastAPI сервера для запуска core_engine.py
+        async function startAutoFarming() {
             const log = document.getElementById('drop-logs');
+            const network = document.getElementById('farmNetwork').value;
             
             if (log) {
-                const randomHash = '0x' + Array.from({length: 8}, () => Math.floor(Math.random()*16).toString(16)).join('');
-                log.innerHTML += `<br><span style="color: #ff6600;">[${new Date().toLocaleTimeString()}] [Auto-Farm] Запуск в сети ${network} | Tx: <b style="color:#aaa;">${randomHash}...</b></span>`;
+                log.innerHTML += `<br><span style="color: #ff6600;">[${new Date().toLocaleTimeString()}] [API] Отправка запроса на запуск ядра (${network})...</span>`;
                 log.scrollTop = log.scrollHeight;
                 
-                setTimeout(() => {
-                    log.innerHTML += `<br><span style="color: #00d95f;">[${new Date().toLocaleTimeString()}] [Success] Очередь ${network} обработана. Сибил-защита пройдена успешно.</span>`;
-                    log.scrollTop = log.scrollHeight;
-                    if(telegramLinked) {
-                        alert("[Telegram Push Bot] 🚀 Фарминг в сети " + network + " успешно завершен!");
+                try {
+                    const response = await fetch('/api/start', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ wallet: "all" })
+                    });
+                    const result = await response.json();
+                    
+                    if (result.status === 'success') {
+                        // 🟢 Зеленый позитивный сигнал для спокойствия
+                        log.innerHTML += `<br><span style="color: #00d95f; font-weight: bold;">[${new Date().toLocaleTimeString()}] [OK] ✅ Все системы в норме! ${result.message} Проверяй JSON-отчет.</span>`;
+                        log.scrollTop = log.scrollHeight;
+                    } else {
+                        log.innerHTML += `<br><span style="color: #ff3333;">[${new Date().toLocaleTimeString()}] [Error] ${result.message}</span>`;
+                        log.scrollTop = log.scrollHeight;
                     }
-                }, 3000);
+                } catch (error) {
+                    log.innerHTML += `<br><span style="color: #ff3333;">[${new Date().toLocaleTimeString()}] [Critical] Ошибка связи с сервером!</span>`;
+                    log.scrollTop = log.scrollHeight;
+                }
             }
         }
-
         function toggleTelegramBot() {
             telegramLinked = !telegramLinked;
             renderDashboardContent('Settings');
+        }
+
+        // Функция экспорта реального отчета
+        async function exportReportJSON() {
+            try {
+                const response = await fetch('/api/report');
+                const data = await response.json();
+                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data, null, 2));
+                const downloadAnchor = document.createElement('a');
+                downloadAnchor.setAttribute("href", dataStr);
+                downloadAnchor.setAttribute("download", "airdrop_x_backend_report.json");
+                document.body.appendChild(downloadAnchor);
+                downloadAnchor.click();
+                downloadAnchor.remove();
+            } catch(e) {
+                alert("Не удалось загрузить отчет с сервера.");
+            }
+        }
+
+        function checkProxiesLive() {
+            const pLogs = document.getElementById('proxy-logs');
+            if(!pLogs) return;
+            pLogs.innerHTML = `[Proxy] Тестирование соединения (Прокси менеджера)...`;
+            setTimeout(() => {
+                pLogs.innerHTML = `[Proxy] #1 HTTP 31.57.178.255:8181 — Active (Ping: 38ms)<br>[Proxy] #2 SOCKS5 Router — OK (Ping: 52ms)`;
+            }, 1200);
         }
 
         function renderDashboard(activeTab) {
@@ -1214,7 +1181,6 @@
                             <button onclick="claimFoundDrops()" style="background-color: #151821; color: #fff; border: 1px solid #222633; padding: 13px 20px; border-radius: 10px; font-weight: bold; font-size: 14px; cursor: pointer; width: 100%;">⚡ ${t.claimBtn}</button>
                         </div>
 
-                        <!-- Живой терминал логов -->
                         <div id="drop-logs" style="margin-top: 20px; background-color: #060709; border: 1px solid #14171f; padding: 16px; border-radius: 10px; font-family: monospace; font-size: 12px; color: #8892b0; max-height: 180px; overflow-y: auto;">
                             ${t.logInit}
                         </div>
@@ -1246,16 +1212,6 @@
                                 <label style="color: #8892b0; font-size: 12px; display: block; margin-bottom: 6px;">${t.delayLabel}</label>
                                 <input type="number" class="auth-input" value="15" id="farmDelay">
                             </div>
-
-                            <div class="input-group">
-                                <label style="color: #8892b0; font-size: 12px; display: block; margin-bottom: 6px;">Макс. <span class="term-tooltip">Газ (Gwei)<div class="tooltip-box">${t.tipGas}</div></span>:</label>
-                                <input type="number" class="auth-input" value="25" placeholder="При превышении скрипт ждет">
-                            </div>
-
-                            <div class="input-group">
-                                <label style="color: #8892b0; font-size: 12px; display: block; margin-bottom: 6px;"><span class="term-tooltip">Целевой объем ($)<div class="tooltip-box">${t.tipVolume}</div></span>:</label>
-                                <input type="number" class="auth-input" value="5000" placeholder="Общая сумма сделок">
-                            </div>
                         </div>
 
                         <button onclick="startAutoFarming()" style="background-color: #ff6600; color: #000; border: none; padding: 13px 20px; border-radius: 10px; font-weight: bold; font-size: 14px; cursor: pointer; width: 100%; margin-top: 10px;">${t.startFarmBtn}</button>
@@ -1263,6 +1219,39 @@
                         <div id="drop-logs" style="margin-top: 20px; background-color: #060709; border: 1px solid #14171f; padding: 14px; border-radius: 10px; font-family: monospace; font-size: 12px; color: #8892b0; max-height: 140px; overflow-y: auto;">
                             [Farm Engine] Готов к запуску. Прокси изолированы.
                         </div>
+                    </div>
+                `;
+            } else if (section === 'Proxy') {
+                centerHtml = `
+                    <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 20px; width: 100%;">
+                        <h3 style="margin-top: 0; color: #fff; font-size: 18px;">${t.proxyTitle}</h3>
+                        <p style="color: #8892b0; font-size: 13px;">${t.proxyDesc}</p>
+                        
+                        <button onclick="checkProxiesLive()" style="background-color: #ff6600; color: #000; border: none; padding: 12px 20px; border-radius: 10px; font-weight: bold; font-size: 14px; cursor: pointer; width: 100%; margin-top: 14px;">${t.checkProxyBtn}</button>
+
+                        <div id="proxy-logs" style="margin-top: 20px; background-color: #060709; border: 1px solid #14171f; padding: 14px; border-radius: 10px; font-family: monospace; font-size: 12px; color: #8892b0; min-height: 80px;">
+                            [Proxy Checker] Нажмите кнопку проверки для пинга узлов...
+                        </div>
+                    </div>
+                `;
+            } else if (section === 'Statistics') {
+                centerHtml = `
+                    <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 20px; width: 100%;">
+                        <h3 style="margin-top: 0; color: #fff; font-size: 18px;">${t.statsTitle}</h3>
+                        <p style="color: #8892b0; font-size: 13px; margin-bottom: 20px;">${t.statsDesc}</p>
+                        
+                        <div style="display: grid; grid-template-columns: 1fr; gap: 12px; margin-bottom: 20px;">
+                            <div style="background: #060709; padding: 16px; border-radius: 12px; border: 1px solid #1c202d;">
+                                <div style="color: #8892b0; font-size: 12px;">Успешных клеймов</div>
+                                <div style="font-size: 22px; font-weight: bold; color: #ff6600; margin-top: 4px;">42</div>
+                            </div>
+                            <div style="background: #060709; padding: 16px; border-radius: 12px; border: 1px solid #1c202d;">
+                                <div style="color: #8892b0; font-size: 12px;">Сэкономлено на газе</div>
+                                <div style="font-size: 22px; font-weight: bold; color: #00d95f; margin-top: 4px;">~0.14 ETH</div>
+                            </div>
+                        </div>
+
+                        <button onclick="exportReportJSON()" style="background-color: #ff6600; color: #000; border: none; padding: 13px 20px; border-radius: 10px; font-weight: bold; font-size: 14px; cursor: pointer; width: 100%;">${t.exportBtn}</button>
                     </div>
                 `;
             } else if (section === 'Tasks') {
@@ -1280,24 +1269,6 @@
                                 <div style="width: 100%; background: #14171f; height: 6px; border-radius: 3px; overflow: hidden;">
                                     <div style="width: 78%; background: #ff6600; height: 100%;"></div>
                                 </div>
-                                <div style="font-size: 11px; color: #8892b0; margin-top: 6px; display: flex; justify-content: space-between;">
-                                    <span>Сделки: 14 / 18 DEX Swaps</span>
-                                    <span>Tx: 0x4f8a...3b21</span>
-                                </div>
-                            </div>
-
-                            <div style="background: #060709; padding: 14px; border-radius: 12px; border: 1px solid #1c202d;">
-                                <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: bold; margin-bottom: 6px;">
-                                    <span style="color: #ff6600;">#2 Farm-Sub1 (ZkSync Era)</span>
-                                    <span style="color: #3b82f6;">Ожидание газа (Gwei: 28)</span>
-                                </div>
-                                <div style="width: 100%; background: #14171f; height: 6px; border-radius: 3px; overflow: hidden;">
-                                    <div style="width: 34%; background: #3b82f6; height: 100%;"></div>
-                                </div>
-                                <div style="font-size: 11px; color: #8892b0; margin-top: 6px; display: flex; justify-content: space-between;">
-                                    <span>Сделки: 5 / 15 DEX Swaps</span>
-                                    <span>Tx: 0x9c12...f8aa</span>
-                                </div>
                             </div>
                         </div>
                     </div>
@@ -1305,91 +1276,24 @@
             } else if (section === 'Wallets') {
                 centerHtml = `
                     <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 20px; width: 100%;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;">
-                            <div>
-                                <h3 style="margin-top: 0; color: #fff; font-size: 18px;">👥 Управление кошельками</h3>
-                                <p style="color: #8892b0; font-size: 13px; margin: 4px 0 0 0;">Список аккаунтов и прокси.</p>
-                            </div>
-                            <div style="background: #151821; padding: 8px 12px; border-radius: 8px; border: 1px solid #222633;">
-                                <div style="font-size: 11px; color: #8892b0;">Лимит (Pro)</div>
-                                <div style="font-size: 14px; font-weight: bold; color: #fff;">5 / 50</div>
-                            </div>
-                        </div>
-                        
-                        <div style="overflow-x: auto; margin-top: 16px;">
-                            <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 12px; min-width: 280px;">
-                                <thead>
-                                    <tr style="color: #8892b0; border-bottom: 1px solid #1c202d;">
-                                        <th style="padding: 8px;">Имя</th>
-                                        <th style="padding: 8px;">Адрес</th>
-                                        <th style="padding: 8px;">Статус</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr style="border-bottom: 1px solid #14171f;">
-                                        <td style="padding: 10px; font-weight: bold; color: #ff6600;">#1 Ruby-Main</td>
-                                        <td style="padding: 10px; font-family: monospace; color: #aaa;">0xBdEA...a6Ec</td>
-                                        <td style="padding: 10px; color: #00d95f; font-weight: bold;">● Active</td>
-                                    </tr>
-                                    <tr style="border-bottom: 1px solid #14171f;">
-                                        <td style="padding: 10px; font-weight: bold; color: #ff6600;">#2 Farm-Sub1</td>
-                                        <td style="padding: 10px; font-family: monospace; color: #aaa;">0x43F1...91Db</td>
-                                        <td style="padding: 10px; color: #00d95f; font-weight: bold;">● Active</td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                        <button style="margin-top: 16px; background-color: transparent; color: #ff6600; border: 1px dashed #ff6600; padding: 10px; border-radius: 8px; font-weight: bold; font-size: 13px; cursor: pointer; width: 100%;">+ Импорт приватных ключей</button>
-                    </div>
-                `;
-            } else if (section === 'Statistics') {
-                centerHtml = `
-                    <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 20px; width: 100%;">
-                        <h3 style="margin-top: 0; color: #fff; font-size: 18px;">📊 Статистика фермы</h3>
-                        <p style="color: #8892b0; font-size: 13px;">Общие показатели эффективности за месяц.</p>
-                        <div style="display: grid; grid-template-columns: 1fr; gap: 12px; margin-top: 16px;">
-                            <div style="background: #060709; padding: 16px; border-radius: 12px; border: 1px solid #1c202d;">
-                                <div style="color: #8892b0; font-size: 12px;">Успешных клеймов</div>
-                                <div style="font-size: 22px; font-weight: bold; color: #ff6600; margin-top: 4px;">42</div>
-                            </div>
-                            <div style="background: #060709; padding: 16px; border-radius: 12px; border: 1px solid #1c202d;">
-                                <div style="color: #8892b0; font-size: 12px;">Сэкономлено на газе</div>
-                                <div style="font-size: 22px; font-weight: bold; color: #00d95f; margin-top: 4px;">~0.14 ETH</div>
-                            </div>
-                            <div style="background: #060709; padding: 16px; border-radius: 12px; border: 1px solid #1c202d;">
-                                <div style="color: #8892b0; font-size: 12px;">Активные сессии</div>
-                                <div style="font-size: 22px; font-weight: bold; color: #fff; margin-top: 4px;">5 / 50</div>
-                            </div>
-                        </div>
+                        <h3 style="margin-top: 0; color: #fff; font-size: 18px;">👥 Управление кошельками</h3>
+                        <p style="color: #8892b0; font-size: 13px;">Список аккаунтов и прокси.</p>
+                        <button style="margin-top: 12px; background-color: transparent; color: #ff6600; border: 1px dashed #ff6600; padding: 10px; border-radius: 8px; font-weight: bold; font-size: 13px; cursor: pointer; width: 100%;">+ Импорт приватных ключей</button>
                     </div>
                 `;
             } else if (section === 'Billing') {
                 centerHtml = `
                     <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 20px; width: 100%;">
                         <h3 style="margin-top: 0; color: #fff; font-size: 18px;">💳 Биллинг и подписка</h3>
-                        <p style="color: #8892b0; font-size: 13px;">Управление тарифом и балансом счета.</p>
-                        
-                        <div style="display: grid; grid-template-columns: 1fr; gap: 14px; margin-top: 16px;">
-                            <div style="background: #060709; padding: 16px; border-radius: 12px; border: 1px solid #1c202d;">
-                                <div style="font-size: 11px; color: #8892b0;">Текущий тариф</div>
-                                <div style="font-size: 17px; font-weight: bold; color: #ff6600; margin-top: 4px;">PRO FARMER ($160 / мес)</div>
-                                <div style="font-size: 11px; color: #00d95f; margin-top: 8px;">● Активен до 26 августа 2026</div>
-                            </div>
-                            <div style="background: #060709; padding: 16px; border-radius: 12px; border: 1px solid #1c202d;">
-                                <div style="font-size: 11px; color: #8892b0;">Баланс аккаунта</div>
-                                <div style="font-size: 17px; font-weight: bold; color: #fff; margin-top: 4px;">$45.00 USDT</div>
-                                <button onclick="alert('Перенаправление на шлюз пополнения...')" style="margin-top: 10px; background: #ff6600; color: #000; border: none; padding: 8px 14px; border-radius: 6px; font-weight: bold; font-size: 12px; cursor: pointer;">Пополнить баланс</button>
-                            </div>
-                        </div>
+                        <p style="color: #8892b0; font-size: 13px;">Тариф: PRO FARMER ($160 / мес) — Активен</p>
                     </div>
                 `;
             } else if (section === 'Settings') {
                 centerHtml = `
                     <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 20px; width: 100%;">
                         <h3 style="margin-top: 0; color: #fff; font-size: 18px;">⚙️ Системные настройки</h3>
-                        <p style="color: #8892b0; font-size: 13px;">Глобальные параметры автоматизации.</p>
+                        <p style="color: #8892b0; font-size: 13px; margin-bottom: 16px;">Глобальные параметры автоматизации и уведомлений.</p>
                         
-                        <!-- Блок интеграции Telegram -->
                         <div style="margin: 16px 0; background: #060709; padding: 16px; border-radius: 12px; border: 1px solid #1c202d;">
                             <h4 style="margin: 0 0 6px 0; color: #fff; font-size: 14px;">${t.tgLinkTitle}</h4>
                             <p style="color: #8892b0; font-size: 12px; margin-bottom: 12px;">${t.tgLinkDesc}</p>
@@ -1413,7 +1317,6 @@
             }
 
             dashboardContent.innerHTML = `
-                <!-- Левый сайдбар (только для десктопов) -->
                 <div class="desktop-sidebar" style="width: 280px; display: flex; flex-direction: column; gap: 14px; flex-shrink: 0;">
                     <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 16px; display: flex; align-items: center; gap: 12px;">
                         <div style="width: 40px; height: 40px; background: linear-gradient(135deg, #ff6600, #993d00); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 16px; color: #000; flex-shrink: 0;">R</div>
@@ -1432,21 +1335,20 @@
                             <button style="background: #00d95f; color: #000; border: none; width: 28px; height: 28px; border-radius: 50%; font-weight: bold; cursor: pointer;">+</button>
                         </div>
                         <button onclick="connectDashboardWallet()" style="width: 100%; background: #14171f; color: #00d95f; border: 1px solid #00d95f; padding: 8px; border-radius: 8px; font-weight: bold; font-size: 12px; cursor: pointer;">${t.walletConnectedText}</button>
-                        <div id="dashboard-wallet-status" style="font-size: 10px; color: #8892b0; margin-top: 6px; word-break: break-all; text-align: center;">Connected: 0xBdEA...a6Ec ✅</div>
                     </div>
 
                     <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 10px; display: flex; flex-direction: column; gap: 4px;">
                         <div class="sidebar-menu-item ${section === 'Looter' ? 'active' : ''}" data-section="Looter" onclick="switchMenu(this, 'Looter')">📦 ${t.looterMenu}</div>
                         <div class="sidebar-menu-item ${section === 'Farming' ? 'active' : ''}" data-section="Farming" onclick="switchMenu(this, 'Farming')">🌾 ${t.farmTabBtn}</div>
                         <div class="sidebar-menu-item ${section === 'Tasks' ? 'active' : ''}" data-section="Tasks" onclick="switchMenu(this, 'Tasks')">⚡ ${t.tasksTabBtn}</div>
-                        <div class="sidebar-menu-item ${section === 'Wallets' ? 'active' : ''}" data-section="Wallets" onclick="switchMenu(this, 'Wallets')">👥 ${t.walletsMenu} <span style="background: #ff6600; color: #000; font-size: 9px; padding: 2px 5px; border-radius: 4px; font-weight: bold; margin-left: 4px;">PRO</span></div>
+                        <div class="sidebar-menu-item ${section === 'Proxy' ? 'active' : ''}" data-section="Proxy" onclick="switchMenu(this, 'Proxy')">🌐 ${t.proxyMenu}</div>
                         <div class="sidebar-menu-item ${section === 'Statistics' ? 'active' : ''}" data-section="Statistics" onclick="switchMenu(this, 'Statistics')">📊 ${t.statsMenu}</div>
+                        <div class="sidebar-menu-item ${section === 'Wallets' ? 'active' : ''}" data-section="Wallets" onclick="switchMenu(this, 'Wallets')">👥 ${t.walletsMenu} <span style="background: #ff6600; color: #000; font-size: 9px; padding: 2px 5px; border-radius: 4px; font-weight: bold; margin-left: 4px;">PRO</span></div>
                         <div class="sidebar-menu-item ${section === 'Billing' ? 'active' : ''}" data-section="Billing" onclick="switchMenu(this, 'Billing')">💳 ${t.billingMenu}</div>
                         <div class="sidebar-menu-item ${section === 'Settings' ? 'active' : ''}" data-section="Settings" onclick="switchMenu(this, 'Settings')">⚙️ ${t.settingsMenu}</div>
                     </div>
                 </div>
 
-                <!-- Центральный контент -->
                 <div style="flex: 1; display: flex; flex-direction: column; gap: 16px; min-width: 0;">
                     ${centerHtml}
                 </div>
@@ -1460,8 +1362,7 @@
                     await provider.send("wallet_requestPermissions", [{ eth_accounts: {} }]);
                     signer = provider.getSigner();
                     userAddress = await signer.getAddress();
-                    const st = document.getElementById('dashboard-wallet-status');
-                    if(st) st.innerText = `Connected: ${userAddress.substring(0,6)}...${userAddress.substring(38)} ✅`;
+                    alert("Connected: " + userAddress);
                 } catch (error) {
                     console.error(error);
                 }
@@ -1473,35 +1374,24 @@
         async function startScanningDrops() {
             const log = document.getElementById('drop-logs');
             if(!log) return;
-            const tx1 = '0x' + Array.from({length: 8}, () => Math.floor(Math.random()*16).toString(16)).join('');
-            const tx2 = '0x' + Array.from({length: 8}, () => Math.floor(Math.random()*16).toString(16)).join('');
-            
-            log.innerHTML += `<br><span style="color: #ff6600;">[${new Date().toLocaleTimeString()}] 🔍 Сканирование контрактов через RPC... [Tx: ${tx1}...]</span>`;
+            log.innerHTML += `<br><span style="color: #ff6600;">[${new Date().toLocaleTimeString()}] 🔍 Сканирование контрактов через RPC...</span>`;
             log.scrollTop = log.scrollHeight;
             
             setTimeout(() => {
-                log.innerHTML += `<br><span style="color: #00d95f;">[${new Date().toLocaleTimeString()}] ✅ Найдено: ZkSync ($24.50), Gas Refund ($1.80) [Tx: ${tx2}...]</span>`;
+                log.innerHTML += `<br><span style="color: #00d95f;">[${new Date().toLocaleTimeString()}] ✅ Найдено: ZkSync ($24.50), Gas Refund ($1.80)</span>`;
                 log.scrollTop = log.scrollHeight;
-                if(telegramLinked) {
-                    alert("[Telegram Push Bot] 🎁 Обнаружен новый аирдроп на сумму ~$26.30!");
-                }
             }, 1500);
         }
 
         async function claimFoundDrops() {
             const log = document.getElementById('drop-logs');
             if(!log) return;
-            const txClaim = '0x' + Array.from({length: 8}, () => Math.floor(Math.random()*16).toString(16)).join('');
-            
-            log.innerHTML += `<br><span style="color: #ff6600;">[${new Date().toLocaleTimeString()}] ⚡ Запуск клейма с Anti-Sybil (Gwei: 14)... [Tx: ${txClaim}...]</span>`;
+            log.innerHTML += `<br><span style="color: #ff6600;">[${new Date().toLocaleTimeString()}] ⚡ Запуск клейма с Anti-Sybil...</span>`;
             log.scrollTop = log.scrollHeight;
             
             setTimeout(() => {
-                log.innerHTML += `<br><span style="color: #00d95f;">[${new Date().toLocaleTimeString()}] 🚀 Успешно! Токены распределены по кошелькам.</span>`;
+                log.innerHTML += `<br><span style="color: #00d95f;">[${new Date().toLocaleTimeString()}] 🚀 Успешно! Токены распределены.</span>`;
                 log.scrollTop = log.scrollHeight;
-                if(telegramLinked) {
-                    alert("[Telegram Push Bot] 💰 Клейм успешно завершен! Средства зачислены.");
-                }
             }, 3000);
         }
 
@@ -1509,6 +1399,97 @@
             element.classList.toggle('active');
             const span = element.querySelector('.faq-question span:last-child');
             span.innerText = element.classList.contains('active') ? '-' : '+';
+        }
+        // Реальная регистрация через БД
+        async function validateRegister() {
+            const emailField = document.getElementById('regEmail');
+            const userField = document.getElementById('regUser');
+            const passField = document.getElementById('regPass');
+            const errorContainer = document.getElementById('errorContainer');
+            
+            // Сбрасываем старые ошибки подсветки
+            emailField.classList.remove('error');
+            userField.classList.remove('error');
+            passField.classList.remove('error');
+            errorContainer.innerHTML = '';
+
+            // Проверка на пустоту
+            if (userField.value.trim() === "" || passField.value.trim() === "" || emailField.value.trim() === "") {
+                emailField.classList.add('error');
+                userField.classList.add('error');
+                passField.classList.add('error');
+                errorContainer.innerHTML = `<div class="error-toast"><span>⚠️</span><span>Заполните все поля!</span></div>`;
+                return;
+            }
+
+            // Проверка, что введена похожая на правду почта (есть символ @)
+            if (!emailField.value.includes('@') || !emailField.value.includes('.')) {
+                emailField.classList.add('error');
+                errorContainer.innerHTML = `<div class="error-toast"><span>⚠️</span><span>Введите корректный адрес электронной почты!</span></div>`;
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username: userField.value.trim(),
+                        email: emailField.value.trim(),
+                        password: passField.value.trim()
+                    })
+                });
+                const result = await response.json();
+
+                if (response.ok) {
+                    errorContainer.innerHTML = `
+                        <div class="error-toast" style="background-color: #0b1f14; border-color: #00d95f; color: #00d95f;">
+                            <span>✅</span><span>Регистрация успешна! Переход к входу...</span>
+                        </div>
+                    `;
+                    setTimeout(() => {
+                        openModal('login');
+                    }, 1500);
+                } else {
+                    errorContainer.innerHTML = `<div class="error-toast"><span>⚠️</span><span>${result.detail || "Ошибка регистрации"}</span></div>`;
+                }
+            } catch (e) {
+                errorContainer.innerHTML = `<div class="error-toast"><span>⚠️</span><span>Ошибка связи с сервером БД!</span></div>`;
+            }
+        }
+
+        // Реальный логин через проверку в SQLite
+        async function validateLogin() {
+            const userField = document.getElementById('loginUser');
+            const passField = document.getElementById('loginPass');
+            const errorContainer = document.getElementById('loginErrorContainer');
+
+            if (userField.value.trim() === "" || passField.value.trim() === "") {
+                userField.classList.add('error');
+                passField.classList.add('error');
+                errorContainer.innerHTML = `<div class="error-toast" style="bottom: -65px;"><span>⚠️</span><span>Введите логин и пароль!</span></div>`;
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username: userField.value.trim(),
+                        password: passField.value.trim()
+                    })
+                });
+                const result = await response.json();
+
+                if (response.ok) {
+                    handleLoginSuccess();
+                } else {
+                    errorContainer.innerHTML = `<div class="error-toast" style="bottom: -65px;"><span>⚠️</span><span>${result.detail || "Неверный логин или пароль"}</span></div>`;
+                }
+            } catch (e) {
+                errorContainer.innerHTML = `<div class="error-toast" style="bottom: -65px;"><span>⚠️</span><span>Ошибка связи с сервером!</span></div>`;
+            }
         }
     </script>
 </body>

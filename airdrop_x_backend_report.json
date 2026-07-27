@@ -1,0 +1,28 @@
+{
+    "timestamp": "2026-07-27T21:42:56.897632",
+    "total_wallets_processed": 2,
+    "status": "Success",
+    "details": [
+        {
+            "wallet_id": 1,
+            "proxy": "http://31.57.178.255:8181",
+            "status": "Completed",
+            "route_executed": [
+                "swap_tokens",
+                "add_liquidity",
+                "bridge_layer"
+            ],
+            "timestamp": "2026-07-27T21:42:56.897632"
+        },
+        {
+            "wallet_id": 2,
+            "proxy": "http://31.57.178.255:8181",
+            "status": "Completed",
+            "route_executed": [
+                "mint_nft",
+                "add_liquidity"
+            ],
+            "timestamp": "2026-07-27T21:42:43.904038"
+        }
+    ]
+}

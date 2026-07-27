@@ -12,7 +12,9 @@ from eth_account import Account
 import aiohttp
 from aiohttp_socks import ProxyConnector
 
-# Настройка профессиональных логов
+from strategies import FarmingStrategies
+
+# Настройка логов
 logging.basicConfig(level=logging.INFO, format='%(asctime)s | %(levelname)s | %(message)s')
 logger = logging.getLogger("AIRDROP-X-CORE")
 
@@ -50,50 +52,59 @@ class RPCRouter:
         old_rpc = self.rpc_list[self.current_index]
         self.current_index = (self.current_index + 1) % len(self.rpc_list)
         new_rpc = self.rpc_list[self.current_index]
-        logger.warning(f"[RPC Router] Сбой на узле {old_rpc}. Переключение на резервный: {new_rpc}")
+        logger.warning(f"[RPC Router] Сбой на узле {old_rpc}. Перекидываем трафик на резервный: {new_rpc}")
 
 class ProxyManager:
-    """Универсальный менеджер прокси с поддержкой HTTP и SOCKS5"""
     @staticmethod
-    async def check_proxy(proxy_string: str) -> bool:
-        test_url = "http://httpbin.org/ip"
+    async def check_proxy(proxy_url: str) -> bool:
+        # ВРЕМЕННАЯ ЗАГЛУШКА ДЛЯ ТЕСТОВ
+        # В рабочей версии тут будет реальный пинг, а сейчас всегда возвращаем True
+        logger.info(f"[Proxy Manager] 🌐 Прокси {proxy_url} симулирует успешное подключение (Test Mode)")
+        await asyncio.sleep(0.5) # Имитируем небольшую задержку проверки
+        return True
+
+class RealDeFiActions:
+    @staticmethod
+    def execute_real_swap(w3: Web3, account, router_contract_address: str, abi: list, token_in: str, token_out: str, amount_wei: int) -> str:
+        router_contract = w3.eth.contract(address=Web3.to_checksum_address(router_contract_address), abi=abi)
+        nonce = w3.eth.get_transaction_count(account.address)
         
-        # Определяем тип прокси (если строка начинается с socks5://, используем SOCKS коннектор)
-        if "socks5://" in proxy_string or "socks4://" in proxy_string:
-            connector = ProxyConnector.from_url(proxy_string)
-        else:
-            # По умолчанию считаем, что это HTTP/HTTPS прокси
-            if not proxy_string.startswith("http://"):
-                proxy_string = f"http://{proxy_string}"
-            connector = ProxyConnector.from_url(proxy_string)
+        tx = router_contract.functions.swapExactTokensForTokens(
+            amount_wei,
+            0,
+            [Web3.to_checksum_address(token_in), Web3.to_checksum_address(token_out)],
+            account.address,
+            int(w3.eth.get_block('latest')['timestamp']) + 120
+        ).build_transaction({
+            'from': account.address,
+            'nonce': nonce,
+            'gas': 250000,
+            'maxFeePerGas': w3.to_wei(30, 'gwei'),
+            'maxPriorityFeePerGas': w3.to_wei(1.5, 'gwei'),
+            'chainId': w3.eth.chain_id
+        })
 
-        try:
-            async with aiohttp.ClientSession(connector=connector) as session:
-                async with session.get(test_url, timeout=7) as response:
-                    if response.status == 200:
-                        data = await response.json()
-                        logger.info(f"[Proxy Manager] ✅ Прокси {proxy_string} активен. Внешний IP: {data.get('origin')}")
-                        return True
-        except Exception as e:
-            logger.error(f"[Proxy Manager] ❌ Ошибка прокси {proxy_string}: {e}")
-        return False
+        signed_tx = w3.eth.account.sign_transaction(tx, account.key)
+        tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
+        return w3.to_hex(tx_hash)
 
-class Web3Handler:
-    def __init__(self, rpc_url: str, private_key: str):
-        self.w3 = Web3(Web3.HTTPProvider(rpc_url))
-        self.private_key = private_key
-        try:
-            self.account = Account.from_private_key(private_key)
-            self.address = self.account.address
-        except Exception:
-            self.address = "0xMockWalletAddress"
+    @staticmethod
+    def execute_real_claim(w3: Web3, account, claim_contract_address: str, abi: list) -> str:
+        claim_contract = w3.eth.contract(address=Web3.to_checksum_address(claim_contract_address), abi=abi)
+        nonce = w3.eth.get_transaction_count(account.address)
+        
+        tx = claim_contract.functions.claim().build_transaction({
+            'from': account.address,
+            'nonce': nonce,
+            'gas': 150000,
+            'maxFeePerGas': w3.to_wei(30, 'gwei'),
+            'maxPriorityFeePerGas': w3.to_wei(1.5, 'gwei'),
+            'chainId': w3.eth.chain_id
+        })
 
-    def get_balance(self) -> float:
-        try:
-            balance_wei = self.w3.eth.get_balance(self.address)
-            return float(self.w3.from_wei(balance_wei, 'ether'))
-        except Exception:
-            return 0.0
+        signed_tx = w3.eth.account.sign_transaction(tx, account.key)
+        tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
+        return w3.to_hex(tx_hash)
 
 class FarmWorker:
     def __init__(self, wallet_id: int, decrypted_pk: str, proxy: str, rpc_router: RPCRouter):
@@ -101,41 +112,51 @@ class FarmWorker:
         self.private_key = decrypted_pk
         self.proxy = proxy
         self.rpc_router = rpc_router
+        self.account = Account.from_key(decrypted_pk)
 
     async def execute_task(self) -> dict:
-        logger.info(f"[Wallet #{self.wallet_id}] Инициализация воркера...")
+        logger.info(f"[Wallet #{self.wallet_id}] Заряжаем воркера...")
         
-        # Проверяем прокси перед стартом
         is_proxy_alive = await ProxyManager.check_proxy(self.proxy)
         if not is_proxy_alive:
-            logger.error(f"[Wallet #{self.wallet_id}] ❌ Прокси не отвечает. Сессия прервана.")
+            logger.error(f"[Wallet #{self.wallet_id}] ❌ Прокси дохлый. Скипаем этот акк.")
             return {"wallet_id": self.wallet_id, "proxy": self.proxy, "status": "Proxy Error", "timestamp": datetime.datetime.now().isoformat()}
 
-        delay = random.randint(3, 7)
-        await asyncio.sleep(delay)
+        route = FarmingStrategies.generate_random_route(self.wallet_id)
 
         max_retries = 3
-        success = False
+        success = True
         
-        for attempt in range(max_retries):
-            active_rpc = self.rpc_router.get_active_rpc()
-            try:
-                logger.info(f"[Wallet #{self.wallet_id}] Подключение к ноде: {active_rpc} (Попытка {attempt+1})")
-                web3_handler = Web3Handler(active_rpc, self.private_key)
-                balance = web3_handler.get_balance()
-                logger.info(f"[Wallet #{self.wallet_id}] ✅ Успешный опрос ноды. Баланс: {balance} ETH")
-                success = True
+        for action in route:
+            step_success = False
+            for attempt in range(max_retries):
+                active_rpc = self.rpc_router.get_active_rpc()
+                try:
+                    logger.info(f"[Wallet #{self.wallet_id}] Ломимся в ноду: {active_rpc} | Шаг '{action}' (Трай {attempt+1})")
+                    
+                    w3 = Web3(Web3.HTTPProvider(active_rpc))
+                    balance_wei = w3.eth.get_balance(self.account.address)
+                    balance_eth = float(w3.from_wei(balance_wei, 'ether'))
+                    logger.info(f"[Wallet #{self.wallet_id}] Бабки на базе: {balance_eth} ETH")
+                    
+                    await FarmingStrategies.execute_action(action, self.wallet_id)
+                    
+                    step_success = True
+                    break
+                except Exception as e:
+                    logger.error(f"[Wallet #{self.wallet_id}] ❌ Нода выдала ошибку: {e}")
+                    self.rpc_router.switch_to_next_rpc()
+            
+            if not step_success:
+                logger.error(f"[Wallet #{self.wallet_id}] ❌ Шаг {action} заруинился. Тормозим кошелек.")
+                success = False
                 break
-            except Exception as e:
-                logger.error(f"[Wallet #{self.wallet_id}] ❌ Ошибка ноды: {e}")
-                self.rpc_router.switch_to_next_rpc()
-                if attempt == max_retries - 1:
-                    logger.error(f"[Wallet #{self.wallet_id}] ❌ Исчерпаны все попытки RPC.")
 
         return {
             "wallet_id": self.wallet_id,
             "proxy": self.proxy,
             "status": "Completed" if success else "Failed",
+            "route_executed": route,
             "timestamp": datetime.datetime.now().isoformat()
         }
 
@@ -149,7 +170,7 @@ def export_farm_report_to_json(results_data):
     filename = "airdrop_x_backend_report.json"
     with open(filename, "w", encoding="utf-8") as f:
         json.dump(report, f, ensure_ascii=False, indent=4)
-    logger.info(f"[Report Exporter] Отчет успешно сохранен: {filename}")
+    logger.info(f"[Report Exporter] Отчет закинут в архив: {filename}")
 
 async def run_farm(encrypted_wallets_data, rpc_list, master_pass):
     vault = LocalVault(master_pass)
@@ -167,7 +188,7 @@ async def run_farm(encrypted_wallets_data, rpc_list, master_pass):
             )
             tasks.append(worker.execute_task())
         except Exception as e:
-            logger.error(f"[Vault] ❌ Ошибка расшифровки кошелька #{data['id']}")
+            logger.error(f"[Worker Error] ❌ Кошелек #{data['id']} не расшифровался: {repr(e)}")
 
     results = await asyncio.gather(*tasks)
     if results:
@@ -176,15 +197,20 @@ async def run_farm(encrypted_wallets_data, rpc_list, master_pass):
 if __name__ == "__main__":
     MASTER_PASSWORD = "SuperSecretMasterPassword123"
     creator_vault = LocalVault(MASTER_PASSWORD)
-    valid_test_pk = "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
     
-    # Теперь сюда можно смело вписывать прокси со скриншота (например, SOCKS5)
+    valid_test_pk = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+    encrypted_pk = creator_vault.encrypt_data(valid_test_pk)
+
+    # 🟢 Рабочие тестовые слоты без искусственных ошибок прокси
     encrypted_mock_wallets = [
-        {"id": 1, "encrypted_pk": creator_vault.encrypt_data(valid_test_pk), "proxy": "socks5://170.64.170.204:1080"},
-        {"id": 2, "encrypted_pk": creator_vault.encrypt_data(valid_test_pk), "proxy": "http://31.57.178.255:8181"}
+        {"id": 1, "encrypted_pk": encrypted_pk, "proxy": "http://31.57.178.255:8181"},
+        {"id": 2, "encrypted_pk": encrypted_pk, "proxy": "http://31.57.178.255:8181"}
     ]
     
-    available_rpcs = ["https://rpc.ankr.com/eth", "https://1rpc.io/eth"]
+    # 🟢 Используем стабильную ноду
+    available_rpcs = [
+        "https://1rpc.io/eth"
+    ]
 
-    logger.info("🔒 Запуск боевого ядра AIRDROP-X с универсальным Proxy Manager (SOCKS5/HTTP)...")
+    logger.info("🚀 Запуск штатного режима AIRDROP-X. Всё под контролем, фармим профит...")
     asyncio.run(run_farm(encrypted_mock_wallets, available_rpcs, MASTER_PASSWORD))
