@@ -2,14 +2,14 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title id="page-title">AIRDROP-X — SaaS Панель для крипто-ферм</title>
     <!-- Telegram WebApp SDK -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <!-- Ethers.js для Web3 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
     <style>
-        * { box-sizing: border-box; scroll-behavior: smooth; }
+        * { box-sizing: border-box; scroll-behavior: smooth; user-select: none; -webkit-tap-highlight-color: transparent; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background-color: #060709;
@@ -19,6 +19,19 @@
             display: flex;
             flex-direction: column;
             min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Полоска загрузки сверху (Preloader) */
+        #preloader-line {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 3px;
+            background: linear-gradient(90deg, #ff6600, #ff9933, #00d95f);
+            width: 0%;
+            z-index: 9999;
+            transition: width 0.4s ease;
         }
 
         /* Шапка */
@@ -26,26 +39,31 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 20px 40px;
+            padding: 14px 20px;
             border-bottom: 1px solid #14171f;
             background-color: #060709;
             position: sticky;
             top: 0;
             z-index: 1000;
+            gap: 12px;
         }
         .logo-container {
             display: flex;
             align-items: center;
-            gap: 12px;
-            font-size: 22px;
+            gap: 8px;
+            font-size: 18px;
             font-weight: 800;
-            letter-spacing: 1.5px;
+            letter-spacing: 0.5px;
             cursor: pointer;
+            user-select: none;
+            white-space: nowrap;
+            flex-shrink: 0;
         }
         .header-actions {
             display: flex;
-            gap: 12px;
+            gap: 8px;
             align-items: center;
+            flex-shrink: 0;
         }
         button {
             cursor: pointer;
@@ -57,19 +75,20 @@
         .btn-orange-sm {
             background-color: #ff6600;
             color: #000;
-            padding: 10px 22px;
-            font-size: 14px;
+            padding: 8px 16px;
+            font-size: 13px;
         }
         .btn-orange-sm:hover { background-color: #e65c00; }
         .btn-dark-sm {
             background-color: transparent;
             color: #fff;
             border: 1px solid #22252e;
-            padding: 10px 18px;
-            font-size: 14px;
+            padding: 8px 14px;
+            font-size: 13px;
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 6px;
+            white-space: nowrap;
         }
         .btn-dark-sm:hover { background-color: #12151c; }
 
@@ -79,24 +98,24 @@
             display: none;
             position: absolute;
             right: 0;
-            top: 45px;
+            top: 40px;
             background-color: #0f1115;
             border: 1px solid #22252e;
             border-radius: 12px;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
-            width: 160px;
+            width: 150px;
             z-index: 1000;
             overflow: hidden;
             animation: fadeIn 0.2s ease;
         }
         .lang-menu.show { display: block; }
         .lang-option {
-            padding: 12px 16px;
+            padding: 10px 14px;
             display: flex;
             align-items: center;
             gap: 10px;
             color: #8892b0;
-            font-size: 14px;
+            font-size: 13px;
             cursor: pointer;
             background: transparent;
             border: none;
@@ -117,6 +136,7 @@
             z-index: 2000;
             align-items: center;
             justify-content: center;
+            padding: 16px;
             animation: fadeIn 0.2s ease;
         }
         .modal-overlay.show { display: flex; }
@@ -126,7 +146,7 @@
             border-radius: 16px;
             width: 100%;
             max-width: 440px;
-            padding: 32px;
+            padding: 24px;
             box-shadow: 0 20px 50px rgba(0,0,0,0.9);
             text-align: left;
             position: relative;
@@ -135,24 +155,24 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            font-size: 20px;
+            font-size: 18px;
             font-weight: 800;
-            margin-bottom: 24px;
+            margin-bottom: 20px;
         }
         .modal-desc {
             color: #8892b0;
-            font-size: 14px;
-            margin-bottom: 24px;
+            font-size: 13px;
+            margin-bottom: 20px;
             line-height: 1.5;
         }
         .modal-desc span { color: #ff6600; font-weight: 600; }
-        .input-group { position: relative; margin-bottom: 16px; }
+        .input-group { position: relative; margin-bottom: 14px; }
         .auth-input {
             width: 100%;
             background-color: #060709;
             border: 1px solid #1c202d;
             border-radius: 10px;
-            padding: 14px 16px;
+            padding: 12px 14px;
             color: #fff;
             font-size: 14px;
             outline: none;
@@ -163,8 +183,8 @@
 
         .password-wrapper { position: relative; width: 100%; }
         .password-toggle-icon {
-            position: absolute; right: 16px; top: 50%; transform: translateY(-50%);
-            cursor: pointer; color: #555c6d; font-size: 16px; user-select: none; transition: 0.2s;
+            position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
+            cursor: pointer; color: #555c6d; font-size: 15px; user-select: none; transition: 0.2s;
         }
         .password-toggle-icon:hover { color: #ff6600; }
         
@@ -173,11 +193,11 @@
             background-color: #ff6600;
             color: #000;
             border: none;
-            padding: 14px;
-            font-size: 15px;
+            padding: 13px;
+            font-size: 14px;
             font-weight: bold;
             border-radius: 10px;
-            margin-top: 8px;
+            margin-top: 6px;
             cursor: pointer;
             transition: 0.2s;
         }
@@ -188,11 +208,11 @@
             background-color: transparent;
             color: #8892b0;
             border: 1px solid #1c202d;
-            padding: 14px;
-            font-size: 15px;
+            padding: 13px;
+            font-size: 14px;
             font-weight: 600;
             border-radius: 10px;
-            margin-top: 10px;
+            margin-top: 8px;
             cursor: pointer;
             transition: 0.2s;
         }
@@ -200,67 +220,69 @@
 
         .error-toast {
             position: absolute;
-            bottom: -75px;
+            bottom: -65px;
             left: 0;
             right: 0;
             background-color: #1f0c0c;
             border: 1px solid #ff3333;
             border-radius: 10px;
-            padding: 12px 16px;
+            padding: 10px 14px;
             color: #ff8888;
-            font-size: 13px;
+            font-size: 12px;
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
             box-shadow: 0 10px 25px rgba(255, 51, 51, 0.2);
         }
 
-        .modal-footer-text {
-            margin-top: 24px;
-            font-size: 12px;
-            color: #555c6d;
-            line-height: 1.5;
-            border-top: 1px solid #141720;
-            padding-top: 16px;
-        }
-        .modal-footer-text a { color: #8892b0; text-decoration: underline; }
-
-        /* Тултип (подсказка с вопросительным знаком) */
-        .tooltip-container {
+        /* Интерактивные термины (Tooltips) */
+        .term-tooltip {
             position: relative;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 26px;
-            height: 26px;
-            background: #151821;
-            border: 1px solid #222633;
-            border-radius: 50%;
+            display: inline-block;
             color: #ff6600;
-            font-size: 13px;
-            font-weight: bold;
+            border-bottom: 1px dotted #ff6600;
             cursor: help;
+            transition: 0.2s;
         }
-        .tooltip-box {
+        .term-tooltip:hover {
+            color: #fff;
+            border-bottom: 1px dotted #fff;
+        }
+        .term-tooltip .tooltip-box {
             display: none;
             position: absolute;
-            right: 0;
-            top: 35px;
-            width: 280px;
-            background-color: #060709;
+            bottom: 120%;
+            left: 50%;
+            transform: translateX(-50%);
+            width: max-content;
+            max-width: 220px;
+            background-color: #151821;
             border: 1px solid #222633;
-            border-radius: 12px;
-            padding: 14px;
+            border-radius: 8px;
+            padding: 10px;
             box-shadow: 0 15px 35px rgba(0,0,0,0.9);
             z-index: 3000;
-            text-align: left;
-            font-size: 12px;
-            line-height: 1.5;
+            font-size: 11px;
+            line-height: 1.4;
             color: #8892b0;
+            font-weight: normal;
             animation: fadeIn 0.2s ease;
+            text-align: left;
         }
-        .tooltip-box b { color: #fff; }
-        .tooltip-container:hover .tooltip-box { display: block; }
+        .term-tooltip .tooltip-box::after {
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            border-width: 5px;
+            border-style: solid;
+            border-color: #222633 transparent transparent transparent;
+        }
+        .term-tooltip:hover .tooltip-box {
+            display: block;
+        }
+        .term-tooltip .tooltip-box b { color: #fff; }
 
         /* Главный экран */
         .hero {
@@ -268,40 +290,50 @@
             flex-direction: column;
             align-items: center;
             justify-content: flex-start;
-            padding: 80px 20px 40px 20px;
+            padding: 50px 16px 30px 16px;
             text-align: center;
             background: radial-gradient(circle at center, rgba(255, 102, 0, 0.08) 0%, rgba(6, 7, 9, 1) 60%);
         }
         .hero h1 {
-            font-size: 48px;
+            font-size: 36px;
             font-weight: 700;
-            margin-bottom: 20px;
+            margin-bottom: 16px;
             line-height: 1.15;
             max-width: 800px;
         }
         .hero p {
             color: #8892b0;
-            font-size: 18px;
-            margin-bottom: 35px;
-            max-width: 650px;
-            line-height: 1.6;
+            font-size: 16px;
+            margin-bottom: 28px;
+            max-width: 600px;
+            line-height: 1.5;
         }
-        .hero-buttons { display: flex; gap: 15px; margin-bottom: 25px; }
+        .hero-buttons { 
+            display: flex; 
+            gap: 12px; 
+            margin-bottom: 20px; 
+            flex-direction: column; 
+            width: 100%; 
+            max-width: 320px; 
+            align-items: center;
+        }
         .btn-orange-lg {
             background-color: #ff6600;
             color: #000;
-            padding: 15px 36px;
-            font-size: 16px;
+            padding: 14px 24px;
+            font-size: 15px;
             border-radius: 10px;
+            width: 100%;
         }
         .btn-orange-lg:hover { background-color: #e65c00; }
         .btn-dark-lg {
             background-color: #0f1115;
             color: #fff;
             border: 1px solid #22252e;
-            padding: 15px 36px;
-            font-size: 16px;
+            padding: 14px 24px;
+            font-size: 15px;
             border-radius: 10px;
+            width: 100%;
         }
         .btn-dark-lg:hover { background-color: #1a1d24; }
 
@@ -311,88 +343,171 @@
             background: #0d0f14;
             border: 1px solid #181c25;
             border-radius: 12px;
-            padding: 16px 24px;
+            padding: 14px 18px;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin: 0 auto 60px auto;
+            margin: 0 auto 40px auto;
+            gap: 10px;
         }
-        .status-left { display: flex; align-items: center; gap: 10px; color: #a0aec0; font-size: 14px; }
-        .status-right { color: #ff6600; font-weight: bold; font-size: 15px; }
+        .status-left { display: flex; align-items: center; gap: 8px; color: #a0aec0; font-size: 13px; text-align: left; }
+        .status-right { color: #ff6600; font-weight: bold; font-size: 14px; flex-shrink: 0; }
 
-        .section-title { font-size: 32px; font-weight: 700; margin: 40px 0 20px 0; text-align: center; }
+        .section-title { font-size: 26px; font-weight: 700; margin: 30px 16px 16px 16px; text-align: center; }
         
         .features-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-            gap: 20px;
-            width: 80%;
+            grid-template-columns: 1fr;
+            gap: 16px;
+            width: 100%;
             max-width: 1000px;
-            margin: 0 auto 80px auto;
+            margin: 0 auto 50px auto;
+            padding: 0 16px;
         }
         .feature-card {
             background-color: #0d0f14;
             border: 1px solid #14171f;
             border-radius: 16px;
-            padding: 28px;
+            padding: 24px;
             transition: all 0.3s ease;
             text-align: left;
         }
         .feature-card:hover {
             border-color: #ff6600;
             background-color: #15100c;
-            transform: translateY(-5px);
-            box-shadow: 0 10px 30px rgba(255, 102, 0, 0.05);
         }
         .card-icon {
-            font-size: 28px;
-            margin-bottom: 16px;
+            font-size: 24px;
+            margin-bottom: 12px;
             display: inline-block;
             background: #14171f;
-            padding: 12px;
-            border-radius: 12px;
+            padding: 10px;
+            border-radius: 10px;
         }
-        .feature-card h3 { font-size: 18px; margin: 0 0 10px 0; color: #ffffff; }
-        .feature-card p { font-size: 14px; color: #8892b0; margin: 0; line-height: 1.5; }
+        .feature-card h3 { font-size: 17px; margin: 0 0 8px 0; color: #ffffff; }
+        .feature-card p { font-size: 13px; color: #8892b0; margin: 0; line-height: 1.5; }
 
-        .faq-section { width: 80%; max-width: 900px; margin: 0 auto 100px auto; text-align: left; }
+        .faq-section { width: 100%; max-width: 900px; margin: 0 auto 60px auto; text-align: left; padding: 0 16px; }
         .faq-item {
             background-color: #0d0f14;
             border: 1px solid #14171f;
             border-radius: 12px;
-            margin-bottom: 12px;
+            margin-bottom: 10px;
             overflow: hidden;
             transition: 0.2s;
         }
         .faq-question {
-            padding: 20px 24px;
-            font-size: 16px;
+            padding: 16px 18px;
+            font-size: 15px;
             font-weight: 600;
             display: flex;
             justify-content: space-between;
             align-items: center;
             cursor: pointer;
+            gap: 10px;
         }
         .faq-question:hover { color: #ff6600; }
         .faq-answer {
-            padding: 0 24px 20px 24px;
+            padding: 0 18px 16px 18px;
             color: #8892b0;
-            font-size: 14px;
-            line-height: 1.6;
+            font-size: 13px;
+            line-height: 1.5;
             display: none;
         }
         .faq-item.active .faq-answer { display: block; }
 
         .footer {
             border-top: 1px solid #14171f;
-            padding: 30px 40px;
+            padding: 24px 16px;
             display: flex;
-            justify-content: space-between;
+            flex-direction: column;
+            gap: 12px;
             align-items: center;
+            text-align: center;
             color: #666;
-            font-size: 14px;
+            font-size: 13px;
             margin-top: auto;
         }
+
+        /* Мобильная панель навигации (Floating / Bottom Sheet Menu) */
+        .mobile-nav-bar {
+            display: none;
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: #0c0e14;
+            border-top: 1px solid #1f2330;
+            padding: 10px 16px;
+            z-index: 1500;
+            justify-content: space-around;
+            align-items: center;
+            box-shadow: 0 -10px 30px rgba(0,0,0,0.8);
+        }
+        .mobile-nav-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            color: #8892b0;
+            font-size: 11px;
+            cursor: pointer;
+            background: transparent;
+            border: none;
+            padding: 6px;
+            flex: 1;
+        }
+        .mobile-nav-item.active { color: #ff6600; font-weight: bold; }
+        .mobile-nav-item span.icon { font-size: 18px; }
+
+        /* Выплывающее меню (Bottom Sheet) для мобилок */
+        .bottom-sheet-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.8);
+            z-index: 2500;
+            backdrop-filter: blur(4px);
+            align-items: flex-end;
+            animation: fadeIn 0.2s ease;
+        }
+        .bottom-sheet-overlay.show { display: flex; }
+        .bottom-sheet {
+            background: #0f1117;
+            border-top: 1px solid #222633;
+            border-radius: 20px 20px 0 0;
+            width: 100%;
+            padding: 24px 20px 36px 20px;
+            box-shadow: 0 -20px 40px rgba(0,0,0,0.9);
+            animation: slideUp 0.3s cubic-bezier(0.1, 0.9, 0.2, 1);
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+        
+        .sheet-handle {
+            width: 40px;
+            height: 4px;
+            background: #2a2f40;
+            border-radius: 2px;
+            margin: 0 auto 20px auto;
+        }
+        .sheet-menu-item {
+            padding: 14px 16px;
+            color: #fff;
+            border-radius: 12px;
+            font-weight: 500;
+            font-size: 15px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin-bottom: 8px;
+            background: #141720;
+            border: 1px solid #1c202d;
+            transition: 0.2s;
+        }
+        .sheet-menu-item:hover, .sheet-menu-item.active { background: #ff6600; color: #000; font-weight: bold; border-color: #ff6600; }
 
         .sidebar-menu-item {
             padding: 12px 16px;
@@ -407,14 +522,45 @@
         }
         .sidebar-menu-item:hover { background: #1a1d24; color: #fff; }
         .sidebar-menu-item.active { background: #151821; color: #fff; font-weight: 600; }
+
+        /* Дашборд лэйаут адаптивный */
+        .dashboard-wrapper {
+            max-width: 1200px;
+            width: 100%;
+            margin: 16px auto;
+            padding: 0 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            flex: 1;
+        }
+
+        @media(min-width: 768px) {
+            .hero h1 { font-size: 44px; }
+            .hero-buttons { flex-direction: row; max-width: none; justify-content: center; width: auto; }
+            .btn-orange-lg, .btn-dark-lg { width: auto; min-width: 200px; }
+            .features-grid { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); padding: 0; }
+            .faq-section { padding: 0; }
+            .footer { flex-direction: row; justify-content: space-between; padding: 30px 40px; }
+            .mobile-nav-bar { display: none !important; }
+            .dashboard-wrapper { flex-direction: row; padding: 0 20px; gap: 24px; }
+        }
+        @media(max-width: 767px) {
+            .desktop-sidebar { display: none !important; }
+            .mobile-nav-bar { display: flex; }
+            body { padding-bottom: 70px; }
+        }
     </style>
 </head>
 <body>
 
+    <!-- Полоска загрузки -->
+    <div id="preloader-line"></div>
+
     <!-- Шапка -->
     <div class="header">
-        <div class="logo-container" onclick="window.scrollTo({ top: 0, behavior: 'smooth' })">
-            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 32px; height: 32px;">
+        <div class="logo-container" id="main-logo-btn" onclick="returnToMainSite()">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 26px; height: 26px; pointer-events: none; flex-shrink: 0;">
                 <ellipse cx="12" cy="20" rx="10" ry="3" stroke="#ff6600" stroke-width="2" fill="#ff6600" fill-opacity="0.15"/>
                 <path d="M2 20c0 1.66 4.48 3 10 3s10-1.34 10-3" stroke="#ff6600" stroke-width="2"/>
                 <ellipse cx="12" cy="20" rx="5" ry="1.5" stroke="#ff6600" stroke-width="1" stroke-opacity="0.6"/>
@@ -425,31 +571,39 @@
                 <path d="M8 11.5V14" stroke="#ff6600" stroke-width="1.5" stroke-linecap="round" stroke-opacity="0.7"/>
                 <path d="M16 11.5V14" stroke="#ff6600" stroke-width="1.5" stroke-linecap="round" stroke-opacity="0.7"/>
             </svg>
-            <span>AIRDROP-X</span>
+            <span style="pointer-events: none;">AIRDROP-X</span>
         </div>
         <div class="header-actions">
             <button id="login-btn" class="btn-dark-sm" onclick="openModal('login')">Войти</button>
             
             <div class="lang-dropdown-wrapper">
                 <button class="btn-dark-sm" id="lang-btn" onclick="toggleLangMenu(event)">
-                    <span style="color: #888; font-size: 12px; font-weight: bold; background: #1a1d24; padding: 2px 6px; border-radius: 4px;" id="current-lang-badge">RU</span>
-                    <span id="current-lang-text">Русский</span>
+                    <span style="color: #888; font-size: 11px; font-weight: bold; background: #1a1d24; padding: 2px 5px; border-radius: 4px;" id="current-lang-badge">RU</span>
+                    <span id="current-lang-text">RU</span>
                 </button>
                 <div class="lang-menu" id="langMenu">
-                    <button class="lang-option" onclick="changeLanguage('en')"><span style="color: #888; font-size: 12px; font-weight: bold; background: #1a1d24; padding: 2px 6px; border-radius: 4px;">US</span> English</button>
-                    <button class="lang-option" onclick="changeLanguage('zh')"><span style="color: #888; font-size: 12px; font-weight: bold; background: #1a1d24; padding: 2px 6px; border-radius: 4px;">CN</span> 中文</button>
-                    <button class="lang-option" onclick="changeLanguage('ru')"><span style="color: #888; font-size: 12px; font-weight: bold; background: #1a1d24; padding: 2px 6px; border-radius: 4px;">RU</span> Русский</button>
+                    <button class="lang-option" onclick="changeLanguage('en')"><span style="color: #888; font-size: 11px; font-weight: bold; background: #1a1d24; padding: 2px 5px; border-radius: 4px;">US</span> English</button>
+                    <button class="lang-option" onclick="changeLanguage('zh')"><span style="color: #888; font-size: 11px; font-weight: bold; background: #1a1d24; padding: 2px 5px; border-radius: 4px;">CN</span> 中文</button>
+                    <button class="lang-option" onclick="changeLanguage('ru')"><span style="color: #888; font-size: 11px; font-weight: bold; background: #1a1d24; padding: 2px 5px; border-radius: 4px;">RU</span> Русский</button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Модальное окно -->
+    <!-- Модальное окно авторизации -->
     <div class="modal-overlay" id="authModal" onclick="handleOverlayClick(event)">
         <div class="auth-modal" id="modalContainer"></div>
     </div>
 
-    <!-- Главный экран -->
+    <!-- Выплывающее меню (Bottom Sheet) для мобильных устройств внутри дашборда -->
+    <div class="bottom-sheet-overlay" id="bottomSheetOverlay" onclick="handleSheetOverlayClick(event)">
+        <div class="bottom-sheet" id="bottomSheetContent">
+            <div class="sheet-handle"></div>
+            <div id="sheetMenuItemsContainer"></div>
+        </div>
+    </div>
+
+    <!-- Главный лендинг -->
     <div id="main-content">
         <div class="hero">
             <h1 id="hero-title">Универсальный инструмент<br>для автоматизации и сбора Airdrop.</h1>
@@ -461,7 +615,7 @@
             </div>
         </div>
 
-        <div style="width: 80%; max-width: 900px; margin: 0 auto;">
+        <div style="width: 100%; max-width: 900px; margin: 0 auto; padding: 0 16px;">
             <div class="status-banner">
                 <div class="status-left">
                     <span>🛡️</span>
@@ -516,22 +670,55 @@
     </div>
 
     <!-- Дашборд -->
-    <div id="dashboard-content" style="display: none; max-width: 1400px; width: 100%; margin: 30px auto; padding: 0 20px; gap: 30px; flex: 1;"></div>
+    <div id="dashboard-content" style="display: none;" class="dashboard-wrapper"></div>
+
+    <!-- Мобильная нижняя панель навигации (для телефонов) -->
+    <div class="mobile-nav-bar" id="mobileNavBar" style="display: none;">
+        <button class="mobile-nav-item active" onclick="switchMobileNav('Looter', this)">
+            <span class="icon">📦</span>
+            <span id="mn-looter">Looter</span>
+        </button>
+        <button class="mobile-nav-item" onclick="switchMobileNav('Farming', this)">
+            <span class="icon">🌾</span>
+            <span id="mn-farm">Фарм</span>
+        </button>
+        <button class="mobile-nav-item" onclick="switchMobileNav('Wallets', this)">
+            <span class="icon">👥</span>
+            <span id="mn-wallets">Кошельки</span>
+        </button>
+        <button class="mobile-nav-item" onclick="openBottomSheetMenu()">
+            <span class="icon">☰</span>
+            <span id="mn-more">Ещё</span>
+        </button>
+    </div>
 
     <div class="footer">
         <div>AIRDROP-X © 2026. All rights reserved.</div>
-        <div style="display: flex; gap: 20px;">
+        <div style="display: flex; gap: 20px; justify-content: center;">
             <a href="#" style="color: #8892b0; text-decoration: none;">Telegram</a>
             <a href="#" style="color: #8892b0; text-decoration: none;">GitHub</a>
         </div>
     </div>
 
     <script>
+        document.getElementById('main-logo-btn').addEventListener('click', function(e) {
+            e.preventDefault();
+            returnToMainSite();
+        });
+
+        window.addEventListener('DOMContentLoaded', () => {
+            const line = document.getElementById('preloader-line');
+            line.style.width = '60%';
+            setTimeout(() => { line.style.width = '100%'; }, 300);
+            setTimeout(() => { line.style.opacity = '0'; }, 700);
+        });
+
         let currentLang = 'ru';
         let isLoggedIn = false;
         let provider;
         let signer;
         let userAddress;
+        let currentSection = 'Looter';
 
         const translations = {
             ru: {
@@ -558,10 +745,10 @@
                 dashTitle: "Панель поиска и клейма аирдропов",
                 dashDesc: "Сканируйте свои кошельки на наличие незабранных наград и запускайте авто-фарминг объема.",
                 scanBtn: "Сканировать кошельки", claimBtn: "Клеймить всё",
-                farmTabBtn: "🌾 Авто-Фарминг (BETA)",
+                farmTabBtn: "Авто-Фарминг",
                 balanceText: "Баланс", connectWalletBtn: "🔌 Подключить кошелек",
                 walletConnectedText: "Кошелек подключен",
-                looterMenu: "Looter & Drops", walletsMenu: "Кошельки", statsMenu: "Статистика", settingsMenu: "Настройки",
+                looterMenu: "Looter & Drops", farmMenu: "Авто-Фарминг", walletsMenu: "Кошельки", statsMenu: "Статистика", billingMenu: "Биллинг и Подписка", settingsMenu: "Настройки",
                 joinedText: "зарегистрирован 26 июля 2026",
                 logInit: "[System] Личный кабинет инициализирован. Все модули прокси и безопасности активированы...",
                 logScanning: "🔍 Сканирование смарт-контрактов...",
@@ -574,14 +761,21 @@
                 logFoundResult: "✅ Обнаружено:",
                 logTotal: "Итого:",
                 
-                farmModalTitle: "🌾 Модуль Авто-Фарминга (Bridge & Swap)",
-                farmModalDesc: "Настройте параметры автоматического набива объемов и транзакций для будущих аирдропов с защитой от сибил-банов.",
+                farmTitle: "🌾 Авто-Фарминг объемов (Multi-Route)",
+                farmDesc: "Комплексная настройка взаимодействия смарт-контрактов для накрутки объемов и транзакций.",
                 netSelectLabel: "Целевая сеть для фарма:",
                 delayLabel: "Рандомная задержка (сек):",
                 startFarmBtn: "Запустить фарминг",
-                closeBtn: "Закрыть",
                 
-                tooltipText: "<b>Рекомендации по таймингам:</b><br><br>• <b>Меньше 10 сек:</b> Высокий риск поймать антифрод-фильтры (Sybil-детекты) из-за робо-подобной активности.<br><br>• <b>15–30 сек (Оптимально):</b> Идеальный баланс между скоростью работы фермы и имитацией живого пользователя.<br><br>• <b>Больше 45 сек:</b> Максимальная безопасность, но сильное замедление набива объемов."
+                tipClaims: "<b>Клейм (Claim)</b> — процесс безопасного извлечения распределенных токенов (аирдропа) из смарт-контракта на ваш кошелек.",
+                tipGas: "<b>Газ (Gas)</b> — комиссия сети блокчейна. Софт автоматически ждет снижения газа, чтобы вы не переплачивали за транзакции.",
+                tipSessions: "<b>Активная сессия</b> — кошелек, который в данный момент выполняет скрипт (меняет токены, бриджит или клеймит).",
+                tipStealth: "<b>Stealth Mode</b> — режим параноика. Софт добавляет микро-задержки и рандомизирует суммы сделок (например, свап не ровно 10$, а 10.14$), чтобы кошельки не пометили как ботов (Sybil).",
+                tipRPC: "<b>RPC (Remote Procedure Call)</b> — узел связи с блокчейном. Если он зависает, софт автоматически переключится на резервный узел без прерывания работы.",
+                tipVolume: "<b>Целевой объем ($)</b> — общая сумма сделок (в долларах), которую софт должен накрутить на кошельке перед тем, как завершить работу (например, прогнать туда-сюда 5000$).",
+                tipSwap: "<b>DEX Swaps</b> — автоматический обмен токенов (например, ETH на USDC) на децентрализованных биржах для создания торгового оборота.",
+                tipMint: "<b>NFT Mints</b> — автоматический выпуск (минт) бесплатных или дешевых NFT в сети для имитации активности живого пользователя.",
+                tipPool: "<b>Liquidity Pools</b> — добавление и изъятие ликвидности в пулы протоколов, за что проект обычно насыпает больше всего поинтов."
             },
             en: {
                 title: "AIRDROP-X — Crypto Farm SaaS Panel",
@@ -607,10 +801,10 @@
                 dashTitle: "Airdrop Search & Claim Dashboard",
                 dashDesc: "Scan your wallets for unclaimed rewards and launch automated volume farming.",
                 scanBtn: "Scan Wallets", claimBtn: "Claim All",
-                farmTabBtn: "🌾 Auto-Farming (BETA)",
+                farmTabBtn: "Auto-Farming",
                 balanceText: "Balance", connectWalletBtn: "🔌 Connect Wallet",
                 walletConnectedText: "Wallet Connected",
-                looterMenu: "Looter & Drops", walletsMenu: "Wallets", statsMenu: "Statistics", settingsMenu: "Settings",
+                looterMenu: "Looter & Drops", farmMenu: "Auto-Farming", walletsMenu: "Wallets", statsMenu: "Statistics", billingMenu: "Billing & Subscription", settingsMenu: "Settings",
                 joinedText: "joined July 26, 2026",
                 logInit: "[System] Dashboard initialized. Proxy & security modules active...",
                 logScanning: "🔍 Scanning smart contracts...",
@@ -623,14 +817,21 @@
                 logFoundResult: "✅ Found:",
                 logTotal: "Total:",
                 
-                farmModalTitle: "🌾 Auto-Farming Module (Bridge & Swap)",
-                farmModalDesc: "Configure automated volume and transaction generation parameters for future airdrops with anti-sybil protection.",
+                farmTitle: "🌾 Auto-Farming (Multi-Route)",
+                farmDesc: "Complex smart-contract interaction setup for generating volume and transactions.",
                 netSelectLabel: "Target Network:",
                 delayLabel: "Random Delay (sec):",
                 startFarmBtn: "Start Farming",
-                closeBtn: "Close",
                 
-                tooltipText: "<b>Timing Recommendations:</b><br><br>• <b>Under 10s:</b> High risk of triggering anti-fraud filters (Sybil detection) due to bot-like speed.<br><br>• <b>15–30s (Optimal):</b> Perfect balance between farming speed and human-like behavior simulation.<br><br>• <b>Over 45s:</b> Maximum safety, but significantly slower volume generation."
+                tipClaims: "<b>Claim</b> — the process of securely withdrawing allocated airdrop tokens from a smart contract to your wallet.",
+                tipGas: "<b>Gas</b> — the blockchain network fee. The software automatically waits for low gas so you don't overpay.",
+                tipSessions: "<b>Active Session</b> — a wallet currently executing a script (swapping, bridging, or claiming).",
+                tipStealth: "<b>Stealth Mode</b> — adds micro-delays and randomizes trade amounts (e.g., $10.14 instead of exactly $10) to avoid Sybil anti-bot detection.",
+                tipRPC: "<b>RPC (Remote Procedure Call)</b> — connection node to the blockchain. If it hangs, the software auto-switches to a backup node without interruption.",
+                tipVolume: "<b>Target Volume ($)</b> — total USD volume the software needs to generate on the wallet before completing the task.",
+                tipSwap: "<b>DEX Swaps</b> — automatic token exchanges on decentralized exchanges to build trading volume.",
+                tipMint: "<b>NFT Mints</b> — automated minting of free or cheap NFTs to simulate real user activity.",
+                tipPool: "<b>Liquidity Pools</b> — adding and removing liquidity in protocol pools for maximum airdrop points."
             },
             zh: {
                 title: "AIRDROP-X — 加密农场 SaaS 面板",
@@ -656,10 +857,10 @@
                 dashTitle: "空投搜索与领取面板",
                 dashDesc: "扫描您的钱包以查找未认领的奖励并启动自动化刷量农场。",
                 scanBtn: "扫描钱包", claimBtn: "全部领取",
-                farmTabBtn: "🌾 自动刷量 (BETA)",
+                farmTabBtn: "自动刷量",
                 balanceText: "余额", connectWalletBtn: "🔌 连接钱包",
                 walletConnectedText: "钱包已连接",
-                looterMenu: "Looter & Drops", walletsMenu: "钱包管理", statsMenu: "数据统计", settingsMenu: "系统设置",
+                looterMenu: "Looter & Drops", farmMenu: "自动刷量", walletsMenu: "钱包管理", statsMenu: "数据统计", billingMenu: "账单与订阅", settingsMenu: "系统设置",
                 joinedText: "加入于 2026年7月26日",
                 logInit: "[System] 控制面板已初始化。代理与安全模块已就绪...",
                 logScanning: "🔍 正在扫描智能合约...",
@@ -672,16 +873,39 @@
                 logFoundResult: "✅ 发现：",
                 logTotal: "总计：",
                 
-                farmModalTitle: "🌾 自动刷量模块 (Bridge & Swap)",
-                farmModalDesc: "为未来的空投配置自动刷量和交易参数，具备完整的防女巫保护。",
+                farmTitle: "🌾 自动刷量 (多路由)",
+                farmDesc: "复杂的智能合约交互设置，用于生成交易量和活跃度。",
                 netSelectLabel: "目标网络：",
                 delayLabel: "随机延迟 (秒)：",
                 startFarmBtn: "启动刷量",
-                closeBtn: "关闭",
                 
-                tooltipText: "<b>时间间隔建议：</b><br><br>• <b>小于 10 秒：</b> 因速度过快呈机器人特征，极易触发反欺诈过滤（女巫检测）。<br><br>• <b>15–30 秒（最佳）：</b> 农场效率与真人行为模拟之间的完美平衡。<br><br>• <b>大于 45 秒：</b> 安全性最高，但刷量速度会明显变慢。"
+                tipClaims: "<b>领取 (Claim)</b> — 将分配到的空投代币从智能合约安全提取到您的钱包的过程。",
+                tipGas: "<b>Gas (矿工费)</b> — 区块链网络费用。软件会自动等待低矿工费时段，以免您支付过高费用。",
+                tipSessions: "<b>活跃会话</b> — 当前正在执行脚本（兑换、跨链或领取）的钱包数量。",
+                tipStealth: "<b>Stealth Mode (隐身模式)</b> — 添加微小延迟并随机化交易金额（例如 $10.14 而不是刚好 $10），以避免被女巫检测系统标记为机器人。",
+                tipRPC: "<b>RPC 节点</b> — 连接到区块链的服务器。如果卡住，软件会自动切换到备用节点，不会中断工作。",
+                tipVolume: "<b>目标交易量 ($)</b> — 软件在钱包上完成任务前需要生成的总交易额（美元）。",
+                tipSwap: "<b>DEX Swaps (DEX 兑换)</b> — 在去中心化交易所上自动兑换代币以建立交易量。",
+                tipMint: "<b>NFT Mints (NFT 铸造)</b> — 自动铸造免费或廉价的 NFT 以模拟真实用户活动。",
+                tipPool: "<b>Liquidity Pools (流动性池)</b> — 在协议池中添加和移除流动性以获取最多空投积分。"
             }
         };
+
+        function returnToMainSite() {
+            isLoggedIn = false;
+            document.getElementById('dashboard-content').style.display = 'none';
+            document.getElementById('mobileNavBar').style.display = 'none';
+            document.getElementById('main-content').style.display = 'block';
+            
+            const t = translations[currentLang];
+            const loginBtn = document.getElementById('login-btn');
+            loginBtn.innerText = t.login;
+            loginBtn.style.borderColor = "#22252e";
+            loginBtn.style.color = "#fff";
+            loginBtn.onclick = function() { openModal('login'); };
+            
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
 
         function toggleLangMenu(event) {
             if (event) event.stopPropagation();
@@ -704,7 +928,7 @@
             if (!t) return;
 
             document.getElementById('current-lang-badge').innerText = t.langCode;
-            document.getElementById('current-lang-text').innerText = t.langName;
+            document.getElementById('current-lang-text').innerText = t.langCode;
             
             if (!isLoggedIn) {
                 document.getElementById('page-title').innerText = t.title;
@@ -748,7 +972,7 @@
                     document.getElementById('q5').innerText = t.q5; document.getElementById('a5').innerText = t.a5;
                 }
             } else {
-                renderDashboardContent('Looter');
+                renderDashboardContent(currentSection);
             }
 
             const menu = document.getElementById('langMenu');
@@ -778,7 +1002,7 @@
                     </div>
                     <button class="btn-modal-primary" onclick="validateLogin()">${t.loginBtnModal}</button>
                     <button class="btn-modal-secondary" onclick="openModal('register')">${t.registerBtnModal}</button>
-                    <div class="modal-footer-text">${t.termsText}</div>
+                    <div class="modal-footer-text" style="font-size: 11px; color: #555c6d; margin-top: 12px; text-align: center;">${t.termsText}</div>
                     <div id="loginErrorContainer"></div>
                 `;
             } else if (type === 'register') {
@@ -793,7 +1017,7 @@
                     </div>
                     <button class="btn-modal-primary" onclick="validateRegister()">${t.regBtnModal}</button>
                     <button class="btn-modal-secondary" onclick="openModal('login')">${t.loginBtnModal}</button>
-                    <div class="modal-footer-text">${t.termsReg}</div>
+                    <div class="modal-footer-text" style="font-size: 11px; color: #555c6d; margin-top: 12px; text-align: center;">${t.termsReg}</div>
                     <div id="errorContainer"></div>
                 `;
             }
@@ -814,6 +1038,42 @@
             if (event.target.id === 'authModal') {
                 document.getElementById('authModal').classList.remove('show');
             }
+        }
+
+        function handleSheetOverlayClick(event) {
+            if (event.target.id === 'bottomSheetOverlay') {
+                closeBottomSheetMenu();
+            }
+        }
+
+        function openBottomSheetMenu() {
+            const t = translations[currentLang];
+            const container = document.getElementById('sheetMenuItemsContainer');
+            container.innerHTML = `
+                <div class="sheet-menu-item ${currentSection === 'Looter' ? 'active' : ''}" onclick="selectSheetMenu('Looter')">📦 ${t.looterMenu}</div>
+                <div class="sheet-menu-item ${currentSection === 'Farming' ? 'active' : ''}" onclick="selectSheetMenu('Farming')">🌾 ${t.farmTabBtn}</div>
+                <div class="sheet-menu-item ${currentSection === 'Wallets' ? 'active' : ''}" onclick="selectSheetMenu('Wallets')">👥 ${t.walletsMenu}</div>
+                <div class="sheet-menu-item ${currentSection === 'Statistics' ? 'active' : ''}" onclick="selectSheetMenu('Statistics')">📊 ${t.statsMenu}</div>
+                <div class="sheet-menu-item ${currentSection === 'Billing' ? 'active' : ''}" onclick="selectSheetMenu('Billing')">💳 ${t.billingMenu}</div>
+                <div class="sheet-menu-item ${currentSection === 'Settings' ? 'active' : ''}" onclick="selectSheetMenu('Settings')">⚙️ ${t.settingsMenu}</div>
+            `;
+            document.getElementById('bottomSheetOverlay').classList.add('show');
+        }
+
+        function closeBottomSheetMenu() {
+            document.getElementById('bottomSheetOverlay').classList.remove('show');
+        }
+
+        function selectSheetMenu(sectionName) {
+            closeBottomSheetMenu();
+            switchMenu(null, sectionName);
+        }
+
+        function switchMobileNav(sectionName, btnElement) {
+            const items = document.querySelectorAll('.mobile-nav-item');
+            items.forEach(i => i.classList.remove('active'));
+            if (btnElement) btnElement.classList.add('active');
+            switchMenu(null, sectionName);
         }
 
         function validateRegister() {
@@ -838,7 +1098,7 @@
             if (userField.value.trim() === "" || passField.value.trim() === "") {
                 userField.classList.add('error');
                 passField.classList.add('error');
-                errorContainer.innerHTML = `<div class="error-toast" style="bottom: -75px;"><span>⚠️</span><span>Введите логин и пароль!</span></div>`;
+                errorContainer.innerHTML = `<div class="error-toast" style="bottom: -65px;"><span>⚠️</span><span>Введите логин и пароль!</span></div>`;
                 return;
             }
             handleLoginSuccess();
@@ -850,57 +1110,28 @@
             
             document.getElementById('main-content').style.display = 'none';
             document.getElementById('dashboard-content').style.display = 'flex';
+            document.getElementById('mobileNavBar').style.display = 'flex';
             
             const t = translations[currentLang];
             const loginBtn = document.getElementById('login-btn');
             loginBtn.innerText = t.logout;
             loginBtn.style.borderColor = "#ff3333";
             loginBtn.style.color = "#ff3333";
-            loginBtn.onclick = function() { isLoggedIn = false; location.reload(); };
+            loginBtn.onclick = function() { returnToMainSite(); };
             
             renderDashboard('Looter');
         }
 
-        function openFarmingModal() {
-            const t = translations[currentLang];
-            const modal = document.getElementById('authModal');
-            const container = document.getElementById('modalContainer');
-            
-            modal.classList.add('show');
-
-            container.innerHTML = `
-                <div class="modal-logo">
-                    <span style="color:#ff6600;">🌾 AIRDROP-X FARM</span>
-                    <div class="tooltip-container">?
-                        <div class="tooltip-box">${t.tooltipText}</div>
-                    </div>
-                </div>
-                <div class="modal-desc">${t.farmModalDesc}</div>
-                
-                <div class="input-group">
-                    <label style="color: #8892b0; font-size: 12px; display: block; margin-bottom: 6px;">${t.netSelectLabel}</label>
-                    <select class="auth-input" id="farmNetwork">
-                        <option value="Base">Base L2</option>
-                        <option value="Arbitrum">Arbitrum One</option>
-                        <option value="ZkSync">ZkSync Era</option>
-                        <option value="Solana">Solana</option>
-                    </select>
-                </div>
-
-                <div class="input-group">
-                    <label style="color: #8892b0; font-size: 12px; display: block; margin-bottom: 6px;">${t.delayLabel}</label>
-                    <input type="number" class="auth-input" value="15" id="farmDelay">
-                </div>
-
-                <button class="btn-modal-primary" onclick="startAutoFarming()">${t.startFarmBtn}</button>
-                <button class="btn-modal-secondary" onclick="document.getElementById('authModal').classList.remove('show')">${t.closeBtn}</button>
-            `;
-        }
-
         function switchMenu(element, sectionName) {
+            currentSection = sectionName;
             const items = document.querySelectorAll('.sidebar-menu-item');
             items.forEach(item => item.classList.remove('active'));
-            element.classList.add('active');
+            if (element) {
+                element.classList.add('active');
+            } else {
+                const found = document.querySelector(`.sidebar-menu-item[data-section="${sectionName}"]`);
+                if (found) found.classList.add('active');
+            }
 
             renderDashboardContent(sectionName);
         }
@@ -909,16 +1140,14 @@
             const t = translations[currentLang];
             const network = document.getElementById('farmNetwork').value;
             const delay = document.getElementById('farmDelay').value;
-            
-            document.getElementById('authModal').classList.remove('show');
             const log = document.getElementById('drop-logs');
             
             if (log) {
-                log.innerHTML += `<br><span style="color: #ff6600;">[Auto-Farm] Запуск фарминга в сети ${network} (Задержка: ${delay}с, Прокси активны)...</span>`;
+                log.innerHTML += `<br><span style="color: #ff6600;">[Auto-Farm] Запуск модулей в сети ${network} (Задержка: ${delay}с, Прокси активны)...</span>`;
                 log.scrollTop = log.scrollHeight;
                 
                 setTimeout(() => {
-                    log.innerHTML += `<br><span style="color: #00d95f;">[Auto-Farm] Успешно отправлен тестовый свап и микс транзакций в ${network}! Сибил-защита пройдена.</span>`;
+                    log.innerHTML += `<br><span style="color: #00d95f;">[Auto-Farm] Транзакции отправлены в очередь ${network}! Сибил-защита пройдена.</span>`;
                     log.scrollTop = log.scrollHeight;
                 }, 3000);
             }
@@ -928,109 +1157,198 @@
             renderDashboardContent(activeTab);
         }
 
-        // Рендер центральной части в зависимости от выбранного пункта меню
         function renderDashboardContent(section) {
+            currentSection = section;
             const t = translations[currentLang];
             const dashboardContent = document.getElementById('dashboard-content');
             
             let centerHtml = '';
 
-            if (section === 'Looter' || section === 'Looter & Drops') {
+            if (section === 'Looter') {
                 centerHtml = `
-                    <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 30px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                            <h3 style="margin: 0; font-size: 20px; color: #fff;">🚀 ${t.dashTitle}</h3>
-                            <span style="background: rgba(0,217,95,0.1); color: #00d95f; padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: bold;">ONLINE</span>
+                    <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 20px; width: 100%;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; gap: 10px;">
+                            <h3 style="margin: 0; font-size: 18px; color: #fff;">🚀 ${t.dashTitle}</h3>
+                            <span style="background: rgba(0,217,95,0.1); color: #00d95f; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: bold; flex-shrink: 0;">ONLINE</span>
                         </div>
-                        <p style="color: #8892b0; font-size: 15px; line-height: 1.6; margin-bottom: 25px;">${t.dashDesc}</p>
+                        <p style="color: #8892b0; font-size: 14px; line-height: 1.5; margin-bottom: 20px;">${t.dashDesc}</p>
                         
-                        <div style="margin-bottom: 20px; padding: 15px; background: #060709; border: 1px solid #1c202d; border-radius: 10px; display: flex; gap: 20px; flex-wrap: wrap;">
-                            <label style="color: #8892b0; font-size: 13px; display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                                <input type="checkbox" id="filter-tier1" checked style="accent-color: #ff6600; width: 16px; height: 16px;"> ${t.filterTier1}
+                        <div style="margin-bottom: 16px; padding: 12px; background: #060709; border: 1px solid #1c202d; border-radius: 10px; display: flex; gap: 14px; flex-wrap: wrap;">
+                            <label style="color: #8892b0; font-size: 12px; display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                                <input type="checkbox" id="filter-tier1" checked style="accent-color: #ff6600; width: 15px; height: 15px;"> ${t.filterTier1}
                             </label>
-                            <label style="color: #8892b0; font-size: 13px; display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                                <input type="checkbox" id="filter-micro" checked style="accent-color: #ff6600; width: 16px; height: 16px;"> ${t.filterMicro}
+                            <label style="color: #8892b0; font-size: 12px; display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                                <input type="checkbox" id="filter-micro" checked style="accent-color: #ff6600; width: 15px; height: 15px;"> ${t.filterMicro}
                             </label>
-                            <label style="color: #8892b0; font-size: 13px; display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                                <input type="checkbox" id="filter-refunds" checked style="accent-color: #ff6600; width: 16px; height: 16px;"> ${t.filterRefunds}
+                            <label style="color: #8892b0; font-size: 12px; display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                                <input type="checkbox" id="filter-refunds" checked style="accent-color: #ff6600; width: 15px; height: 15px;"> ${t.filterRefunds}
                             </label>
                         </div>
 
-                        <div style="display: flex; gap: 15px;">
-                            <button onclick="startScanningDrops()" style="background-color: #ff6600; color: #000; border: none; padding: 14px 28px; border-radius: 10px; font-weight: bold; font-size: 14px; cursor: pointer;">🔍 ${t.scanBtn}</button>
-                            <button onclick="claimFoundDrops()" style="background-color: #151821; color: #fff; border: 1px solid #222633; padding: 14px 28px; border-radius: 10px; font-weight: bold; font-size: 14px; cursor: pointer;">⚡ ${t.claimBtn}</button>
+                        <div style="display: flex; gap: 10px; flex-direction: column;">
+                            <button onclick="startScanningDrops()" style="background-color: #ff6600; color: #000; border: none; padding: 13px 20px; border-radius: 10px; font-weight: bold; font-size: 14px; cursor: pointer; width: 100%;">🔍 ${t.scanBtn}</button>
+                            <button onclick="claimFoundDrops()" style="background-color: #151821; color: #fff; border: 1px solid #222633; padding: 13px 20px; border-radius: 10px; font-weight: bold; font-size: 14px; cursor: pointer; width: 100%;">⚡ ${t.claimBtn}</button>
                         </div>
 
-                        <div id="drop-logs" style="margin-top: 25px; background-color: #060709; border: 1px solid #14171f; padding: 20px; border-radius: 10px; font-family: monospace; font-size: 13px; color: #8892b0; max-height: 200px; overflow-y: auto;">
+                        <div id="drop-logs" style="margin-top: 20px; background-color: #060709; border: 1px solid #14171f; padding: 16px; border-radius: 10px; font-family: monospace; font-size: 12px; color: #8892b0; max-height: 180px; overflow-y: auto;">
                             ${t.logInit}
+                        </div>
+                    </div>
+                `;
+            } else if (section === 'Farming') {
+                centerHtml = `
+                    <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 20px; width: 100%;">
+                        <h3 style="margin-top: 0; color: #fff; font-size: 18px;">${t.farmTitle}</h3>
+                        <p style="color: #8892b0; font-size: 13px;">${t.farmDesc}</p>
+                        
+                        <div style="display: grid; grid-template-columns: 1fr; gap: 14px; margin-top: 20px;">
+                            <div class="input-group">
+                                <label style="color: #8892b0; font-size: 12px; display: block; margin-bottom: 6px;">${t.netSelectLabel}</label>
+                                <select class="auth-input" id="farmNetwork">
+                                    <option value="Base">Base L2 (Coinbase)</option>
+                                    <option value="Arbitrum">Arbitrum One</option>
+                                    <option value="ZkSync">ZkSync Era</option>
+                                    <option value="Scroll">Scroll Network</option>
+                                    <option value="Linea">Linea (Consensys)</option>
+                                    <option value="Blast">Blast L2 (Yield)</option>
+                                    <option value="Mantle">Mantle Network</option>
+                                    <option value="Berachain">Berachain (BArtio)</option>
+                                    <option value="Solana">Solana (SVM)</option>
+                                </select>
+                            </div>
+                            
+                            <div class="input-group">
+                                <label style="color: #8892b0; font-size: 12px; display: block; margin-bottom: 6px;">${t.delayLabel}</label>
+                                <input type="number" class="auth-input" value="15" id="farmDelay">
+                            </div>
+
+                            <div class="input-group">
+                                <label style="color: #8892b0; font-size: 12px; display: block; margin-bottom: 6px;">Макс. <span class="term-tooltip">Газ (Gwei)<div class="tooltip-box">${t.tipGas}</div></span>:</label>
+                                <input type="number" class="auth-input" value="25" placeholder="При превышении скрипт ждет">
+                            </div>
+
+                            <div class="input-group">
+                                <label style="color: #8892b0; font-size: 12px; display: block; margin-bottom: 6px;"><span class="term-tooltip">Целевой объем ($)<div class="tooltip-box">${t.tipVolume}</div></span>:</label>
+                                <input type="number" class="auth-input" value="5000" placeholder="Общая сумма сделок">
+                            </div>
+                        </div>
+                        
+                        <div style="margin: 16px 0; background: #060709; padding: 14px; border-radius: 10px; border: 1px solid #1c202d;">
+                            <div style="color: #fff; font-size: 13px; margin-bottom: 10px;">Включить модули набива:</div>
+                            <div style="display: flex; gap: 14px; flex-wrap: wrap;">
+                                <label style="color: #8892b0; font-size: 12px; display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                                    <input type="checkbox" checked style="accent-color: #ff6600;"> <span class="term-tooltip">DEX Swaps<div class="tooltip-box">${t.tipSwap}</div></span>
+                                </label>
+                                <label style="color: #8892b0; font-size: 12px; display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                                    <input type="checkbox" checked style="accent-color: #ff6600;"> <span class="term-tooltip">NFT Mints<div class="tooltip-box">${t.tipMint}</div></span>
+                                </label>
+                                <label style="color: #8892b0; font-size: 12px; display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                                    <input type="checkbox" checked style="accent-color: #ff6600;"> <span class="term-tooltip">Liquidity Pools<div class="tooltip-box">${t.tipPool}</div></span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <button onclick="startAutoFarming()" style="background-color: #ff6600; color: #000; border: none; padding: 13px 20px; border-radius: 10px; font-weight: bold; font-size: 14px; cursor: pointer; width: 100%;">Запустить фарминг</button>
+
+                        <div id="drop-logs" style="margin-top: 20px; background-color: #060709; border: 1px solid #14171f; padding: 14px; border-radius: 10px; font-family: monospace; font-size: 12px; color: #8892b0; max-height: 140px; overflow-y: auto;">
+                            [Farm Engine] Готов к запуску. Прокси изолированы.
                         </div>
                     </div>
                 `;
             } else if (section === 'Wallets') {
                 centerHtml = `
-                    <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 30px;">
-                        <h3 style="margin-top: 0; color: #fff; font-size: 20px;">👥 Управление кошельками и прокси</h3>
-                        <p style="color: #8892b0; font-size: 14px;">Список подключенных мультиаккаунтов и привязанных мобильных прокси.</p>
-                        <table style="width: 100%; margin-top: 20px; border-collapse: collapse; text-align: left; font-size: 13px;">
-                            <thead>
-                                <tr style="color: #8892b0; border-bottom: 1px solid #1c202d;">
-                                    <th style="padding: 10px;">№ / Имя</th>
-                                    <th style="padding: 10px;">Адрес кошелька</th>
-                                    <th style="padding: 10px;">Прокси (HTTP)</th>
-                                    <th style="padding: 10px;">Статус</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <tr style="border-bottom: 1px solid #14171f;">
-                                    <td style="padding: 12px; font-weight: bold; color: #ff6600;">#1 Ruby-Main</td>
-                                    <td style="padding: 12px; font-family: monospace; color: #aaa;">0xBdEA...a6Ec</td>
-                                    <td style="padding: 12px; color: #8892b0;">194.28.xx.xx:8000</td>
-                                    <td style="padding: 12px; color: #00d95f; font-weight: bold;">● Active</td>
-                                </tr>
-                                <tr style="border-bottom: 1px solid #14171f;">
-                                    <td style="padding: 12px; font-weight: bold; color: #ff6600;">#2 Farm-Sub1</td>
-                                    <td style="padding: 12px; font-family: monospace; color: #aaa;">0x43F1...91Db</td>
-                                    <td style="padding: 12px; color: #8892b0;">45.153.xx.xx:8000</td>
-                                    <td style="padding: 12px; color: #00d95f; font-weight: bold;">● Active</td>
-                                </tr>
-                            </tbody>
-                        </table>
+                    <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 20px; width: 100%;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;">
+                            <div>
+                                <h3 style="margin-top: 0; color: #fff; font-size: 18px;">👥 Управление кошельками</h3>
+                                <p style="color: #8892b0; font-size: 13px; margin: 4px 0 0 0;">Список аккаунтов и прокси.</p>
+                            </div>
+                            <div style="background: #151821; padding: 8px 12px; border-radius: 8px; border: 1px solid #222633;">
+                                <div style="font-size: 11px; color: #8892b0;">Лимит (Pro)</div>
+                                <div style="font-size: 14px; font-weight: bold; color: #fff;">5 / 50</div>
+                            </div>
+                        </div>
+                        
+                        <div style="overflow-x: auto; margin-top: 16px;">
+                            <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 12px; min-width: 280px;">
+                                <thead>
+                                    <tr style="color: #8892b0; border-bottom: 1px solid #1c202d;">
+                                        <th style="padding: 8px;">Имя</th>
+                                        <th style="padding: 8px;">Адрес</th>
+                                        <th style="padding: 8px;">Статус</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr style="border-bottom: 1px solid #14171f;">
+                                        <td style="padding: 10px; font-weight: bold; color: #ff6600;">#1 Ruby-Main</td>
+                                        <td style="padding: 10px; font-family: monospace; color: #aaa;">0xBdEA...a6Ec</td>
+                                        <td style="padding: 10px; color: #00d95f; font-weight: bold;">● Active</td>
+                                    </tr>
+                                    <tr style="border-bottom: 1px solid #14171f;">
+                                        <td style="padding: 10px; font-weight: bold; color: #ff6600;">#2 Farm-Sub1</td>
+                                        <td style="padding: 10px; font-family: monospace; color: #aaa;">0x43F1...91Db</td>
+                                        <td style="padding: 10px; color: #00d95f; font-weight: bold;">● Active</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <button style="margin-top: 16px; background-color: transparent; color: #ff6600; border: 1px dashed #ff6600; padding: 10px; border-radius: 8px; font-weight: bold; font-size: 13px; cursor: pointer; width: 100%;">+ Импорт приватных ключей</button>
                     </div>
                 `;
             } else if (section === 'Statistics') {
                 centerHtml = `
-                    <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 30px;">
-                        <h3 style="margin-top: 0; color: #fff; font-size: 20px;">📊 Статистика фермы</h3>
-                        <p style="color: #8892b0; font-size: 14px;">Общие показатели эффективности за текущий месяц.</p>
-                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-top: 20px;">
-                            <div style="background: #060709; padding: 20px; border-radius: 12px; border: 1px solid #1c202d;">
+                    <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 20px; width: 100%;">
+                        <h3 style="margin-top: 0; color: #fff; font-size: 18px;">📊 Статистика фермы</h3>
+                        <p style="color: #8892b0; font-size: 13px;">Общие показатели эффективности за месяц.</p>
+                        <div style="display: grid; grid-template-columns: 1fr; gap: 12px; margin-top: 16px;">
+                            <div style="background: #060709; padding: 16px; border-radius: 12px; border: 1px solid #1c202d;">
                                 <div style="color: #8892b0; font-size: 12px;">Успешных клеймов</div>
-                                <div style="font-size: 24px; font-weight: bold; color: #ff6600; margin-top: 6px;">42</div>
+                                <div style="font-size: 22px; font-weight: bold; color: #ff6600; margin-top: 4px;">42</div>
                             </div>
-                            <div style="background: #060709; padding: 20px; border-radius: 12px; border: 1px solid #1c202d;">
+                            <div style="background: #060709; padding: 16px; border-radius: 12px; border: 1px solid #1c202d;">
                                 <div style="color: #8892b0; font-size: 12px;">Сэкономлено на газе</div>
-                                <div style="font-size: 24px; font-weight: bold; color: #00d95f; margin-top: 6px;">~0.14 ETH</div>
+                                <div style="font-size: 22px; font-weight: bold; color: #00d95f; margin-top: 4px;">~0.14 ETH</div>
                             </div>
-                            <div style="background: #060709; padding: 20px; border-radius: 12px; border: 1px solid #1c202d;">
+                            <div style="background: #060709; padding: 16px; border-radius: 12px; border: 1px solid #1c202d;">
                                 <div style="color: #8892b0; font-size: 12px;">Активные сессии</div>
-                                <div style="font-size: 24px; font-weight: bold; color: #fff; margin-top: 6px;">5 / 5</div>
+                                <div style="font-size: 22px; font-weight: bold; color: #fff; margin-top: 4px;">5 / 50</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            } else if (section === 'Billing') {
+                centerHtml = `
+                    <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 20px; width: 100%;">
+                        <h3 style="margin-top: 0; color: #fff; font-size: 18px;">💳 Биллинг и подписка</h3>
+                        <p style="color: #8892b0; font-size: 13px;">Управление тарифом и балансом счета.</p>
+                        
+                        <div style="display: grid; grid-template-columns: 1fr; gap: 14px; margin-top: 16px;">
+                            <div style="background: #060709; padding: 16px; border-radius: 12px; border: 1px solid #1c202d;">
+                                <div style="font-size: 11px; color: #8892b0;">Текущий тариф</div>
+                                <div style="font-size: 17px; font-weight: bold; color: #ff6600; margin-top: 4px;">PRO FARMER ($160 / мес)</div>
+                                <div style="font-size: 11px; color: #00d95f; margin-top: 8px;">● Активен до 26 августа 2026</div>
+                            </div>
+                            <div style="background: #060709; padding: 16px; border-radius: 12px; border: 1px solid #1c202d;">
+                                <div style="font-size: 11px; color: #8892b0;">Баланс аккаунта</div>
+                                <div style="font-size: 17px; font-weight: bold; color: #fff; margin-top: 4px;">$45.00 USDT</div>
+                                <button onclick="alert('Перенаправление на шлюз пополнения...')" style="margin-top: 10px; background: #ff6600; color: #000; border: none; padding: 8px 14px; border-radius: 6px; font-weight: bold; font-size: 12px; cursor: pointer;">Пополнить баланс</button>
                             </div>
                         </div>
                     </div>
                 `;
             } else if (section === 'Settings') {
                 centerHtml = `
-                    <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 30px;">
-                        <h3 style="margin-top: 0; color: #fff; font-size: 20px;">⚙️ Системные настройки ПО</h3>
-                        <p style="color: #8892b0; font-size: 14px;">Глобальные параметры безопасности и автоматизации.</p>
-                        <div style="display: flex; flex-direction: column; gap: 15px; margin-top: 20px;">
-                            <label style="display: flex; align-items: center; justify-content: space-between; background: #060709; padding: 15px; border-radius: 10px; border: 1px solid #1c202d; cursor: pointer;">
-                                <span style="font-size: 14px; color: #fff;">Автоматическая ротация прокси при сбое RPC</span>
-                                <input type="checkbox" checked style="accent-color: #ff6600; width: 18px; height: 18px;">
+                    <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 20px; width: 100%;">
+                        <h3 style="margin-top: 0; color: #fff; font-size: 18px;">⚙️ Системные настройки</h3>
+                        <p style="color: #8892b0; font-size: 13px;">Глобальные параметры автоматизации.</p>
+                        <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 16px;">
+                            <label style="display: flex; align-items: center; justify-content: space-between; background: #060709; padding: 14px; border-radius: 10px; border: 1px solid #1c202d; cursor: pointer; gap: 10px;">
+                                <span style="font-size: 13px; color: #fff;">Авто-ротация прокси при сбое RPC</span>
+                                <input type="checkbox" checked style="accent-color: #ff6600; width: 16px; height: 16px; flex-shrink: 0;">
                             </label>
-                            <label style="display: flex; align-items: center; justify-content: space-between; background: #060709; padding: 15px; border-radius: 10px; border: 1px solid #1c202d; cursor: pointer;">
-                                <span style="font-size: 14px; color: #fff;">Режим повышенной конфиденциальности (Stealth Mode)</span>
-                                <input type="checkbox" checked style="accent-color: #ff6600; width: 18px; height: 18px;">
+                            <label style="display: flex; align-items: center; justify-content: space-between; background: #060709; padding: 14px; border-radius: 10px; border: 1px solid #1c202d; cursor: pointer; gap: 10px;">
+                                <span style="font-size: 13px; color: #fff;">Режим повышенной конфиденциальности (Stealth)</span>
+                                <input type="checkbox" checked style="accent-color: #ff6600; width: 16px; height: 16px; flex-shrink: 0;">
                             </label>
                         </div>
                     </div>
@@ -1038,37 +1356,40 @@
             }
 
             dashboardContent.innerHTML = `
-                <div style="width: 300px; display: flex; flex-direction: column; gap: 15px;">
-                    <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 20px; display: flex; align-items: center; gap: 15px;">
-                        <div style="width: 45px; height: 45px; background: linear-gradient(135deg, #ff6600, #993d00); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 18px; color: #000;">R</div>
-                        <div>
-                            <div style="font-weight: 700; font-size: 15px; color: #fff;">Ruby1</div>
-                            <div style="font-size: 12px; color: #8892b0;">${t.joinedText}</div>
+                <!-- Левый сайдбар (только для десктопов) -->
+                <div class="desktop-sidebar" style="width: 280px; display: flex; flex-direction: column; gap: 14px; flex-shrink: 0;">
+                    <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 16px; display: flex; align-items: center; gap: 12px;">
+                        <div style="width: 40px; height: 40px; background: linear-gradient(135deg, #ff6600, #993d00); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 16px; color: #000; flex-shrink: 0;">R</div>
+                        <div style="overflow: hidden;">
+                            <div style="font-weight: 700; font-size: 14px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Ruby1</div>
+                            <div style="font-size: 11px; color: #8892b0;">${t.joinedText}</div>
                         </div>
                     </div>
 
-                    <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 20px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 16px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                             <div>
-                                <div style="font-size: 12px; color: #8892b0;">${t.balanceText}</div>
-                                <div id="dashboard-balance-value" style="font-size: 18px; font-weight: bold; color: #ff6600; margin-top: 4px;">$0.3538</div>
+                                <div style="font-size: 11px; color: #8892b0;">${t.balanceText}</div>
+                                <div style="font-size: 16px; font-weight: bold; color: #ff6600; margin-top: 2px;">$0.3538</div>
                             </div>
-                            <button style="background: #00d95f; color: #000; border: none; width: 30px; height: 30px; border-radius: 50%; font-weight: bold; cursor: pointer;">+</button>
+                            <button style="background: #00d95f; color: #000; border: none; width: 28px; height: 28px; border-radius: 50%; font-weight: bold; cursor: pointer;">+</button>
                         </div>
-                        <button id="dashboard-wallet-btn" onclick="connectDashboardWallet()" style="width: 100%; background: #14171f; color: #00d95f; border: 1px solid #00d95f; padding: 10px; border-radius: 8px; font-weight: bold; font-size: 13px; cursor: pointer;">${t.walletConnectedText}</button>
-                        <div id="dashboard-wallet-status" style="font-size: 11px; color: #8892b0; margin-top: 8px; word-break: break-all; text-align: center;">Connected: 0xBdEA...a6Ec ✅</div>
+                        <button onclick="connectDashboardWallet()" style="width: 100%; background: #14171f; color: #00d95f; border: 1px solid #00d95f; padding: 8px; border-radius: 8px; font-weight: bold; font-size: 12px; cursor: pointer;">${t.walletConnectedText}</button>
+                        <div id="dashboard-wallet-status" style="font-size: 10px; color: #8892b0; margin-top: 6px; word-break: break-all; text-align: center;">Connected: 0xBdEA...a6Ec ✅</div>
                     </div>
 
-                    <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 12px; display: flex; flex-direction: column; gap: 4px;">
-                        <div class="sidebar-menu-item ${section === 'Looter' ? 'active' : ''}" onclick="switchMenu(this, 'Looter')">📦 ${t.looterMenu}</div>
-                        <div class="sidebar-menu-item" onclick="openFarmingModal()">🌾 ${t.farmTabBtn}</div>
-                        <div class="sidebar-menu-item ${section === 'Wallets' ? 'active' : ''}" onclick="switchMenu(this, 'Wallets')">👥 ${t.walletsMenu} <span style="background: #ff6600; color: #000; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: bold; margin-left: 5px;">BETA</span></div>
-                        <div class="sidebar-menu-item ${section === 'Statistics' ? 'active' : ''}" onclick="switchMenu(this, 'Statistics')">📊 ${t.statsMenu}</div>
-                        <div class="sidebar-menu-item ${section === 'Settings' ? 'active' : ''}" onclick="switchMenu(this, 'Settings')">⚙️ ${t.settingsMenu}</div>
+                    <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 10px; display: flex; flex-direction: column; gap: 4px;">
+                        <div class="sidebar-menu-item ${section === 'Looter' ? 'active' : ''}" data-section="Looter" onclick="switchMenu(this, 'Looter')">📦 ${t.looterMenu}</div>
+                        <div class="sidebar-menu-item ${section === 'Farming' ? 'active' : ''}" data-section="Farming" onclick="switchMenu(this, 'Farming')">🌾 ${t.farmTabBtn}</div>
+                        <div class="sidebar-menu-item ${section === 'Wallets' ? 'active' : ''}" data-section="Wallets" onclick="switchMenu(this, 'Wallets')">👥 ${t.walletsMenu} <span style="background: #ff6600; color: #000; font-size: 9px; padding: 2px 5px; border-radius: 4px; font-weight: bold; margin-left: 4px;">PRO</span></div>
+                        <div class="sidebar-menu-item ${section === 'Statistics' ? 'active' : ''}" data-section="Statistics" onclick="switchMenu(this, 'Statistics')">📊 ${t.statsMenu}</div>
+                        <div class="sidebar-menu-item ${section === 'Billing' ? 'active' : ''}" data-section="Billing" onclick="switchMenu(this, 'Billing')">💳 ${t.billingMenu}</div>
+                        <div class="sidebar-menu-item ${section === 'Settings' ? 'active' : ''}" data-section="Settings" onclick="switchMenu(this, 'Settings')">⚙️ ${t.settingsMenu}</div>
                     </div>
                 </div>
 
-                <div style="flex: 1; display: flex; flex-direction: column; gap: 20px;">
+                <!-- Центральный контент -->
+                <div style="flex: 1; display: flex; flex-direction: column; gap: 16px; min-width: 0;">
                     ${centerHtml}
                 </div>
             `;
@@ -1081,7 +1402,8 @@
                     await provider.send("wallet_requestPermissions", [{ eth_accounts: {} }]);
                     signer = provider.getSigner();
                     userAddress = await signer.getAddress();
-                    document.getElementById('dashboard-wallet-status').innerText = `Connected: ${userAddress.substring(0,6)}...${userAddress.substring(38)} ✅`;
+                    const st = document.getElementById('dashboard-wallet-status');
+                    if(st) st.innerText = `Connected: ${userAddress.substring(0,6)}...${userAddress.substring(38)} ✅`;
                 } catch (error) {
                     console.error(error);
                 }
