@@ -143,16 +143,37 @@ async def get_user_wallets(username: str, db: Session = Depends(get_db)):
     return {"status": "success", "wallets": wallets_list}
 
 
-# 6. Запуск боевого ядра core_engine.py
+# 6. Запуск боевого ядра core_engine.py с реальными кошельками из БД
 @app.post("/api/start")
-async def start_farm_core(data: FarmRequest = None):
+async def start_farm_core(data: FarmRequest = None, db: Session = Depends(get_db)):
     print("\n[+] Получен запрос от панели на запуск фермы через БД-сессию!")
     try:
+        # Находим кошельки (для примера берем все или по текущему пользователю)
+        wallets_query = db.query(Wallet).all()
+        if not wallets_query:
+            return JSONResponse(status_code=400, content={"status": "error", "message": "Нет доступных кошельков в базе данных!"})
+        
+        # Формируем чистый список для ядра
+        active_wallets = []
+        for w in wallets_query:
+            # Убираем возможный мусор/форматирование из строки прокси
+            clean_proxy = w.proxy.split(']')[0].replace('[', '') if '[' in w.proxy else w.proxy
+            
+            active_wallets.append({
+                "id": w.id,
+                "encrypted_pk": w.encrypted_pk,
+                "proxy": clean_proxy
+            })
+            
+        # Сохраняем во временный конфиг, который ядро может прочитать
+        with open("active_farm_config.json", "w", encoding="utf-8") as f:
+            json.dump(active_wallets, f, indent=4)
+
+        # Запускаем ядро
         subprocess.Popen(["python", "core_engine.py"])
-        return {"status": "success", "message": "🔥 Ядро AIRDROP-X успешно запущено в фоне!"}
+        return {"status": "success", "message": f"🔥 Ядро запущенно! В работу взято кошельков: {len(active_wallets)}."}
     except Exception as e:
         return JSONResponse(status_code=500, content={"status": "error", "message": f"Ошибка: {str(e)}"})
-
 
 # 7. Получение отчета JSON
 @app.get("/api/report")

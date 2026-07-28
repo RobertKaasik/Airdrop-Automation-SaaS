@@ -542,17 +542,6 @@
         </div>
     </div>
 
-    <div class="wallet-manager-container" style="background: #141416; padding: 20px; border-radius: 12px; border: 1px solid #222; margin-bottom: 20px;">
-        <h3 style="color: #fff; margin-bottom: 15px;">➕ Добавить новый кошелек в базу</h3>
-        <div style="display: flex; flex-direction: column; gap: 10px;">
-            <input type="text" id="newWalletAddress" placeholder="Название или адрес кошелька (например, Wallet #1)" style="padding: 10px; background: #0b0b0d; border: 1px solid #333; color: #fff; border-radius: 6px;">
-            <input type="password" id="newWalletPk" placeholder="Приватный ключ (Private Key)" style="padding: 10px; background: #0b0b0d; border: 1px solid #333; color: #fff; border-radius: 6px;">
-            <input type="text" id="newWalletProxy" placeholder="Прокси (http://ip:port или логин:пароль)" style="padding: 10px; background: #0b0b0d; border: 1px solid #333; color: #fff; border-radius: 6px;">
-            <button onclick="addNewWalletToDB()" style="padding: 12px; background: #ff6600; color: #fff; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;">Сохранить кошелек</button>
-        </div>
-        <div id="walletResponseMsg" style="margin-top: 10px; font-size: 14px;"></div>
-    </div>
-
     <div id="main-content">
         <div class="hero">
             <h1 id="hero-title">Универсальный инструмент<br>для автоматизации и сбора Airdrop.</h1>
@@ -1033,21 +1022,62 @@
             switchMenu(null, sectionName);
         }
 
-        function validateRegister() {
+        async function validateRegister() {
+            const emailField = document.getElementById('regEmail');
             const userField = document.getElementById('regUser');
             const passField = document.getElementById('regPass');
             const errorContainer = document.getElementById('errorContainer');
             
-            if (userField.value.trim() === "" || passField.value.trim() === "") {
+            emailField.classList.remove('error');
+            userField.classList.remove('error');
+            passField.classList.remove('error');
+            errorContainer.innerHTML = '';
+
+            if (userField.value.trim() === "" || passField.value.trim() === "" || emailField.value.trim() === "") {
+                emailField.classList.add('error');
                 userField.classList.add('error');
                 passField.classList.add('error');
-                errorContainer.innerHTML = `<div class="error-toast"><span>⚠️</span><span>Заполните обязательные поля!</span></div>`;
+                errorContainer.innerHTML = `<div class="error-toast"><span>⚠️</span><span>Заполните все поля!</span></div>`;
                 return;
             }
-            handleLoginSuccess();
+
+            if (!emailField.value.includes('@') || !emailField.value.includes('.')) {
+                emailField.classList.add('error');
+                errorContainer.innerHTML = `<div class="error-toast"><span>⚠️</span><span>Введите корректный адрес электронной почты!</span></div>`;
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username: userField.value.trim(),
+                        email: emailField.value.trim(),
+                        password: passField.value.trim()
+                    })
+                });
+                const result = await response.json();
+
+                if (response.ok) {
+                    localStorage.setItem('airdrop_username', userField.value.trim()); // Сохраняем логин
+                    errorContainer.innerHTML = `
+                        <div class="error-toast" style="background-color: #0b1f14; border-color: #00d95f; color: #00d95f;">
+                            <span>✅</span><span>Регистрация успешна! Переход к входу...</span>
+                        </div>
+                    `;
+                    setTimeout(() => {
+                        openModal('login');
+                    }, 1500);
+                } else {
+                    errorContainer.innerHTML = `<div class="error-toast"><span>⚠️</span><span>${result.detail || "Ошибка регистрации"}</span></div>`;
+                }
+            } catch (e) {
+                errorContainer.innerHTML = `<div class="error-toast"><span>⚠️</span><span>Ошибка связи с сервером БД!</span></div>`;
+            }
         }
 
-        function validateLogin() {
+        async function validateLogin() {
             const userField = document.getElementById('loginUser');
             const passField = document.getElementById('loginPass');
             const errorContainer = document.getElementById('loginErrorContainer');
@@ -1058,7 +1088,27 @@
                 errorContainer.innerHTML = `<div class="error-toast" style="bottom: -65px;"><span>⚠️</span><span>Введите логин и пароль!</span></div>`;
                 return;
             }
-            handleLoginSuccess();
+
+            try {
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username: userField.value.trim(),
+                        password: passField.value.trim()
+                    })
+                });
+                const result = await response.json();
+
+                if (response.ok) {
+                    localStorage.setItem('airdrop_username', userField.value.trim()); // Сохраняем логин
+                    handleLoginSuccess();
+                } else {
+                    errorContainer.innerHTML = `<div class="error-toast" style="bottom: -65px;"><span>⚠️</span><span>${result.detail || "Неверный логин или пароль"}</span></div>`;
+                }
+            } catch (e) {
+                errorContainer.innerHTML = `<div class="error-toast" style="bottom: -65px;"><span>⚠️</span><span>Ошибка связи с сервером!</span></div>`;
+            }
         }
 
         function handleLoginSuccess() {
@@ -1089,11 +1139,9 @@
                 const found = document.querySelector(`.sidebar-menu-item[data-section="${sectionName}"]`);
                 if (found) found.classList.add('active');
             }
-
             renderDashboardContent(sectionName);
         }
 
-        // Интегрированная функция вызова FastAPI сервера для запуска core_engine.py
         async function startAutoFarming() {
             const log = document.getElementById('drop-logs');
             const network = document.getElementById('farmNetwork').value;
@@ -1111,7 +1159,6 @@
                     const result = await response.json();
                     
                     if (result.status === 'success') {
-                        // 🟢 Зеленый позитивный сигнал для спокойствия
                         log.innerHTML += `<br><span style="color: #00d95f; font-weight: bold;">[${new Date().toLocaleTimeString()}] [OK] ✅ Все системы в норме! ${result.message} Проверяй JSON-отчет.</span>`;
                         log.scrollTop = log.scrollHeight;
                     } else {
@@ -1124,19 +1171,22 @@
                 }
             }
         }
+
         function toggleTelegramBot() {
             telegramLinked = !telegramLinked;
             renderDashboardContent('Settings');
         }
         
+        // Добавление кошельков в базу данных
         async function addNewWalletToDB() {
-            // Предполагаем, что при логине мы сохранили имя юзера в localStorage
-            const currentUser = localStorage.getItem('airdrop_username') || "Robert"; // дефолт для тестов
+            const currentUser = localStorage.getItem('airdrop_username') || "Robert";
             
             const addressField = document.getElementById('newWalletAddress');
             const pkField = document.getElementById('newWalletPk');
             const proxyField = document.getElementById('newWalletProxy');
             const msgContainer = document.getElementById('walletResponseMsg');
+
+            if (!addressField || !pkField || !proxyField) return;
 
             if (!addressField.value || !pkField.value || !proxyField.value) {
                 msgContainer.innerHTML = `<span style="color: #ff3333;">⚠️ Заполните все поля!</span>`;
@@ -1150,7 +1200,7 @@
                     body: JSON.stringify({
                         username: currentUser,
                         wallet_address: addressField.value.trim(),
-                        encrypted_pk: pkField.value.trim(), // В будущем здесь можно добавить клиентское шифрование через LocalVault
+                        encrypted_pk: pkField.value.trim(),
                         proxy: proxyField.value.trim()
                     })
                 });
@@ -1162,6 +1212,8 @@
                     addressField.value = '';
                     pkField.value = '';
                     proxyField.value = '';
+                    // Автоматически перезагружаем список
+                    setTimeout(loadWalletsFromDB, 1000);
                 } else {
                     msgContainer.innerHTML = `<span style="color: #ff3333;">⚠️ ${result.detail || "Ошибка сохранения"}</span>`;
                 }
@@ -1169,7 +1221,38 @@
                 msgContainer.innerHTML = `<span style="color: #ff3333;">⚠️ Ошибка связи с сервером!</span>`;
             }
         }
-        // Функция экспорта реального отчета
+
+        // Подгрузка кошельков из базы данных
+        async function loadWalletsFromDB() {
+            const currentUser = localStorage.getItem('airdrop_username') || "Robert";
+            const container = document.getElementById('walletsListContainer');
+            if(!container) return;
+
+            try {
+                const response = await fetch(`/api/wallets/${currentUser}`);
+                const result = await response.json();
+
+                if (response.ok && result.wallets && result.wallets.length > 0) {
+                    container.innerHTML = '';
+                    result.wallets.forEach(w => {
+                        container.innerHTML += `
+                            <div style="background: #060709; border: 1px solid #1c202d; padding: 12px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
+                                <div>
+                                    <div style="color: #fff; font-weight: bold; font-size: 14px; margin-bottom: 4px;">${w.wallet_address}</div>
+                                    <div style="color: #8892b0; font-size: 11px;">🌐 ${w.proxy}</div>
+                                </div>
+                                <span style="background: #151821; color: #00d95f; padding: 4px 8px; border-radius: 4px; font-size: 11px;">Active</span>
+                            </div>
+                        `;
+                    });
+                } else {
+                    container.innerHTML = `<span style="color: #555c6d; font-size: 13px;">У вас пока нет сохраненных кошельков. Добавьте их ниже.</span>`;
+                }
+            } catch(e) {
+                container.innerHTML = `<span style="color: #ff3333; font-size: 13px;">⚠️ Ошибка загрузки кошельков</span>`;
+            }
+        }
+
         async function exportReportJSON() {
             try {
                 const response = await fetch('/api/report');
@@ -1204,6 +1287,10 @@
             const t = translations[currentLang];
             const dashboardContent = document.getElementById('dashboard-content');
             
+            // Динамический вывод имени пользователя
+            const activeUser = localStorage.getItem('airdrop_username') || "User";
+            const firstLetter = activeUser.charAt(0).toUpperCase();
+
             let centerHtml = '';
 
             if (section === 'Looter') {
@@ -1326,17 +1413,41 @@
                 `;
             } else if (section === 'Wallets') {
                 centerHtml = `
-                    <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 20px; width: 100%;">
+                    <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 20px; width: 100%; margin-bottom: 20px;">
                         <h3 style="margin-top: 0; color: #fff; font-size: 18px;">👥 Управление кошельками</h3>
-                        <p style="color: #8892b0; font-size: 13px;">Список аккаунтов и прокси.</p>
-                        <button style="margin-top: 12px; background-color: transparent; color: #ff6600; border: 1px dashed #ff6600; padding: 10px; border-radius: 8px; font-weight: bold; font-size: 13px; cursor: pointer; width: 100%;">+ Импорт приватных ключей</button>
+                        <p style="color: #8892b0; font-size: 13px;">Ваши сохраненные аккаунты и прокси для автоматизации.</p>
+                        <div id="walletsListContainer" style="margin-top: 15px; display: flex; flex-direction: column; gap: 10px;">
+                            <span style="color: #555c6d; font-size: 13px;">Загрузка кошельков...</span>
+                        </div>
+                    </div>
+
+                    <div class="wallet-manager-container" style="background: #141416; padding: 20px; border-radius: 12px; border: 1px solid #222; width: 100%;">
+                        <h3 style="color: #fff; margin-top: 0; margin-bottom: 15px;">➕ Добавить новый кошелек</h3>
+                        <div style="display: flex; flex-direction: column; gap: 10px;">
+                            <input type="text" id="newWalletAddress" placeholder="Название или адрес кошелька (например, Wallet #1)" autocomplete="off" style="padding: 10px; background: #0b0b0d; border: 1px solid #333; color: #fff; border-radius: 6px;">
+                            <input type="password" id="newWalletPk" placeholder="Приватный ключ (Private Key)" autocomplete="new-password" style="padding: 10px; background: #0b0b0d; border: 1px solid #333; color: #fff; border-radius: 6px;">
+                            <input type="text" id="newWalletProxy" placeholder="Прокси (http://ip:port или логин:пароль)" autocomplete="off" style="padding: 10px; background: #0b0b0d; border: 1px solid #333; color: #fff; border-radius: 6px;">
+                            <button onclick="addNewWalletToDB()" style="padding: 12px; background: #ff6600; color: #000; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;">Сохранить кошелек</button>
+                        </div>
+                        <div id="walletResponseMsg" style="margin-top: 10px; font-size: 14px;"></div>
                     </div>
                 `;
+                setTimeout(loadWalletsFromDB, 50); // Вызов функции загрузки после отрисовки
             } else if (section === 'Billing') {
                 centerHtml = `
-                    <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 20px; width: 100%;">
-                        <h3 style="margin-top: 0; color: #fff; font-size: 18px;">💳 Биллинг и подписка</h3>
-                        <p style="color: #8892b0; font-size: 13px;">Тариф: PRO FARMER ($160 / мес) — Активен</p>
+                    <div id="billing-tab" style="background: #141416; padding: 25px; border-radius: 12px; border: 1px solid #222; width: 100%;">
+                        <h3 style="color: #fff; margin-top: 0; margin-bottom: 15px; display: flex; align-items: center; gap: 10px;">
+                            <span>💳</span> Биллинг и подписка
+                        </h3>
+                        <p style="color: #888; font-size: 14px; margin-bottom: 20px;">Управление активным тарифным планом и статусом аккаунта.</p>
+                        
+                        <div style="background: #0b0b0d; padding: 20px; border-radius: 8px; border: 1px solid #222; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                            <div>
+                                <div style="color: #fff; font-weight: bold; font-size: 16px;">Тариф: PRO FARMER ($160 / мес)</div>
+                                <div style="color: #00d95f; font-size: 13px; margin-top: 5px;">● Статус: Активен</div>
+                            </div>
+                            <button style="padding: 10px 20px; background: #ff6600; color: #000; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;">Продлить тариф</button>
+                        </div>
                     </div>
                 `;
             } else if (section === 'Settings') {
@@ -1370,9 +1481,9 @@
             dashboardContent.innerHTML = `
                 <div class="desktop-sidebar" style="width: 280px; display: flex; flex-direction: column; gap: 14px; flex-shrink: 0;">
                     <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 16px; display: flex; align-items: center; gap: 12px;">
-                        <div style="width: 40px; height: 40px; background: linear-gradient(135deg, #ff6600, #993d00); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 16px; color: #000; flex-shrink: 0;">R</div>
+                        <div style="width: 40px; height: 40px; background: linear-gradient(135deg, #ff6600, #993d00); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 16px; color: #000; flex-shrink: 0;">${firstLetter}</div>
                         <div style="overflow: hidden;">
-                            <div style="font-weight: 700; font-size: 14px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Ruby1</div>
+                            <div style="font-weight: 700; font-size: 14px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${activeUser}</div>
                             <div style="font-size: 11px; color: #8892b0;">${t.joinedText}</div>
                         </div>
                     </div>
@@ -1450,97 +1561,6 @@
             element.classList.toggle('active');
             const span = element.querySelector('.faq-question span:last-child');
             span.innerText = element.classList.contains('active') ? '-' : '+';
-        }
-        // Реальная регистрация через БД
-        async function validateRegister() {
-            const emailField = document.getElementById('regEmail');
-            const userField = document.getElementById('regUser');
-            const passField = document.getElementById('regPass');
-            const errorContainer = document.getElementById('errorContainer');
-            
-            // Сбрасываем старые ошибки подсветки
-            emailField.classList.remove('error');
-            userField.classList.remove('error');
-            passField.classList.remove('error');
-            errorContainer.innerHTML = '';
-
-            // Проверка на пустоту
-            if (userField.value.trim() === "" || passField.value.trim() === "" || emailField.value.trim() === "") {
-                emailField.classList.add('error');
-                userField.classList.add('error');
-                passField.classList.add('error');
-                errorContainer.innerHTML = `<div class="error-toast"><span>⚠️</span><span>Заполните все поля!</span></div>`;
-                return;
-            }
-
-            // Проверка, что введена похожая на правду почта (есть символ @)
-            if (!emailField.value.includes('@') || !emailField.value.includes('.')) {
-                emailField.classList.add('error');
-                errorContainer.innerHTML = `<div class="error-toast"><span>⚠️</span><span>Введите корректный адрес электронной почты!</span></div>`;
-                return;
-            }
-
-            try {
-                const response = await fetch('/api/register', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        username: userField.value.trim(),
-                        email: emailField.value.trim(),
-                        password: passField.value.trim()
-                    })
-                });
-                const result = await response.json();
-
-                if (response.ok) {
-                    errorContainer.innerHTML = `
-                        <div class="error-toast" style="background-color: #0b1f14; border-color: #00d95f; color: #00d95f;">
-                            <span>✅</span><span>Регистрация успешна! Переход к входу...</span>
-                        </div>
-                    `;
-                    setTimeout(() => {
-                        openModal('login');
-                    }, 1500);
-                } else {
-                    errorContainer.innerHTML = `<div class="error-toast"><span>⚠️</span><span>${result.detail || "Ошибка регистрации"}</span></div>`;
-                }
-            } catch (e) {
-                errorContainer.innerHTML = `<div class="error-toast"><span>⚠️</span><span>Ошибка связи с сервером БД!</span></div>`;
-            }
-        }
-
-        // Реальный логин через проверку в SQLite
-        async function validateLogin() {
-            const userField = document.getElementById('loginUser');
-            const passField = document.getElementById('loginPass');
-            const errorContainer = document.getElementById('loginErrorContainer');
-
-            if (userField.value.trim() === "" || passField.value.trim() === "") {
-                userField.classList.add('error');
-                passField.classList.add('error');
-                errorContainer.innerHTML = `<div class="error-toast" style="bottom: -65px;"><span>⚠️</span><span>Введите логин и пароль!</span></div>`;
-                return;
-            }
-
-            try {
-                const response = await fetch('/api/login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        username: userField.value.trim(),
-                        password: passField.value.trim()
-                    })
-                });
-                const result = await response.json();
-
-                if (response.ok) {
-                    handleLoginSuccess();
-                } else {
-                    errorContainer.innerHTML = `<div class="error-toast" style="bottom: -65px;"><span>⚠️</span><span>${result.detail || "Неверный логин или пароль"}</span></div>`;
-                }
-            } catch (e) {
-                errorContainer.innerHTML = `<div class="error-toast" style="bottom: -65px;"><span>⚠️</span><span>Ошибка связи с сервером!</span></div>`;
-            }
         }
     </script>
 </body>
