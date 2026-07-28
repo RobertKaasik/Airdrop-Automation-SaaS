@@ -8,7 +8,6 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from airdrop_scanner import AirdropScanner
 
-
 # Импортируем нашу базу данных, модели и функции из database.py
 from database import SessionLocal, User, Wallet, get_password_hash, verify_password, get_db
 
@@ -54,7 +53,6 @@ async def get_index():
 # 2. API Регистрации нового пользователя в SQLite
 @app.post("/api/register")
 async def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
-    # Простейшая валидация почты на бэкенде
     if "@" not in user_data.email or "." not in user_data.email:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -160,15 +158,12 @@ async def trigger_wallet_scan(username: str):
 async def start_farm_core(data: FarmRequest = None, db: Session = Depends(get_db)):
     print("\n[+] Получен запрос от панели на запуск фермы через БД-сессию!")
     try:
-        # Находим кошельки (для примера берем все или по текущему пользователю)
         wallets_query = db.query(Wallet).all()
         if not wallets_query:
             return JSONResponse(status_code=400, content={"status": "error", "message": "Нет доступных кошельков в базе данных!"})
         
-        # Формируем чистый список для ядра
         active_wallets = []
         for w in wallets_query:
-            # Убираем возможный мусор/форматирование из строки прокси
             clean_proxy = w.proxy.split(']')[0].replace('[', '') if '[' in w.proxy else w.proxy
             
             active_wallets.append({
@@ -177,15 +172,27 @@ async def start_farm_core(data: FarmRequest = None, db: Session = Depends(get_db
                 "proxy": clean_proxy
             })
             
-        # Сохраняем во временный конфиг, который ядро может прочитать
+        # Сохраняем во временный конфиг для ядра
         with open("active_farm_config.json", "w", encoding="utf-8") as f:
             json.dump(active_wallets, f, indent=4)
 
-        # Запускаем ядро
+        # Запускаем боевое ядро асинхронно
         subprocess.Popen(["python", "core_engine.py"])
         return {"status": "success", "message": f"🔥 Ядро запущенно! В работу взято кошельков: {len(active_wallets)}."}
     except Exception as e:
         return JSONResponse(status_code=500, content={"status": "error", "message": f"Ошибка: {str(e)}"})
+
+# Эндпоинт удаления кошелька по его ID из базы данных
+
+@app.delete("/api/wallets/delete/{wallet_id}")
+async def delete_wallet_from_db(wallet_id: int, db: Session = Depends(get_db)):
+    wallet = db.query(Wallet).filter(Wallet.id == wallet_id).first()
+    if not wallet:
+        raise HTTPException(status_code=404, detail="Кошелек не найден в базе данных!")
+    
+    db.delete(wallet)
+    db.commit()
+    return {"status": "success", "message": "Кошелек успешно удален из базы данных!"}
 
 # 7. Получение отчета JSON
 @app.get("/api/report")

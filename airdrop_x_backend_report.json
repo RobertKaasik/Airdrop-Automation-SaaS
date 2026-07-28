@@ -1,29 +1,19 @@
 {
-    "timestamp": "2026-07-28T14:35:33.489363",
-    "total_wallets_processed": 2,
+    "timestamp": "2026-07-28T17:41:59.466553",
+    "total_wallets_processed": 1,
     "status": "Success",
     "details": [
         {
             "wallet_id": 1,
-            "proxy": "http://31.57.178.255:8181",
+            "proxy": "http://Mnaj9Z:NxmT5P@163.198.110.172:8000",
             "status": "Completed",
             "route_executed": [
                 "bridge_layer",
-                "mint_nft",
-                "swap_tokens"
-            ],
-            "timestamp": "2026-07-28T14:35:33.489363"
-        },
-        {
-            "wallet_id": 2,
-            "proxy": "http://31.57.178.255:8181",
-            "status": "Completed",
-            "route_executed": [
+                "swap_tokens",
                 "add_liquidity",
-                "mint_nft",
-                "swap_tokens"
+                "mint_nft"
             ],
-            "timestamp": "2026-07-28T14:35:27.752388"
+            "timestamp": "2026-07-28T17:41:59.465545"
         }
     ]
 }

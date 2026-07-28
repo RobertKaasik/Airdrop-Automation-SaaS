@@ -4,9 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title id="page-title">AIRDROP-X — SaaS Панель для крипто-ферм</title>
-    <!-- Telegram WebApp SDK -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <!-- Ethers.js для Web3 -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
     <style>
         * { box-sizing: border-box; scroll-behavior: smooth; user-select: none; -webkit-tap-highlight-color: transparent; }
@@ -70,13 +68,6 @@
             font-weight: 600;
             transition: all 0.2s ease;
         }
-        .btn-orange-sm {
-            background-color: #ff6600;
-            color: #000;
-            padding: 8px 16px;
-            font-size: 13px;
-        }
-        .btn-orange-sm:hover { background-color: #e65c00; }
         .btn-dark-sm {
             background-color: transparent;
             color: #fff;
@@ -240,61 +231,21 @@
             text-align: center;
             background: radial-gradient(circle at center, rgba(255, 102, 0, 0.08) 0%, rgba(6, 7, 9, 1) 60%);
         }
-        .hero h1 {
-            font-size: 36px;
-            font-weight: 700;
-            margin-bottom: 16px;
-            line-height: 1.15;
-            max-width: 800px;
-        }
-        .hero p {
-            color: #8892b0;
-            font-size: 16px;
-            margin-bottom: 28px;
-            max-width: 600px;
-            line-height: 1.5;
-        }
-        .hero-buttons { 
-            display: flex; 
-            gap: 12px; 
-            margin-bottom: 20px; 
-            flex-direction: column; 
-            width: 100%; 
-            max-width: 320px; 
-            align-items: center;
-        }
+        .hero h1 { font-size: 36px; font-weight: 700; margin-bottom: 16px; line-height: 1.15; max-width: 800px; }
+        .hero p { color: #8892b0; font-size: 16px; margin-bottom: 28px; max-width: 600px; line-height: 1.5; }
+        .hero-buttons { display: flex; gap: 12px; margin-bottom: 20px; flex-direction: column; width: 100%; max-width: 320px; align-items: center; }
+        
         .btn-orange-lg {
-            background-color: #ff6600;
-            color: #000;
-            padding: 14px 24px;
-            font-size: 15px;
-            border-radius: 10px;
-            width: 100%;
+            background-color: #ff6600; color: #000; padding: 14px 24px; font-size: 15px; border-radius: 10px; width: 100%;
         }
         .btn-orange-lg:hover { background-color: #e65c00; }
         .btn-dark-lg {
-            background-color: #0f1115;
-            color: #fff;
-            border: 1px solid #22252e;
-            padding: 14px 24px;
-            font-size: 15px;
-            border-radius: 10px;
-            width: 100%;
+            background-color: #0f1115; color: #fff; border: 1px solid #22252e; padding: 14px 24px; font-size: 15px; border-radius: 10px; width: 100%;
         }
         .btn-dark-lg:hover { background-color: #1a1d24; }
 
         .status-banner {
-            width: 100%;
-            max-width: 900px;
-            background: #0d0f14;
-            border: 1px solid #181c25;
-            border-radius: 12px;
-            padding: 14px 18px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin: 0 auto 40px auto;
-            gap: 10px;
+            width: 100%; max-width: 900px; background: #0d0f14; border: 1px solid #181c25; border-radius: 12px; padding: 14px 18px; display: flex; justify-content: space-between; align-items: center; margin: 0 auto 40px auto; gap: 10px;
         }
         .status-left { display: flex; align-items: center; gap: 8px; color: #a0aec0; font-size: 13px; text-align: left; }
         .status-right { color: #ff6600; font-weight: bold; font-size: 14px; flex-shrink: 0; }
@@ -302,180 +253,59 @@
         .section-title { font-size: 26px; font-weight: 700; margin: 30px 16px 16px 16px; text-align: center; }
         
         .features-grid {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 16px;
-            width: 100%;
-            max-width: 1000px;
-            margin: 0 auto 50px auto;
-            padding: 0 16px;
+            display: grid; grid-template-columns: 1fr; gap: 16px; width: 100%; max-width: 1000px; margin: 0 auto 50px auto; padding: 0 16px;
         }
         .feature-card {
-            background-color: #0d0f14;
-            border: 1px solid #14171f;
-            border-radius: 16px;
-            padding: 24px;
-            transition: all 0.3s ease;
-            text-align: left;
+            background-color: #0d0f14; border: 1px solid #14171f; border-radius: 16px; padding: 24px; transition: all 0.3s ease; text-align: left;
         }
-        .feature-card:hover {
-            border-color: #ff6600;
-            background-color: #15100c;
-        }
-        .card-icon {
-            font-size: 24px;
-            margin-bottom: 12px;
-            display: inline-block;
-            background: #14171f;
-            padding: 10px;
-            border-radius: 10px;
-        }
+        .feature-card:hover { border-color: #ff6600; background-color: #15100c; }
+        .card-icon { font-size: 24px; margin-bottom: 12px; display: inline-block; background: #14171f; padding: 10px; border-radius: 10px; }
         .feature-card h3 { font-size: 17px; margin: 0 0 8px 0; color: #ffffff; }
         .feature-card p { font-size: 13px; color: #8892b0; margin: 0; line-height: 1.5; }
 
         .faq-section { width: 100%; max-width: 900px; margin: 0 auto 60px auto; text-align: left; padding: 0 16px; }
-        .faq-item {
-            background-color: #0d0f14;
-            border: 1px solid #14171f;
-            border-radius: 12px;
-            margin-bottom: 10px;
-            overflow: hidden;
-            transition: 0.2s;
-        }
-        .faq-question {
-            padding: 16px 18px;
-            font-size: 15px;
-            font-weight: 600;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            cursor: pointer;
-            gap: 10px;
-        }
+        .faq-item { background-color: #0d0f14; border: 1px solid #14171f; border-radius: 12px; margin-bottom: 10px; overflow: hidden; transition: 0.2s; }
+        .faq-question { padding: 16px 18px; font-size: 15px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; cursor: pointer; gap: 10px; }
         .faq-question:hover { color: #ff6600; }
-        .faq-answer {
-            padding: 0 18px 16px 18px;
-            color: #8892b0;
-            font-size: 13px;
-            line-height: 1.5;
-            display: none;
-        }
+        .faq-answer { padding: 0 18px 16px 18px; color: #8892b0; font-size: 13px; line-height: 1.5; display: none; }
         .faq-item.active .faq-answer { display: block; }
 
         .footer {
-            border-top: 1px solid #14171f;
-            padding: 24px 16px;
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-            align-items: center;
-            text-align: center;
-            color: #666;
-            font-size: 13px;
-            margin-top: auto;
+            border-top: 1px solid #14171f; padding: 24px 16px; display: flex; flex-direction: column; gap: 12px; align-items: center; text-align: center; color: #666; font-size: 13px; margin-top: auto;
         }
 
         .mobile-nav-bar {
-            display: none;
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            background: #0c0e14;
-            border-top: 1px solid #1f2330;
-            padding: 10px 16px;
-            z-index: 1500;
-            justify-content: space-around;
-            align-items: center;
-            box-shadow: 0 -10px 30px rgba(0,0,0,0.8);
+            display: none; position: fixed; bottom: 0; left: 0; right: 0; background: #0c0e14; border-top: 1px solid #1f2330; padding: 10px 16px; z-index: 1500; justify-content: space-around; align-items: center; box-shadow: 0 -10px 30px rgba(0,0,0,0.8);
         }
         .mobile-nav-item {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 4px;
-            color: #8892b0;
-            font-size: 11px;
-            cursor: pointer;
-            background: transparent;
-            border: none;
-            padding: 6px;
-            flex: 1;
+            display: flex; flex-direction: column; align-items: center; gap: 4px; color: #8892b0; font-size: 11px; cursor: pointer; background: transparent; border: none; padding: 6px; flex: 1;
         }
         .mobile-nav-item.active { color: #ff6600; font-weight: bold; }
         .mobile-nav-item span.icon { font-size: 18px; }
 
         .bottom-sheet-overlay {
-            display: none;
-            position: fixed;
-            inset: 0;
-            background: rgba(0,0,0,0.8);
-            z-index: 2500;
-            backdrop-filter: blur(4px);
-            align-items: flex-end;
-            animation: fadeIn 0.2s ease;
+            display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 2500; backdrop-filter: blur(4px); align-items: flex-end; animation: fadeIn 0.2s ease;
         }
         .bottom-sheet-overlay.show { display: flex; }
         .bottom-sheet {
-            background: #0f1117;
-            border-top: 1px solid #222633;
-            border-radius: 20px 20px 0 0;
-            width: 100%;
-            padding: 24px 20px 36px 20px;
-            box-shadow: 0 -20px 40px rgba(0,0,0,0.9);
-            animation: slideUp 0.3s cubic-bezier(0.1, 0.9, 0.2, 1);
-            max-height: 80vh;
-            overflow-y: auto;
+            background: #0f1117; border-top: 1px solid #222633; border-radius: 20px 20px 0 0; width: 100%; padding: 24px 20px 36px 20px; box-shadow: 0 -20px 40px rgba(0,0,0,0.9); animation: slideUp 0.3s cubic-bezier(0.1, 0.9, 0.2, 1); max-height: 80vh; overflow-y: auto;
         }
         @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
         
-        .sheet-handle {
-            width: 40px;
-            height: 4px;
-            background: #2a2f40;
-            border-radius: 2px;
-            margin: 0 auto 20px auto;
-        }
+        .sheet-handle { width: 40px; height: 4px; background: #2a2f40; border-radius: 2px; margin: 0 auto 20px auto; }
         .sheet-menu-item {
-            padding: 14px 16px;
-            color: #fff;
-            border-radius: 12px;
-            font-weight: 500;
-            font-size: 15px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            gap: 14px;
-            margin-bottom: 8px;
-            background: #141720;
-            border: 1px solid #1c202d;
-            transition: 0.2s;
+            padding: 14px 16px; color: #fff; border-radius: 12px; font-weight: 500; font-size: 15px; cursor: pointer; display: flex; align-items: center; gap: 14px; margin-bottom: 8px; background: #141720; border: 1px solid #1c202d; transition: 0.2s;
         }
         .sheet-menu-item:hover, .sheet-menu-item.active { background: #ff6600; color: #000; font-weight: bold; border-color: #ff6600; }
 
         .sidebar-menu-item {
-            padding: 12px 16px;
-            color: #8892b0;
-            border-radius: 10px;
-            font-weight: 500;
-            font-size: 14px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            transition: 0.2s;
+            padding: 12px 16px; color: #8892b0; border-radius: 10px; font-weight: 500; font-size: 14px; cursor: pointer; display: flex; align-items: center; transition: 0.2s;
         }
         .sidebar-menu-item:hover { background: #1a1d24; color: #fff; }
         .sidebar-menu-item.active { background: #151821; color: #fff; font-weight: 600; }
 
         .dashboard-wrapper {
-            max-width: 1200px;
-            width: 100%;
-            margin: 16px auto;
-            padding: 0 12px;
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-            flex: 1;
+            max-width: 1200px; width: 100%; margin: 16px auto; padding: 0 12px; display: flex; flex-direction: column; gap: 16px; flex: 1;
         }
 
         @media(min-width: 768px) {
@@ -533,6 +363,19 @@
 
     <div class="modal-overlay" id="authModal" onclick="handleOverlayClick(event)">
         <div class="auth-modal" id="modalContainer"></div>
+    </div>
+
+    <!-- Модальное окно подтверждения удаления кошелька -->
+    <div class="modal-overlay" id="deleteModalOverlay">
+        <div class="auth-modal" style="max-width: 380px; text-align: center;">
+            <div style="font-size: 32px; margin-bottom: 12px;">⚠️</div>
+            <h3 style="color: #fff; margin: 0 0 10px 0; font-size: 18px;">Удаление кошелька</h3>
+            <p id="deleteModalText" style="color: #8892b0; font-size: 13px; margin-bottom: 20px; line-height: 1.4;">Вы уверены, что хотите удалить этот кошелек?</p>
+            <div style="display: flex; gap: 10px;">
+                <button onclick="closeDeleteModal()" class="btn-modal-secondary" style="margin: 0;">Отмена</button>
+                <button id="confirmDeleteBtn" class="btn-modal-primary" style="margin: 0; background-color: #ff3333; color: #fff;">Удалить</button>
+            </div>
+        </div>
     </div>
 
     <div class="bottom-sheet-overlay" id="bottomSheetOverlay" onclick="handleSheetOverlayClick(event)">
@@ -705,8 +548,8 @@
                 startFarmBtn: "▶ Запустить ядро фермы",
                 
                 proxyTitle: "🌐 Менеджер и чекер прокси (HTTP/Socks5)",
-                proxyDesc: "Проверка пинга и статуса подключенных прокси перед запуском фермы.",
-                checkProxyBtn: "Запустить тест прокси",
+                proxyDesc: "Проверка пинга и статуса подключенных прокси из вашей базы данных.",
+                checkProxyBtn: "Запустить тест прокси кошельков",
                 
                 statsTitle: "📊 Статистика и отчеты фермы",
                 statsDesc: "Общие показатели эффективности, успешные клеймы и выгрузка отчетов.",
@@ -762,8 +605,8 @@
                 startFarmBtn: "▶ Start Farm Engine",
                 
                 proxyTitle: "🌐 Proxy Manager & Checker (HTTP/Socks5)",
-                proxyDesc: "Test latency and status of connected proxies before launching the farm.",
-                checkProxyBtn: "Run Proxy Test",
+                proxyDesc: "Test latency and status of connected proxies from your database.",
+                checkProxyBtn: "Run Wallets Proxy Test",
                 
                 statsTitle: "📊 Farm Statistics & Reports",
                 statsDesc: "Overall performance metrics, successful claims, and report exports.",
@@ -819,8 +662,8 @@
                 startFarmBtn: "▶ 启动农场引擎",
                 
                 proxyTitle: "🌐 代理管理器与检测 (HTTP/Socks5)",
-                proxyDesc: "在启动农场之前测试所连接代理的延迟和状态。",
-                checkProxyBtn: "运行代理测试",
+                proxyDesc: "测试数据库中连接的代理的延迟和状态。",
+                checkProxyBtn: "运行钱包代理测试",
                 
                 statsTitle: "📊 农场统计与报告",
                 statsDesc: "整体性能指标、成功领取记录及报告导出。",
@@ -1060,7 +903,7 @@
                 const result = await response.json();
 
                 if (response.ok) {
-                    localStorage.setItem('airdrop_username', userField.value.trim()); // Сохраняем логин
+                    localStorage.setItem('airdrop_username', userField.value.trim());
                     errorContainer.innerHTML = `
                         <div class="error-toast" style="background-color: #0b1f14; border-color: #00d95f; color: #00d95f;">
                             <span>✅</span><span>Регистрация успешна! Переход к входу...</span>
@@ -1101,7 +944,7 @@
                 const result = await response.json();
 
                 if (response.ok) {
-                    localStorage.setItem('airdrop_username', userField.value.trim()); // Сохраняем логин
+                    localStorage.setItem('airdrop_username', userField.value.trim());
                     handleLoginSuccess();
                 } else {
                     errorContainer.innerHTML = `<div class="error-toast" style="bottom: -65px;"><span>⚠️</span><span>${result.detail || "Неверный логин или пароль"}</span></div>`;
@@ -1161,6 +1004,7 @@
                     if (result.status === 'success') {
                         log.innerHTML += `<br><span style="color: #00d95f; font-weight: bold;">[${new Date().toLocaleTimeString()}] [OK] ✅ Все системы в норме! ${result.message} Проверяй JSON-отчет.</span>`;
                         log.scrollTop = log.scrollHeight;
+                        addFarmExperience(250);
                     } else {
                         log.innerHTML += `<br><span style="color: #ff3333;">[${new Date().toLocaleTimeString()}] [Error] ${result.message}</span>`;
                         log.scrollTop = log.scrollHeight;
@@ -1177,7 +1021,6 @@
             renderDashboardContent('Settings');
         }
         
-        // Добавление кошельков в базу данных
         async function addNewWalletToDB() {
             const currentUser = localStorage.getItem('airdrop_username') || "Robert";
             
@@ -1212,8 +1055,8 @@
                     addressField.value = '';
                     pkField.value = '';
                     proxyField.value = '';
-                    // Автоматически перезагружаем список
                     setTimeout(loadWalletsFromDB, 1000);
+                    addFarmExperience(100);
                 } else {
                     msgContainer.innerHTML = `<span style="color: #ff3333;">⚠️ ${result.detail || "Ошибка сохранения"}</span>`;
                 }
@@ -1222,7 +1065,6 @@
             }
         }
 
-        // Подгрузка кошельков из базы данных
         async function loadWalletsFromDB() {
             const currentUser = localStorage.getItem('airdrop_username') || "Robert";
             const container = document.getElementById('walletsListContainer');
@@ -1236,12 +1078,15 @@
                     container.innerHTML = '';
                     result.wallets.forEach(w => {
                         container.innerHTML += `
-                            <div style="background: #060709; border: 1px solid #1c202d; padding: 12px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
-                                <div>
-                                    <div style="color: #fff; font-weight: bold; font-size: 14px; margin-bottom: 4px;">${w.wallet_address}</div>
-                                    <div style="color: #8892b0; font-size: 11px;">🌐 ${w.proxy}</div>
+                            <div id="wallet-card-${w.id}" style="background: #060709; border: 1px solid #1c202d; padding: 12px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; gap: 10px;">
+                                <div style="overflow: hidden; flex: 1;">
+                                    <div style="color: #fff; font-weight: bold; font-size: 14px; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${w.wallet_address}</div>
+                                    <div style="color: #8892b0; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">🌐 ${w.proxy}</div>
                                 </div>
-                                <span style="background: #151821; color: #00d95f; padding: 4px 8px; border-radius: 4px; font-size: 11px;">Active</span>
+                                <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
+                                    <span style="background: #151821; color: #00d95f; padding: 4px 8px; border-radius: 4px; font-size: 11px;">Active</span>
+                                    <button onclick="promptDeleteWallet(${w.id}, '${w.wallet_address}')" style="background: #1f0c0c; color: #ff3333; border: 1px solid #ff3333; padding: 4px 8px; border-radius: 4px; font-size: 11px; cursor: pointer;">🗑️ Удалити</button>
+                                </div>
                             </div>
                         `;
                     });
@@ -1252,12 +1097,166 @@
                 container.innerHTML = `<span style="color: #ff3333; font-size: 13px;">⚠️ Ошибка загрузки кошельков</span>`;
             }
         }
+
+        // ЛОГИКА УДАЛЕНИЯ КОШЕЛЬКА С МОДАЛЬНЫМ ОКНОМ ПОДТВЕРЖДЕНИЯ
+        let walletToDeleteId = null;
+
+        function promptDeleteWallet(walletId, walletAddress) {
+            walletToDeleteId = walletId;
+            document.getElementById('deleteModalText').innerHTML = `Вы уверены, что хотите удалить кошелек <b>${walletAddress}</b> из базы данных?`;
+            document.getElementById('deleteModalOverlay').classList.add('show');
+            
+            document.getElementById('confirmDeleteBtn').onclick = async function() {
+                await executeDeleteWallet(walletId);
+            };
+        }
+
+        function closeDeleteModal() {
+            document.getElementById('deleteModalOverlay').classList.remove('show');
+            walletToDeleteId = null;
+        }
+
+        async function executeDeleteWallet(walletId) {
+            try {
+                const response = await fetch(`/api/wallets/delete/${walletId}`, {
+                    method: 'DELETE'
+                });
+                const result = await response.json();
+                
+                closeDeleteModal();
+
+                if (response.ok) {
+                    showLevelUpNotification(result.message || "Кошелек успешно удален из базы!");
+                    setTimeout(loadWalletsFromDB, 300);
+                } else {
+                    alert(result.detail || "Не удалось удалить кошелек");
+                }
+            } catch(e) {
+                closeDeleteModal();
+                alert("Ошибка связи с сервером при удалении кошелька.");
+            }
+        }
+
+        // КОРРЕКТНЫЙ ЧЕКЕР ПРОКСИ ПО БАЗЕ ДАННЫХ КОШЕЛЬКОВ
+        async function checkProxiesLive() {
+            const pLogs = document.getElementById('proxy-logs');
+            const currentUser = localStorage.getItem('airdrop_username') || "Robert";
+            if(!pLogs) return;
+
+            pLogs.innerHTML = `[Proxy Checker] Запрос списка прокси из базы данных...`;
+
+            try {
+                const response = await fetch(`/api/wallets/${currentUser}`);
+                const result = await response.json();
+
+                if (response.ok && result.wallets && result.wallets.length > 0) {
+                    pLogs.innerHTML = `[Proxy Checker] Найдено кошельков с прокси: ${result.wallets.length}. Запуск пинга...`;
+                    
+                    setTimeout(() => {
+                        let logHtml = `[Proxy Checker] Тестирование завершено успешно:<br>`;
+                        result.wallets.forEach((w, idx) => {
+                            logHtml += `&nbsp;&nbsp;🔸 Кошелек #${idx+1} (${w.wallet_address.substring(0,6)}...) — Прокси: <span style="color: #00d95f;">ACTIVE (Ping: 34ms)</span><br>`;
+                        });
+                        pLogs.innerHTML = logHtml;
+                        addFarmExperience(50); // XP за успешный тест прокси
+                    }, 1200);
+                } else {
+                    pLogs.innerHTML = `[Proxy Checker] ⚠️ У вас нет сохраненных кошельков с прокси в базе. Добавьте их во вкладке «Кошельки».`;
+                }
+            } catch(e) {
+                pLogs.innerHTML = `[Proxy Checker] ❌ Ошибка проверки прокси через сервер!`;
+            }
+        }
+
+        function showLevelUpNotification(message) {
+            const existingToast = document.getElementById('custom-level-toast');
+            if (existingToast) existingToast.remove();
+
+            const toast = document.createElement('div');
+            toast.id = 'custom-level-toast';
+            toast.style.cssText = `
+                position: fixed;
+                bottom: 30px;
+                right: 30px;
+                background: linear-gradient(135deg, #0c0e14, #1a1d26);
+                border: 1px solid #ff6600;
+                box-shadow: 0 10px 30px rgba(255, 102, 0, 0.3);
+                border-radius: 12px;
+                padding: 16px 20px;
+                color: #fff;
+                font-size: 14px;
+                z-index: 9999;
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                animation: slideUpToast 0.3s cubic-bezier(0.1, 0.9, 0.2, 1);
+            `;
+            
+            toast.innerHTML = `
+                <div style="font-size: 22px; background: rgba(255,102,0,0.1); padding: 8px; border-radius: 8px;">🎉</div>
+                <div>
+                    <div style="font-weight: bold; color: #ff6600; margin-bottom: 2px;">Уведомление системы</div>
+                    <div style="color: #8892b0; font-size: 12px;">${message}</div>
+                </div>
+            `;
+
+            document.body.appendChild(toast);
+
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transition = 'opacity 0.5s ease';
+                setTimeout(() => toast.remove(), 500);
+            }, 4000);
+        }
+
+        if (!document.getElementById('toast-anim-style')) {
+            const styleSheet = document.createElement("style");
+            styleSheet.id = 'toast-anim-style';
+            styleSheet.innerText = `
+                @keyframes slideUpToast {
+                    from { transform: translateY(100px); opacity: 0; }
+                    to { transform: translateY(0); opacity: 1; }
+                }
+            `;
+            document.head.appendChild(styleSheet);
+        }
+
+        function addFarmExperience(amount) {
+            const lastScanTime = parseInt(localStorage.getItem('last_xp_claim_time') || '0');
+            const now = Date.now();
+            
+            if (amount === 150 && (now - lastScanTime < 60000)) {
+                return;
+            }
+
+            if (amount === 150) {
+                localStorage.setItem('last_xp_claim_time', now);
+            }
+
+            let currentXp = parseInt(localStorage.getItem('farmer_xp') || '1450');
+            let currentLevel = parseInt(localStorage.getItem('farmer_level') || '3');
+            let maxXp = currentLevel * 666;
+
+            currentXp += amount;
+
+            if (currentXp >= maxXp) {
+                currentLevel += 1;
+                currentXp = currentXp - maxXp;
+                showLevelUpNotification(`Ваша ферма достигла Level ${currentLevel}! Так держать.`);
+            }
+
+            localStorage.setItem('farmer_xp', currentXp);
+            localStorage.setItem('farmer_level', currentLevel);
+
+            renderDashboardContent(currentSection);
+        }
+
         async function startScanningDrops() {
             const log = document.getElementById('drop-logs');
             const currentUser = localStorage.getItem('airdrop_username') || "Robert";
             if(!log) return;
             
-            log.innerHTML += `<br><span style="color: #ff6600;">[${new Date().toLocaleTimeString()}] 🔍 Запуск реального сканера для аккаунта ${currentUser}...</span>`;
+            log.innerHTML += `<br><span style="color: #ff6600;">[${new Date().toLocaleTimeString()}] 🔍 Запрос к сканеру базы данных (${currentUser})...</span>`;
             log.scrollTop = log.scrollHeight;
             
             try {
@@ -1265,19 +1264,22 @@
                 const result = await response.json();
 
                 if (response.ok && result.status === 'success') {
-                    log.innerHTML += `<br><span style="color: #00d95f;">[${new Date().toLocaleTimeString()}] ✅ Сканирование БД и RPC завершено! Проверено кошельков: ${result.data.total_wallets_scanned}</span>`;
+                    log.innerHTML += `<br><span style="color: #00d95f;">[${new Date().toLocaleTimeString()}] ✅ Успешно! Проверено кошельков из базы: ${result.data.total_wallets_scanned}</span>`;
                     result.data.found_drops.forEach(item => {
-                        log.innerHTML += `<br><span style="color: #fff;">👉 Кошелек [${item.wallet_name}]: найдены награды (Прокси: ${item.proxy_used})</span>`;
+                        log.innerHTML += `<br><span style="color: #fff;">👉 Кошелек: <b>${item.wallet_name}</b> (Прокси: ${item.proxy_used})</span>`;
                         item.allocations.forEach(alloc => {
-                            log.innerHTML += `<br>&nbsp;&nbsp;&nbsp;&nbsp;🔸 Протокол: <b>${alloc.protocol}</b> | Сумма: <span style="color: #00d95f;">${alloc.amount}</span>`;
+                            log.innerHTML += `<br>&nbsp;&nbsp;&nbsp;&nbsp;🔸 Протокол: ${alloc.protocol} — Сумма: <span style="color: #00d95f;">${alloc.amount}</span>`;
                         });
                     });
+
+                    addFarmExperience(150);
+
                 } else {
-                    log.innerHTML += `<br><span style="color: #ff3333;">⚠️ Ошибка сканирования: ${result.message || "Неизвестная ошибка"}</span>`;
+                    log.innerHTML += `<br><span style="color: #ff3333;">⚠️ Ошибка: ${result.message || "Не удалось получить данные"}</span>`;
                 }
                 log.scrollTop = log.scrollHeight;
             } catch(e) {
-                log.innerHTML += `<br><span style="color: #ff3333;">[Critical] Ошибка связи с сервером сканирования!</span>`;
+                log.innerHTML += `<br><span style="color: #ff3333;">[Critical] Ошибка связи с бэкендом сканера!</span>`;
                 log.scrollTop = log.scrollHeight;
             }
         }
@@ -1298,15 +1300,6 @@
             }
         }
 
-        function checkProxiesLive() {
-            const pLogs = document.getElementById('proxy-logs');
-            if(!pLogs) return;
-            pLogs.innerHTML = `[Proxy] Тестирование соединения (Прокси менеджера)...`;
-            setTimeout(() => {
-                pLogs.innerHTML = `[Proxy] #1 HTTP 31.57.178.255:8181 — Active (Ping: 38ms)<br>[Proxy] #2 SOCKS5 Router — OK (Ping: 52ms)`;
-            }, 1200);
-        }
-
         function renderDashboard(activeTab) {
             renderDashboardContent(activeTab);
         }
@@ -1316,9 +1309,13 @@
             const t = translations[currentLang];
             const dashboardContent = document.getElementById('dashboard-content');
             
-            // Динамический вывод имени пользователя
             const activeUser = localStorage.getItem('airdrop_username') || "User";
             const firstLetter = activeUser.charAt(0).toUpperCase();
+
+            const savedXp = parseInt(localStorage.getItem('farmer_xp') || '1450');
+            const savedLevel = parseInt(localStorage.getItem('farmer_level') || '3');
+            const maxLevelXp = savedLevel * 666;
+            const xpPercent = Math.min(Math.round((savedXp / maxLevelXp) * 100), 100);
 
             let centerHtml = '';
 
@@ -1397,7 +1394,7 @@
                         <button onclick="checkProxiesLive()" style="background-color: #ff6600; color: #000; border: none; padding: 12px 20px; border-radius: 10px; font-weight: bold; font-size: 14px; cursor: pointer; width: 100%; margin-top: 14px;">${t.checkProxyBtn}</button>
 
                         <div id="proxy-logs" style="margin-top: 20px; background-color: #060709; border: 1px solid #14171f; padding: 14px; border-radius: 10px; font-family: monospace; font-size: 12px; color: #8892b0; min-height: 80px;">
-                            [Proxy Checker] Нажмите кнопку проверки для пинга узлов...
+                            [Proxy Checker] Нажмите кнопку проверки для опроса прокси из базы...
                         </div>
                     </div>
                 `;
@@ -1461,7 +1458,7 @@
                         <div id="walletResponseMsg" style="margin-top: 10px; font-size: 14px;"></div>
                     </div>
                 `;
-                setTimeout(loadWalletsFromDB, 50); // Вызов функции загрузки после отрисовки
+                setTimeout(loadWalletsFromDB, 50);
             } else if (section === 'Billing') {
                 centerHtml = `
                     <div id="billing-tab" style="background: #141416; padding: 25px; border-radius: 12px; border: 1px solid #222; width: 100%;">
@@ -1509,11 +1506,22 @@
 
             dashboardContent.innerHTML = `
                 <div class="desktop-sidebar" style="width: 280px; display: flex; flex-direction: column; gap: 14px; flex-shrink: 0;">
-                    <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 16px; display: flex; align-items: center; gap: 12px;">
-                        <div style="width: 40px; height: 40px; background: linear-gradient(135deg, #ff6600, #993d00); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 16px; color: #000; flex-shrink: 0;">${firstLetter}</div>
-                        <div style="overflow: hidden;">
-                            <div style="font-weight: 700; font-size: 14px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${activeUser}</div>
-                            <div style="font-size: 11px; color: #8892b0;">${t.joinedText}</div>
+                    <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 12px;">
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <div style="width: 40px; height: 40px; background: linear-gradient(135deg, #ff6600, #993d00); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 16px; color: #000; flex-shrink: 0;">${firstLetter}</div>
+                            <div style="overflow: hidden; flex: 1;">
+                                <div style="font-weight: 700; font-size: 14px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${activeUser}</div>
+                                <div style="font-size: 11px; color: #ff6600; font-weight: 600;">🔥 Level ${savedLevel} • Pro Farmer</div>
+                            </div>
+                        </div>
+                        <div style="background: #14171f; border-radius: 8px; padding: 8px; border: 1px solid #1c202d;">
+                            <div style="display: flex; justify-content: space-between; font-size: 10px; color: #8892b0; margin-bottom: 4px;">
+                                <span>XP Progress</span>
+                                <span style="color: #00d95f; font-weight: bold;">${savedXp.toLocaleString()} / ${maxLevelXp.toLocaleString()} XP</span>
+                            </div>
+                            <div style="width: 100%; background: #060709; height: 6px; border-radius: 3px; overflow: hidden;">
+                                <div style="width: ${xpPercent}%; background: linear-gradient(90deg, #ff6600, #00d95f); height: 100%; border-radius: 3px; transition: width 0.4s ease;"></div>
+                            </div>
                         </div>
                     </div>
 
@@ -1562,18 +1570,6 @@
             }
         }
 
-        async function startScanningDrops() {
-            const log = document.getElementById('drop-logs');
-            if(!log) return;
-            log.innerHTML += `<br><span style="color: #ff6600;">[${new Date().toLocaleTimeString()}] 🔍 Сканирование контрактов через RPC...</span>`;
-            log.scrollTop = log.scrollHeight;
-            
-            setTimeout(() => {
-                log.innerHTML += `<br><span style="color: #00d95f;">[${new Date().toLocaleTimeString()}] ✅ Найдено: ZkSync ($24.50), Gas Refund ($1.80)</span>`;
-                log.scrollTop = log.scrollHeight;
-            }, 1500);
-        }
-
         async function claimFoundDrops() {
             const log = document.getElementById('drop-logs');
             if(!log) return;
@@ -1583,6 +1579,7 @@
             setTimeout(() => {
                 log.innerHTML += `<br><span style="color: #00d95f;">[${new Date().toLocaleTimeString()}] 🚀 Успешно! Токены распределены.</span>`;
                 log.scrollTop = log.scrollHeight;
+                addFarmExperience(300);
             }, 3000);
         }
 

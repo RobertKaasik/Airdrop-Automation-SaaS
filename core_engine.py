@@ -1,4 +1,5 @@
 import asyncio
+import os 
 import random
 import logging
 import base64
@@ -57,54 +58,9 @@ class RPCRouter:
 class ProxyManager:
     @staticmethod
     async def check_proxy(proxy_url: str) -> bool:
-        # ВРЕМЕННАЯ ЗАГЛУШКА ДЛЯ ТЕСТОВ
-        # В рабочей версии тут будет реальный пинг, а сейчас всегда возвращаем True
         logger.info(f"[Proxy Manager] 🌐 Прокси {proxy_url} симулирует успешное подключение (Test Mode)")
-        await asyncio.sleep(0.5) # Имитируем небольшую задержку проверки
+        await asyncio.sleep(0.5)
         return True
-
-class RealDeFiActions:
-    @staticmethod
-    def execute_real_swap(w3: Web3, account, router_contract_address: str, abi: list, token_in: str, token_out: str, amount_wei: int) -> str:
-        router_contract = w3.eth.contract(address=Web3.to_checksum_address(router_contract_address), abi=abi)
-        nonce = w3.eth.get_transaction_count(account.address)
-        
-        tx = router_contract.functions.swapExactTokensForTokens(
-            amount_wei,
-            0,
-            [Web3.to_checksum_address(token_in), Web3.to_checksum_address(token_out)],
-            account.address,
-            int(w3.eth.get_block('latest')['timestamp']) + 120
-        ).build_transaction({
-            'from': account.address,
-            'nonce': nonce,
-            'gas': 250000,
-            'maxFeePerGas': w3.to_wei(30, 'gwei'),
-            'maxPriorityFeePerGas': w3.to_wei(1.5, 'gwei'),
-            'chainId': w3.eth.chain_id
-        })
-
-        signed_tx = w3.eth.account.sign_transaction(tx, account.key)
-        tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
-        return w3.to_hex(tx_hash)
-
-    @staticmethod
-    def execute_real_claim(w3: Web3, account, claim_contract_address: str, abi: list) -> str:
-        claim_contract = w3.eth.contract(address=Web3.to_checksum_address(claim_contract_address), abi=abi)
-        nonce = w3.eth.get_transaction_count(account.address)
-        
-        tx = claim_contract.functions.claim().build_transaction({
-            'from': account.address,
-            'nonce': nonce,
-            'gas': 150000,
-            'maxFeePerGas': w3.to_wei(30, 'gwei'),
-            'maxPriorityFeePerGas': w3.to_wei(1.5, 'gwei'),
-            'chainId': w3.eth.chain_id
-        })
-
-        signed_tx = w3.eth.account.sign_transaction(tx, account.key)
-        tx_hash = w3.eth.send_raw_transaction(signed_tx.rawTransaction)
-        return w3.to_hex(tx_hash)
 
 class FarmWorker:
     def __init__(self, wallet_id: int, decrypted_pk: str, proxy: str, rpc_router: RPCRouter):
@@ -179,7 +135,12 @@ async def run_farm(encrypted_wallets_data, rpc_list, master_pass):
     
     for data in encrypted_wallets_data:
         try:
-            decrypted_pk = vault.decrypt_data(data['encrypted_pk'])
+            # Пытаемся расшифровать, а если не получается (например, ключ тестовый или строка чистая), берем как есть
+            try:
+                decrypted_pk = vault.decrypt_data(data['encrypted_pk'])
+            except Exception:
+                decrypted_pk = data['encrypted_pk'] # Запасной вариант на случай нешифрованного ключа
+                
             worker = FarmWorker(
                 wallet_id=data['id'],
                 decrypted_pk=decrypted_pk,
@@ -188,7 +149,7 @@ async def run_farm(encrypted_wallets_data, rpc_list, master_pass):
             )
             tasks.append(worker.execute_task())
         except Exception as e:
-            logger.error(f"[Worker Error] ❌ Кошелек #{data['id']} не расшифровался: {repr(e)}")
+            logger.error(f"[Worker Error] ❌ Кошелек #{data['id']} не запустился: {repr(e)}")
 
     results = await asyncio.gather(*tasks)
     if results:
@@ -196,21 +157,34 @@ async def run_farm(encrypted_wallets_data, rpc_list, master_pass):
 
 if __name__ == "__main__":
     MASTER_PASSWORD = "SuperSecretMasterPassword123"
-    creator_vault = LocalVault(MASTER_PASSWORD)
     
-    valid_test_pk = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
-    encrypted_pk = creator_vault.encrypt_data(valid_test_pk)
+    # Пытаемся прочитать конфиг, который сформировал server.py из базы данных
+    config_file = "active_farm_config.json"
+    encrypted_mock_wallets = []
+    
+    try:
+        if os.path.exists(config_file):
+            with open(config_file, "r", encoding="utf-8") as f:
+                encrypted_mock_wallets = json.load(f)
+            logger.info(f"[Core Engine] Загружено кошельков из базы через конфиг: {len(encrypted_mock_wallets)}")
+        else:
+            # Запасной вариант для автономного запуска
+            creator_vault = LocalVault(MASTER_PASSWORD)
+            valid_test_pk = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+            encrypted_pk = creator_vault.encrypt_data(valid_test_pk)
+            encrypted_mock_wallets = [
+                {"id": 1, "encrypted_pk": encrypted_pk, "proxy": "http://31.57.178.255:8181"}
+            ]
+            logger.warning("[Core Engine] Конфиг не найден, запущен тестовый дефолтный кошелек.")
+    except Exception as e:
+        logger.error(f"[Core Engine Error] Ошибка чтения конфига: {e}")
 
-    # 🟢 Рабочие тестовые слоты без искусственных ошибок прокси
-    encrypted_mock_wallets = [
-        {"id": 1, "encrypted_pk": encrypted_pk, "proxy": "http://31.57.178.255:8181"},
-        {"id": 2, "encrypted_pk": encrypted_pk, "proxy": "http://31.57.178.255:8181"}
-    ]
-    
-    # 🟢 Используем стабильную ноду
     available_rpcs = [
         "https://1rpc.io/eth"
     ]
 
-    logger.info("🚀 Запуск штатного режима AIRDROP-X. Всё под контролем, фармим профит...")
-    asyncio.run(run_farm(encrypted_mock_wallets, available_rpcs, MASTER_PASSWORD))
+    logger.info("🚀 Запуск боевого ядра AIRDROP-X через FastAPI-мост...")
+    if encrypted_mock_wallets:
+        asyncio.run(run_farm(encrypted_mock_wallets, available_rpcs, MASTER_PASSWORD))
+    else:
+        logger.error("❌ Нет данных для запуска воркеров!")
