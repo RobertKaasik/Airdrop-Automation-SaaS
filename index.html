@@ -1252,6 +1252,35 @@
                 container.innerHTML = `<span style="color: #ff3333; font-size: 13px;">⚠️ Ошибка загрузки кошельков</span>`;
             }
         }
+        async function startScanningDrops() {
+            const log = document.getElementById('drop-logs');
+            const currentUser = localStorage.getItem('airdrop_username') || "Robert";
+            if(!log) return;
+            
+            log.innerHTML += `<br><span style="color: #ff6600;">[${new Date().toLocaleTimeString()}] 🔍 Запуск реального сканера для аккаунта ${currentUser}...</span>`;
+            log.scrollTop = log.scrollHeight;
+            
+            try {
+                const response = await fetch(`/api/scan/${currentUser}`, { method: 'POST' });
+                const result = await response.json();
+
+                if (response.ok && result.status === 'success') {
+                    log.innerHTML += `<br><span style="color: #00d95f;">[${new Date().toLocaleTimeString()}] ✅ Сканирование БД и RPC завершено! Проверено кошельков: ${result.data.total_wallets_scanned}</span>`;
+                    result.data.found_drops.forEach(item => {
+                        log.innerHTML += `<br><span style="color: #fff;">👉 Кошелек [${item.wallet_name}]: найдены награды (Прокси: ${item.proxy_used})</span>`;
+                        item.allocations.forEach(alloc => {
+                            log.innerHTML += `<br>&nbsp;&nbsp;&nbsp;&nbsp;🔸 Протокол: <b>${alloc.protocol}</b> | Сумма: <span style="color: #00d95f;">${alloc.amount}</span>`;
+                        });
+                    });
+                } else {
+                    log.innerHTML += `<br><span style="color: #ff3333;">⚠️ Ошибка сканирования: ${result.message || "Неизвестная ошибка"}</span>`;
+                }
+                log.scrollTop = log.scrollHeight;
+            } catch(e) {
+                log.innerHTML += `<br><span style="color: #ff3333;">[Critical] Ошибка связи с сервером сканирования!</span>`;
+                log.scrollTop = log.scrollHeight;
+            }
+        }
 
         async function exportReportJSON() {
             try {

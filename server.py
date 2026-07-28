@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from airdrop_scanner import AirdropScanner
 
 
 # Импортируем нашу базу данных, модели и функции из database.py
@@ -142,6 +143,17 @@ async def get_user_wallets(username: str, db: Session = Depends(get_db)):
         
     return {"status": "success", "wallets": wallets_list}
 
+
+scanner_module = AirdropScanner()
+
+# API для реального сканирования кошельков из базы
+@app.post("/api/scan/{username}")
+async def trigger_wallet_scan(username: str):
+    try:
+        result = scanner_module.scan_allocations(username)
+        return {"status": "success", "data": result}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"status": "error", "message": str(e)})
 
 # 6. Запуск боевого ядра core_engine.py с реальными кошельками из БД
 @app.post("/api/start")
