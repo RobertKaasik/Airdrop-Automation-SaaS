@@ -1,7 +1,7 @@
 import hashlib
 import os
-from sqlalchemy import create_engine, Column, Integer, String, Boolean
-from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy import create_engine, Column, Integer, String, Boolean, ForeignKey
+from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
 # 1. Настройка подключения к SQLite
 SQLALCHEMY_DATABASE_URL = "sqlite:///./airdrop_x.db"
@@ -12,13 +12,10 @@ engine = create_engine(
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-# 2. Надежное хеширование через встроенный hashlib (без ошибок passlib/bcrypt)
+# 2. Хеширование паролей через hashlib
 def get_password_hash(password: str) -> str:
-    # Генерируем случайную соль
     salt = os.urandom(16).hex()
-    # Создаем хэш пароля с солью
     pwd_hash = hashlib.sha256((password + salt).encode('utf-8')).hexdigest()
-    # Возвращаем связку соль$хэш, чтобы потом можно было проверить
     return f"{salt}${pwd_hash}"
 
 def verify_password(plain_password: str, stored_password: str) -> bool:
@@ -29,7 +26,7 @@ def verify_password(plain_password: str, stored_password: str) -> bool:
     except Exception:
         return False
 
-# 3. Создаем модель пользователя (Таблица в БД)
+# 3. Модель пользователя
 class User(Base):
     __tablename__ = "users"
 
@@ -40,10 +37,25 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     subscription_tier = Column(String, default="PRO FARMER")
 
-# 4. Создаем таблицы в базе при запуске
+    # Связь с кошельками пользователя
+    wallets = relationship("Wallet", back_populates="owner", cascade="all, delete-orphan")
+
+# 4. 🔥 НОВАЯ МОДЕЛЬ: Кошельки и прокси пользователей
+class Wallet(Base):
+    __tablename__ = "wallets"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    wallet_address = Column(String, index=True)  # Публичный адрес или метка
+    encrypted_pk = Column(String)                # Зашифрованный приватный ключ
+    proxy = Column(String)                       # Индивидуальный прокси (http/socks5)
+
+    owner = relationship("User", back_populates="wallets")
+
+# 5. Создаем таблицы в базе (если их еще нет)
 Base.metadata.create_all(bind=engine)
 
-# 5. Функция для получения сессии БД
+# 6. Функция для получения сессии БД
 def get_db():
     db = SessionLocal()
     try:

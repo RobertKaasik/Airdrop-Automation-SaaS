@@ -7,8 +7,9 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-# Импортируем нашу базу данных и функции хеширования из database.py
-from database import SessionLocal, User, get_password_hash, verify_password, get_db
+
+# Импортируем нашу базу данных, модели и функции из database.py
+from database import SessionLocal, User, Wallet, get_password_hash, verify_password, get_db
 
 app = FastAPI(title="AIRDROP-X Backend with DB")
 
@@ -33,6 +34,12 @@ class UserLogin(BaseModel):
 
 class FarmRequest(BaseModel):
     wallet: str = "all"
+
+class WalletCreate(BaseModel):
+    username: str
+    wallet_address: str
+    encrypted_pk: str
+    proxy: str
 
 
 # 1. Отдаем наш интерфейс (index.html)
@@ -97,7 +104,46 @@ async def login_user(user_data: UserLogin, db: Session = Depends(get_db)):
     }
 
 
-# 4. Запуск боевого ядра core_engine.py
+# 4. API Добавления кошелька в базу данных
+@app.post("/api/wallets/add")
+async def add_wallet(data: WalletCreate, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.username == data.username).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Пользователь не найден!")
+    
+    new_wallet = Wallet(
+        user_id=user.id,
+        wallet_address=data.wallet_address,
+        encrypted_pk=data.encrypted_pk,
+        proxy=data.proxy
+    )
+    
+    db.add(new_wallet)
+    db.commit()
+    db.refresh(new_wallet)
+    
+    return {"status": "success", "message": f"Кошелек {data.wallet_address} успешно добавлен в базу!"}
+
+
+# 5. API Получения списка кошельков пользователя
+@app.get("/api/wallets/{username}")
+async def get_user_wallets(username: str, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.username == username).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Пользователь не найден!")
+    
+    wallets_list = []
+    for w in user.wallets:
+        wallets_list.append({
+            "id": w.id,
+            "wallet_address": w.wallet_address,
+            "proxy": w.proxy
+        })
+        
+    return {"status": "success", "wallets": wallets_list}
+
+
+# 6. Запуск боевого ядра core_engine.py
 @app.post("/api/start")
 async def start_farm_core(data: FarmRequest = None):
     print("\n[+] Получен запрос от панели на запуск фермы через БД-сессию!")
@@ -108,7 +154,7 @@ async def start_farm_core(data: FarmRequest = None):
         return JSONResponse(status_code=500, content={"status": "error", "message": f"Ошибка: {str(e)}"})
 
 
-# 5. Получение отчета JSON
+# 7. Получение отчета JSON
 @app.get("/api/report")
 async def get_report():
     report_file = "airdrop_x_backend_report.json"

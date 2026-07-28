@@ -542,6 +542,17 @@
         </div>
     </div>
 
+    <div class="wallet-manager-container" style="background: #141416; padding: 20px; border-radius: 12px; border: 1px solid #222; margin-bottom: 20px;">
+        <h3 style="color: #fff; margin-bottom: 15px;">➕ Добавить новый кошелек в базу</h3>
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+            <input type="text" id="newWalletAddress" placeholder="Название или адрес кошелька (например, Wallet #1)" style="padding: 10px; background: #0b0b0d; border: 1px solid #333; color: #fff; border-radius: 6px;">
+            <input type="password" id="newWalletPk" placeholder="Приватный ключ (Private Key)" style="padding: 10px; background: #0b0b0d; border: 1px solid #333; color: #fff; border-radius: 6px;">
+            <input type="text" id="newWalletProxy" placeholder="Прокси (http://ip:port или логин:пароль)" style="padding: 10px; background: #0b0b0d; border: 1px solid #333; color: #fff; border-radius: 6px;">
+            <button onclick="addNewWalletToDB()" style="padding: 12px; background: #ff6600; color: #fff; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;">Сохранить кошелек</button>
+        </div>
+        <div id="walletResponseMsg" style="margin-top: 10px; font-size: 14px;"></div>
+    </div>
+
     <div id="main-content">
         <div class="hero">
             <h1 id="hero-title">Универсальный инструмент<br>для автоматизации и сбора Airdrop.</h1>
@@ -1117,7 +1128,47 @@
             telegramLinked = !telegramLinked;
             renderDashboardContent('Settings');
         }
+        
+        async function addNewWalletToDB() {
+            // Предполагаем, что при логине мы сохранили имя юзера в localStorage
+            const currentUser = localStorage.getItem('airdrop_username') || "Robert"; // дефолт для тестов
+            
+            const addressField = document.getElementById('newWalletAddress');
+            const pkField = document.getElementById('newWalletPk');
+            const proxyField = document.getElementById('newWalletProxy');
+            const msgContainer = document.getElementById('walletResponseMsg');
 
+            if (!addressField.value || !pkField.value || !proxyField.value) {
+                msgContainer.innerHTML = `<span style="color: #ff3333;">⚠️ Заполните все поля!</span>`;
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/wallets/add', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username: currentUser,
+                        wallet_address: addressField.value.trim(),
+                        encrypted_pk: pkField.value.trim(), // В будущем здесь можно добавить клиентское шифрование через LocalVault
+                        proxy: proxyField.value.trim()
+                    })
+                });
+                
+                const result = await response.json();
+
+                if (response.ok) {
+                    msgContainer.innerHTML = `<span style="color: #00d95f;">✅ ${result.message}</span>`;
+                    addressField.value = '';
+                    pkField.value = '';
+                    proxyField.value = '';
+                } else {
+                    msgContainer.innerHTML = `<span style="color: #ff3333;">⚠️ ${result.detail || "Ошибка сохранения"}</span>`;
+                }
+            } catch (e) {
+                msgContainer.innerHTML = `<span style="color: #ff3333;">⚠️ Ошибка связи с сервером!</span>`;
+            }
+        }
         // Функция экспорта реального отчета
         async function exportReportJSON() {
             try {
