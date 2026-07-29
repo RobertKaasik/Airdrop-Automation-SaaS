@@ -87,9 +87,6 @@
         .divider-container::before { margin-right: 10px; }
         .divider-container::after { margin-left: 10px; }
 
-        .btn-google { width: 100%; background-color: #07050c; color: #e0aaff; border: 1px solid rgba(157, 78, 221, 0.3); padding: 12px; font-size: 13px; font-weight: 600; border-radius: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; transition: 0.2s; }
-        .btn-google:hover { background-color: rgba(157, 78, 221, 0.15); border-color: #c77dff; }
-
         .error-toast {
             position: absolute; bottom: -55px; left: 0; right: 0; background-color: #1a0826;
             border: 1px solid #ff3366; border-radius: 12px; padding: 10px 14px; color: #ff88aa;
@@ -120,11 +117,26 @@
         .section-title { font-size: 26px; font-weight: 700; margin: 30px 16px 16px 16px; text-align: center; color: #fff; text-shadow: 0 0 15px rgba(157, 78, 221, 0.3); }
         
         .features-grid { display: grid; grid-template-columns: 1fr; gap: 16px; width: 100%; max-width: 1000px; margin: 0 auto 50px auto; padding: 0 16px; }
-        .feature-card { background-color: #100a1c; border: 1px solid rgba(157, 78, 221, 0.25); border-radius: 20px; padding: 24px; text-align: left; box-shadow: 0 10px 30px rgba(0,0,0,0.5), 0 0 15px rgba(123, 44, 191, 0.1); transition: 0.3s; }
-        .feature-card:hover { border-color: rgba(199, 125, 255, 0.6); box-shadow: 0 10px 30px rgba(0,0,0,0.7), 0 0 25px rgba(157, 78, 221, 0.3); }
+        .feature-card { background-color: #100a1c; border: 1px solid rgba(157, 78, 221, 0.25); border-radius: 20px; padding: 24px; text-align: left; box-shadow: 0 10px 30px rgba(0,0,0,0.5), 0 0 15px rgba(123, 44, 191, 0.1); }
         .card-icon { font-size: 24px; margin-bottom: 12px; display: inline-block; background: rgba(157, 78, 221, 0.15); padding: 10px; border-radius: 14px; border: 1px solid rgba(157, 78, 221, 0.3); }
         .feature-card h3 { font-size: 17px; margin: 0 0 8px 0; color: #e0aaff; }
         .feature-card p { font-size: 13px; color: #b19cd9; margin: 0; line-height: 1.5; }
+
+        .showcase-section { width: 100%; max-width: 1000px; margin: 0 auto 60px auto; padding: 0 16px; display: flex; flex-direction: column; gap: 30px; }
+        .showcase-card {
+            background-color: #100a1c; border: 1px solid rgba(157, 78, 221, 0.3); border-radius: 20px;
+            padding: 24px; display: flex; flex-direction: column; gap: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.6), 0 0 20px rgba(123, 44, 191, 0.15);
+        }
+        .showcase-content h3 { font-size: 20px; color: #e0aaff; margin: 0 0 10px 0; display: flex; align-items: center; gap: 10px; }
+        .showcase-content p { font-size: 14px; color: #b19cd9; line-height: 1.6; margin: 0 0 12px 0; }
+        .media-placeholder {
+            width: 100%; height: 220px; background: #07050c; border: 2px dashed rgba(157, 78, 221, 0.4);
+            border-radius: 16px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+            color: #7b68ee; font-size: 13px; gap: 8px; position: relative; overflow: hidden;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
+        }
+        .media-placeholder span.media-icon { font-size: 32px; }
 
         .faq-section { width: 100%; max-width: 900px; margin: 0 auto 60px auto; text-align: left; padding: 0 16px; }
         .faq-item { background-color: #100a1c; border: 1px solid rgba(157, 78, 221, 0.25); border-radius: 16px; margin-bottom: 10px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.4); }
@@ -144,11 +156,11 @@
         .bottom-sheet { background: #120c22; border-top: 1px solid rgba(157, 78, 221, 0.4); border-radius: 24px 24px 0 0; width: 100%; padding: 24px 20px 36px 20px; max-height: 80vh; overflow-y: auto; box-shadow: 0 -20px 50px rgba(110, 44, 180, 0.4); }
         .sheet-handle { width: 40px; height: 4px; background: rgba(157, 78, 221, 0.4); border-radius: 2px; margin: 0 auto 20px auto; }
         .sheet-menu-item { padding: 14px 16px; color: #fff; border-radius: 16px; font-weight: 500; font-size: 15px; cursor: pointer; display: flex; align-items: center; gap: 14px; margin-bottom: 8px; background: #18102e; border: 1px solid rgba(157, 78, 221, 0.25); }
-        .sheet-menu-item:hover, .sheet-menu-item.active { background: linear-gradient(135deg, #7b2cbf, #9d4edd); color: #fff; font-weight: bold; border-color: #c77dff; box-shadow: 0 0 15px rgba(157, 78, 221, 0.5); }
+        .sheet-menu-item.active { background: linear-gradient(135deg, #7b2cbf, #9d4edd); color: #fff; font-weight: bold; border-color: #c77dff; }
 
         .sidebar-menu-item { padding: 12px 16px; color: #b19cd9; border-radius: 14px; font-weight: 500; font-size: 14px; cursor: pointer; display: flex; align-items: center; transition: 0.2s; }
         .sidebar-menu-item:hover { background: rgba(157, 78, 221, 0.15); color: #fff; }
-        .sidebar-menu-item.active { background: linear-gradient(135deg, rgba(123, 44, 191, 0.4), rgba(157, 78, 221, 0.4)); color: #fff; font-weight: 600; border-left: 3px solid #c77dff; box-shadow: inset 0 0 15px rgba(157, 78, 221, 0.2); }
+        .sidebar-menu-item.active { background: linear-gradient(135deg, rgba(123, 44, 191, 0.4), rgba(157, 78, 221, 0.4)); color: #fff; font-weight: 600; border-left: 3px solid #c77dff; }
 
         .dashboard-wrapper { max-width: 1200px; width: 100%; margin: 16px auto; padding: 0 12px; display: flex; flex-direction: column; gap: 16px; flex: 1; }
 
@@ -157,10 +169,9 @@
             background: #07050c; border: 1px solid rgba(157,78,221,0.25); border-radius: 12px; padding: 10px 4px;
             text-align: center; cursor: pointer; transition: 0.2s; color: #b19cd9; font-size: 11px; font-weight: 600;
         }
-        .calendar-day:hover { border-color: #c77dff; color: #fff; }
         .calendar-day.active {
             background: linear-gradient(135deg, #7b2cbf, #9d4edd); color: #fff; border-color: #e0aaff;
-            box-shadow: 0 0 12px rgba(157,78,221,0.5); text-shadow: 0 0 5px rgba(255,255,255,0.5);
+            box-shadow: 0 0 12px rgba(157,78,221,0.5);
         }
 
         .tooltip-container { position: relative; display: inline-flex; align-items: center; cursor: help; }
@@ -169,7 +180,7 @@
             text-align: left; border-radius: 12px; padding: 10px 12px; font-size: 11px;
             border: 1px solid rgba(157, 78, 221, 0.4); position: absolute; z-index: 100;
             bottom: 125%; left: 50%; transform: translateX(-50%);
-            opacity: 0; transition: opacity 0.2s; box-shadow: 0 10px 25px rgba(0,0,0,0.9), 0 0 15px rgba(123, 44, 191, 0.4);
+            opacity: 0; transition: opacity 0.2s; box-shadow: 0 10px 25px rgba(0,0,0,0.9);
             line-height: 1.4; font-weight: normal;
         }
         .tooltip-container:hover .tooltip-text { visibility: visible; opacity: 1; }
@@ -179,6 +190,10 @@
             .hero-buttons { flex-direction: row; max-width: none; justify-content: center; width: auto; }
             .btn-purple-lg, .btn-dark-lg { width: auto; min-width: 200px; }
             .features-grid { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); padding: 0; }
+            .showcase-card { flex-direction: row; align-items: center; }
+            .showcase-card:nth-child(even) { flex-direction: row-reverse; }
+            .showcase-content, .media-placeholder { flex: 1; }
+            .media-placeholder { height: 260px; }
             .footer { flex-direction: row; justify-content: space-between; padding: 30px 40px; }
             .mobile-nav-bar { display: none !important; }
             .dashboard-wrapper { flex-direction: row; padding: 0 20px; gap: 24px; }
@@ -226,10 +241,80 @@
         </div>
     </div>
 
+    <!-- Модальное окно выбора тарифов -->
+    <div class="modal-overlay" id="pricingModal" onclick="handlePricingOverlayClick(event)">
+        <div class="auth-modal" style="max-width: 950px; width: 95%;">
+            <div class="modal-logo">
+                <span id="p-title-modal">⚡ Выберите тарифный план AIRDROP-X</span>
+                <span onclick="closePricingModal()" style="cursor: pointer; color: #b19cd9; font-size: 20px;">✕</span>
+            </div>
+            <div class="modal-desc" id="p-desc-modal" style="text-align: center; margin-bottom: 24px;">
+                Мощный инструмент автоматизации. Выберите подходящий срок доступа к закрытому ПО.
+            </div>
+
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px;">
+                
+                <!-- Стандарт (1 месяц) -->
+                <div style="background: #07050c; border: 1px solid rgba(157,78,221,0.3); border-radius: 18px; padding: 22px; display: flex; flex-direction: column; justify-content: space-between;">
+                    <div>
+                        <div id="p-std-top" style="font-size: 14px; font-weight: bold; color: #b19cd9; margin-bottom: 6px;">ТЕСТОВЫЙ ПЕРИОД</div>
+                        <div id="p-std-name" style="font-size: 22px; font-weight: 800; color: #fff; margin-bottom: 4px;">Стандарт</div>
+                        <div style="font-size: 26px; font-weight: 800; color: #e0aaff; margin-bottom: 16px;">$35 <span id="p-std-per" style="font-size: 13px; color: #b19cd9; font-weight: normal;">/ 1 месяц</span></div>
+                        
+                        <div style="border-top: 1px solid rgba(157,78,221,0.2); padding-top: 14px; display: flex; flex-direction: column; gap: 10px; font-size: 13px; color: #b19cd9;">
+                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-std-f1">Лимит: до 5 кошельков (воркеров)</span></div>
+                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-std-f2">Только сеть Base L2</span></div>
+                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-std-f3">Базовый Claim Looter и Anti-Sybil</span></div>
+                        </div>
+                    </div>
+                    <button type="button" id="p-std-btn" onclick="selectPlanAndRegister('Standard', 35)" class="btn-dark-lg" style="margin-top: 20px; width: 100%; padding: 12px; font-size: 13px;">Выбрать Стандарт</button>
+                </div>
+
+                <!-- PRO (3 месяца) -->
+                <div style="background: linear-gradient(135deg, #120c22, #18102e); border: 2px solid #c77dff; border-radius: 18px; padding: 22px; display: flex; flex-direction: column; justify-content: space-between; position: relative; box-shadow: 0 0 30px rgba(157,78,221,0.3);">
+                    <div id="p-pro-badge" style="position: absolute; top: -12px; right: 20px; background: linear-gradient(135deg, #7b2cbf, #9d4edd); color: #fff; font-size: 10px; font-weight: bold; padding: 4px 10px; border-radius: 10px; text-transform: uppercase;">Рекомендуемый</div>
+                    <div>
+                        <div id="p-pro-top" style="font-size: 14px; font-weight: bold; color: #c77dff; margin-bottom: 6px;">КВАРТАЛЬНЫЙ ДОСТУП</div>
+                        <div id="p-pro-name" style="font-size: 22px; font-weight: 800; color: #fff; margin-bottom: 4px;">PRO Фермер</div>
+                        <div style="font-size: 26px; font-weight: 800; color: #e0aaff; margin-bottom: 16px;">$90 <span id="p-pro-per" style="font-size: 13px; color: #b19cd9; font-weight: normal;">/ 3 месяца ($30/мес)</span></div>
+                        
+                        <div style="border-top: 1px solid rgba(157,78,221,0.2); padding-top: 14px; display: flex; flex-direction: column; gap: 10px; font-size: 13px; color: #b19cd9;">
+                            <div style="display: flex; align-items: flex-start; gap: 8px; color: #fff;"><span>✓</span> <span id="p-pro-f1"><b>Лимит до 15 кошельков</b> (воркеров)</span></div>
+                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-pro-f2">Все сети (Arbitrum, ZkSync, Scroll, Solana...)</span></div>
+                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-pro-f3">Автоматический фоновый планировщик</span></div>
+                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-pro-f4">Приоритетная поддержка 24/7</span></div>
+                        </div>
+                    </div>
+                    <button type="button" id="p-pro-btn" onclick="selectPlanAndRegister('Pro', 90)" class="btn-purple-lg" style="margin-top: 20px; width: 100%; padding: 12px; font-size: 13px;">Получить PRO доступ</button>
+                </div>
+
+                <!-- Premium (9 месяцев) -->
+                <div style="background: #07050c; border: 1px solid rgba(157,78,221,0.3); border-radius: 18px; padding: 22px; display: flex; flex-direction: column; justify-content: space-between;">
+                    <div>
+                        <div id="p-prem-top" style="font-size: 14px; font-weight: bold; color: #00d95f; margin-bottom: 6px;">СЕЗОННЫЙ ПАКЕТ</div>
+                        <div id="p-prem-name" style="font-size: 22px; font-weight: 800; color: #fff; margin-bottom: 4px;">Premium VIP</div>
+                        <div style="font-size: 26px; font-weight: 800; color: #e0aaff; margin-bottom: 16px;">$220 <span id="p-prem-per" style="font-size: 13px; color: #b19cd9; font-weight: normal;">/ 9 месяцев ($24/мес)</span></div>
+                        
+                        <div style="border-top: 1px solid rgba(157,78,221,0.2); padding-top: 14px; display: flex; flex-direction: column; gap: 10px; font-size: 13px; color: #b19cd9;">
+                            <div style="display: flex; align-items: flex-start; gap: 8px; color: #00d95f;"><span>✓</span> <span id="p-prem-f1"><b>Лимит до 30 слотов</b> кошельков</span></div>
+                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-prem-f2">Все текущие и будущие блокчейны</span></div>
+                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-prem-f3">Telegram Webhook пуш-уведомления</span></div>
+                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-prem-f4">Личный менеджер и ранний доступ</span></div>
+                        </div>
+                    </div>
+                    <button type="button" id="p-prem-btn" onclick="selectPlanAndRegister('Premium', 220)" class="btn-dark-lg" style="margin-top: 20px; width: 100%; padding: 12px; font-size: 13px;">Выбрать Premium</button>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- Модалка авторизации -->
     <div class="modal-overlay" id="authModal" onclick="handleOverlayClick(event)">
         <div class="auth-modal" id="modalContainer"></div>
     </div>
 
+    <!-- Модалка кошелька -->
     <div class="modal-overlay" id="walletActionModal">
         <div class="auth-modal" style="max-width: 440px;">
             <div class="modal-logo">
@@ -239,10 +324,10 @@
             
             <div style="display: flex; flex-direction: column; gap: 14px;">
                 <div style="background: #07050c; padding: 14px; border-radius: 14px; border: 1px solid rgba(0,217,95,0.4);">
-                    <div style="font-size: 12px; font-weight: bold; color: #00d95f; margin-bottom: 10px;">➕ Пополнить баланс воркера:</div>
+                    <div style="font-size: 12px; font-weight: bold; color: #00d95f; margin-bottom: 10px;" id="wm-dep-title">➕ Пополнить баланс воркера:</div>
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
                         <div>
-                            <label style="font-size: 10px; color: #b19cd9; display: block; margin-bottom: 2px;">Сеть:</label>
+                            <label style="font-size: 10px; color: #b19cd9; display: block; margin-bottom: 2px;" id="wm-net-lbl">Сеть:</label>
                             <select id="depositNetwork" class="auth-input" style="padding: 8px 10px; font-size: 12px;">
                                 <option value="Base">Base L2</option>
                                 <option value="Arbitrum">Arbitrum</option>
@@ -251,15 +336,15 @@
                             </select>
                         </div>
                         <div>
-                            <label style="font-size: 10px; color: #b19cd9; display: block; margin-bottom: 2px;">Сумма (ETH):</label>
+                            <label style="font-size: 10px; color: #b19cd9; display: block; margin-bottom: 2px;" id="wm-amt-lbl">Сумма (ETH):</label>
                             <input type="number" step="0.001" id="depositAmount" class="auth-input" value="0.005" style="padding: 8px 10px; font-size: 12px;">
                         </div>
                     </div>
-                    <button type="button" onclick="executeWalletDeposit()" class="btn-modal-primary" style="background: linear-gradient(135deg, #008833, #00d95f); color: #000; padding: 10px; font-size: 13px;">💳 Пополнить с мастер-аккаунта</button>
+                    <button type="button" onclick="executeWalletDeposit()" class="btn-modal-primary" id="wm-dep-btn" style="background: linear-gradient(135deg, #008833, #00d95f); color: #000; padding: 10px; font-size: 13px;">💳 Пополнить с мастер-аккаунта</button>
                 </div>
 
                 <div style="background: #07050c; padding: 14px; border-radius: 14px; border: 1px solid rgba(157,78,221,0.3);">
-                    <div style="font-size: 12px; font-weight: bold; color: #c77dff; margin-bottom: 10px;">✏️ Редактировать данные:</div>
+                    <div style="font-size: 12px; font-weight: bold; color: #c77dff; margin-bottom: 10px;" id="wm-edit-title">✏️ Редактировать данные:</div>
                     <div class="input-group" style="margin-bottom: 8px;">
                         <input type="text" id="editWalletAddress" class="auth-input" placeholder="Название или адрес" autocomplete="off" name="custom_addr_edit">
                     </div>
@@ -269,15 +354,16 @@
                     <div class="input-group" style="margin-bottom: 10px;">
                         <input type="text" id="editWalletProxy" class="auth-input" placeholder="Прокси" autocomplete="off" name="custom_proxy_edit">
                     </div>
-                    <button type="button" onclick="executeWalletUpdate()" class="btn-modal-primary" style="padding: 10px; font-size: 13px;">💾 Сохранить изменения</button>
+                    <button type="button" onclick="executeWalletUpdate()" class="btn-modal-primary" id="wm-save-btn" style="padding: 10px; font-size: 13px;">💾 Сохранить изменения</button>
                 </div>
 
-                <button type="button" onclick="executeWalletDeleteFromModal()" class="btn-modal-secondary" style="border-color: rgba(255, 51, 102, 0.5); color: #ff88aa; padding: 10px; font-size: 13px;">🗑️ Удалить кошелек навсегда</button>
+                <button type="button" onclick="executeWalletDeleteFromModal()" class="btn-modal-secondary" id="wm-del-btn" style="border-color: rgba(255, 51, 102, 0.5); color: #ff88aa; padding: 10px; font-size: 13px;">🗑️ Удалить кошелек навсегда</button>
             </div>
             <div id="walletActionMsg" style="margin-top: 10px; font-size: 12px; text-align: center;"></div>
         </div>
     </div>
 
+    <!-- Мобильное нижнее меню -->
     <div class="bottom-sheet-overlay" id="bottomSheetOverlay" onclick="handleSheetOverlayClick(event)">
         <div class="bottom-sheet" id="bottomSheetContent">
             <div class="sheet-handle"></div>
@@ -291,7 +377,7 @@
             <p id="hero-desc">Фармите поинты, сканируйте кошельки на наличие распределений и клеймите аирдропы в один клик с защитой Anti-Sybil.</p>
             
             <div class="hero-buttons">
-                <button id="farm-btn" class="btn-purple-lg" onclick="openModal('register')">Получить доступ ($160)</button>
+                <button id="farm-btn" class="btn-purple-lg" onclick="openPricingModal()">Получить доступ</button>
                 <button id="settings-btn" class="btn-dark-lg" onclick="scrollToFeatures()">Подробнее</button>
             </div>
         </div>
@@ -325,6 +411,57 @@
             </div>
         </div>
 
+        <!-- Презентация с плейсхолдерами под гифки -->
+        <div class="section-title" id="instr-title">Как работает AIRDROP-X (Инструкция)</div>
+        <div class="showcase-section">
+            <div class="showcase-card">
+                <div class="showcase-content">
+                    <h3 id="sc1-t">🌾 1. Авто-фарм и Anti-Sybil Ядро</h3>
+                    <p id="sc1-d1"><b>Что это и почему это выгодно:</b> Ручное выполнение сотен транзакций в день отнимает уйму сил и времени. Наш авто-фарминг через встроенное ядро полностью имитирует активность живого пользователя.</p>
+                    <p id="sc1-d2">Софт рандомизирует задержки, порядок кошельков и суммы транзакций, защищая от сибил-банов.</p>
+                </div>
+                <div class="media-placeholder">
+                    <span class="media-icon">🎬</span>
+                    <span id="ph1">GIF-анимация процесса авто-фарма</span>
+                </div>
+            </div>
+
+            <div class="showcase-card">
+                <div class="showcase-content">
+                    <h3 id="sc2-t">👥 2. Лимиты и добавление кошельков</h3>
+                    <p id="sc2-d1"><b>Удобство и защита тарифов:</b> Тариф Standard позволяет запустить до 5 кошельков (для теста), в то время как PRO открывает до 30 слотов, а Premium снимает любые ограничения.</p>
+                    <p id="sc2-d2">Импортируйте ключи и прокси в один клик, управляя всей фермой из единой панели.</p>
+                </div>
+                <div class="media-placeholder">
+                    <span class="media-icon">🖼️</span>
+                    <span id="ph2">Скриншот импорта кошельков</span>
+                </div>
+            </div>
+
+            <div class="showcase-card">
+                <div class="showcase-content">
+                    <h3 id="sc3-t">📦 3. Автоматический сбор лута (Claim Looter)</h3>
+                    <p id="sc3-d1"><b>Когда и как это происходит:</b> Как только проект объявляет раздачу ретродропа, сканер находит распределенные токены.</p>
+                    <p id="sc3-d2">Поддерживаются Base, Arbitrum, ZkSync, Scroll, Solana и др. Один клик — и награды у вас.</p>
+                </div>
+                <div class="media-placeholder">
+                    <span class="media-icon">🎬</span>
+                    <span id="ph3">GIF-анимация клейма наград</span>
+                </div>
+            </div>
+
+            <div class="showcase-card">
+                <div class="showcase-content">
+                    <h3 id="sc4-t">💬 4. Профессиональная поддержка 24/7</h3>
+                    <p id="sc4-d1"><b>Мы всегда рядом:</b> Наша команда техподдержки поможет вам настроить прокси, газ и мосты для максимального профита.</p>
+                </div>
+                <div class="media-placeholder">
+                    <span class="media-icon">🖼️</span>
+                    <span id="ph4">Скриншот чата поддержки</span>
+                </div>
+            </div>
+        </div>
+
         <div id="faq-heading" class="section-title">Часто задаваемые вопросы</div>
         <div class="faq-section">
             <div class="faq-item" onclick="toggleFaq(this)">
@@ -332,20 +469,16 @@
                 <div class="faq-answer" id="a1">Софт сканирует смарт-контракты и чекеры проектов, находит распределенные на ваши кошельки токены и безопасно подписывает транзакции сбора.</div>
             </div>
             <div class="faq-item" onclick="toggleFaq(this)">
-                <div class="faq-question"><span id="q2">Безопасно ли подключать мультиаккаунты?</span> <span>+</span></div>
-                <div class="faq-answer" id="a2">Да, система полностью изолирует сессии, прокси и отпечатки, исключая риск сибил-бана от протоколов.</div>
+                <div class="faq-question"><span id="q2">В чем разница между Standard и PRO?</span> <span>+</span></div>
+                <div class="faq-answer" id="a2">Standard ограничен 5 кошельками и сетью Base. PRO дает до 30 кошельков, доступ ко всем сетям (Arbitrum, ZkSync, Solana) и фоновый планировщик.</div>
             </div>
             <div class="faq-item" onclick="toggleFaq(this)">
                 <div class="faq-question"><span id="q3">Нужно ли настраивать прокси для каждого кошелька?</span> <span>+</span></div>
-                <div class="faq-answer" id="a3">Да, софт поддерживает привязку индивидуальных HTTP/Socks5 прокси к каждому адресу, чтобы антифрод-системы не связывали ваши кошельки между собой.</div>
+                <div class="faq-answer" id="a3">Да, софт поддерживает привязку индивидуальных HTTP/Socks5 прокси к каждому адресу.</div>
             </div>
             <div class="faq-item" onclick="toggleFaq(this)">
-                <div class="faq-question"><span id="q4">Как оптимизируются расходы на газ при клейме?</span> <span>+</span></div>
-                <div class="faq-answer" id="a4">Встроенный модуль Anti-Sybil автоматически рандомизирует время отправки транзакций и подбирает оптимальный Gwei, экономя ваши средства на комиссиях сети.</div>
-            </div>
-            <div class="faq-item" onclick="toggleFaq(this)">
-                <div class="faq-question"><span id="q5">Как получить доступ к софту?</span> <span>+</span></div>
-                <div class="faq-answer" id="a5">Оформите подписку в личном кабинете или свяжитесь с поддержкой, количество мест строго ограничено (300 слотов).</div>
+                <div class="faq-question"><span id="q4">Как получить доступ к софту?</span> <span>+</span></div>
+                <div class="faq-answer" id="a4">Выберите тариф вверху сайта, оформите подписку и залогиньтесь. Количество мест ограничено.</div>
             </div>
         </div>
     </div>
@@ -353,26 +486,11 @@
     <div id="dashboard-content" style="display: none;" class="dashboard-wrapper"></div>
 
     <div class="mobile-nav-bar" id="mobileNavBar" style="display: none;">
-        <button class="mobile-nav-item active" onclick="switchMobileNav('Looter', this)">
-            <span class="icon">📦</span>
-            <span id="mn-looter">Looter</span>
-        </button>
-        <button class="mobile-nav-item" onclick="switchMobileNav('Farming', this)">
-            <span class="icon">🌾</span>
-            <span id="mn-farm">Фарм</span>
-        </button>
-        <button class="mobile-nav-item" onclick="switchMobileNav('Proxy', this)">
-            <span class="icon">🌐</span>
-            <span id="mn-proxy">Прокси</span>
-        </button>
-        <button class="mobile-nav-item" onclick="switchMobileNav('Statistics', this)">
-            <span class="icon">📊</span>
-            <span id="mn-stats">Статистика</span>
-        </button>
-        <button class="mobile-nav-item" onclick="openBottomSheetMenu()">
-            <span class="icon">☰</span>
-            <span id="mn-more">Ещё</span>
-        </button>
+        <button class="mobile-nav-item active" onclick="switchMobileNav('Looter', this)"><span class="icon">📦</span><span id="mn-looter">Looter</span></button>
+        <button class="mobile-nav-item" onclick="switchMobileNav('Farming', this)"><span class="icon">🌾</span><span id="mn-farm">Фарм</span></button>
+        <button class="mobile-nav-item" onclick="switchMobileNav('Proxy', this)"><span class="icon">🌐</span><span id="mn-proxy">Прокси</span></button>
+        <button class="mobile-nav-item" onclick="switchMobileNav('Statistics', this)"><span class="icon">📊</span><span id="mn-stats">Статистика</span></button>
+        <button class="mobile-nav-item" onclick="openBottomSheetMenu()"><span class="icon">☰</span><span id="mn-more">Ещё</span></button>
     </div>
 
     <div class="footer">
@@ -402,14 +520,15 @@
         let telegramLinked = false;
         let selectedNetwork = 'Base';
         let activeSelectedWalletId = null;
+        let userPlan = 'Standard';
 
         const translations = {
             ru: {
                 title: "AIRDROP-X — Cyberpunk SaaS Panel",
-                login: "Войти", logout: "Выйти", langCode: "RU", langName: "Русский",
+                login: "Войти", logout: "Выйти", langCode: "RU",
                 heroTitle: "Универсальный инструмент<br>для автоматизации и сбора Airdrop.",
                 heroDesc: "Фармите поинты, сканируйте кошельки на наличие распределений и клеймите аирдропы в один клик с защитой Anti-Sybil.",
-                farmBtn: "Получить доступ ($160)", settingsBtn: "Подробнее",
+                farmBtn: "Получить доступ", settingsBtn: "Подробнее",
                 bannerText: "Приватное ПО с ограниченным количеством слотов для защиты от детектирования.",
                 featuresHeading: "Возможности платформы", faqHeading: "Часто задаваемые вопросы",
                 c1t: "Drop Scanner & Looter", c1d: "Автоматический поиск доступных для клейма аирдропов и ретродропов по всем подключенным кошелькам.",
@@ -419,8 +538,7 @@
                 dashTitle: "Панель поиска и авто-сбора лута (Claim Looter)",
                 dashDesc: "Сканируйте свои кошельки на наличие незабранных наград и запускайте авто-фарминг объема.",
                 logInit: "[System] Антифрод-ядро инициализировано. Ожидание сканирования...",
-                scanBtn: "🔍 Запустить авто-сбор (Claim Looter)", claimBtn: "Клеймить всё",
-                exportBtn: "📥 Экспорт отчета фермы (JSON)",
+                scanBtn: "🔍 Запустить авто-сбор (Claim Looter)",
                 farmTabBtn: "Авто-Фарминг", tasksTabBtn: "Активные задачи", proxyTabBtn: "Прокси менеджер", statsTabBtn: "Статистика",
                 looterMenu: "Looter & Drops", farmMenu: "Авто-Фарминг", tasksMenu: "Активные задачи", proxyMenu: "Прокси Чекинг", walletsMenu: "Кошельки", statsMenu: "Статистика", billingMenu: "Биллинг и Подписка", settingsMenu: "Настройки",
                 
@@ -435,21 +553,20 @@
                 
                 statsTitle: "📊 Статистика и отчеты фермы",
                 statsDesc: "Общие показатели эффективности, успешные клеймы и выгрузка отчетов.",
+                exportBtn: "📥 Экспорт отчета фермы (JSON)",
                 
                 tasksTitle: "⚡ Очередь активных задач (Live Queue)",
                 tasksDesc: "Мониторинг запущенных скриптов накрутки объемов и клейма по кошелькам.",
                 
-                tgLinkTitle: "🤖 Telegram Уведомления",
-                tgLinkDesc: "Получайте мгновенные пуш-уведомления в Telegram, когда софт находит жирный дроп или завершает сессию.",
                 tgConnectBtn: "Привязать Telegram Bot",
                 tgConnectedText: "Telegram успешно привязан (@RubyFarmer_bot) ✅"
             },
             en: {
                 title: "AIRDROP-X — Cyberpunk SaaS Panel",
-                login: "Login", logout: "Logout", langCode: "US", langName: "English",
+                login: "Login", logout: "Logout", langCode: "US",
                 heroTitle: "Universal Tool<br>for Airdrop Automation & Claiming.",
                 heroDesc: "Farm points, scan wallets for allocations, and claim airdrops in one click with robust Anti-Sybil protection.",
-                farmBtn: "Get Access ($160)", settingsBtn: "Details",
+                farmBtn: "Get Access", settingsBtn: "Details",
                 bannerText: "Private software with limited slots to ensure maximum safety and reliability.",
                 featuresHeading: "Platform Features", faqHeading: "Frequently Asked Questions",
                 c1t: "Drop Scanner & Looter", c1d: "Automatic search for claimable airdrops and retro-drops across all connected wallets.",
@@ -459,8 +576,7 @@
                 dashTitle: "Airdrop Search & Claim Dashboard",
                 dashDesc: "Scan your wallets for unclaimed rewards and launch automated volume farming.",
                 logInit: "[System] Anti-sybil core initialized. Waiting for scan...",
-                scanBtn: "🔍 Run Claim Looter", claimBtn: "Claim All",
-                exportBtn: "📥 Export Farm Report (JSON)",
+                scanBtn: "🔍 Run Claim Looter",
                 farmTabBtn: "Auto-Farming", tasksTabBtn: "Active Tasks", proxyTabBtn: "Proxy Checker", statsTabBtn: "Statistics",
                 looterMenu: "Looter & Drops", farmMenu: "Auto-Farming", tasksMenu: "Active Tasks", proxyMenu: "Proxy Checker", walletsMenu: "Wallets", statsMenu: "Statistics", billingMenu: "Billing & Subscription", settingsMenu: "Settings",
                 
@@ -475,21 +591,20 @@
                 
                 statsTitle: "📊 Farm Statistics & Reports",
                 statsDesc: "Overall performance metrics, successful claims, and report exports.",
+                exportBtn: "📥 Export Farm Report (JSON)",
                 
                 tasksTitle: "⚡ Live Task Queue",
                 tasksDesc: "Monitoring running volume generation scripts and claims across wallets.",
                 
-                tgLinkTitle: "🤖 Telegram Notifications",
-                tgLinkDesc: "Receive instant push notifications in Telegram when software finds a lucrative drop or finishes a session.",
                 tgConnectBtn: "Link Telegram Bot",
                 tgConnectedText: "Telegram successfully linked (@RubyFarmer_bot) ✅"
             },
             zh: {
                 title: "AIRDROP-X — Cyberpunk SaaS Panel",
-                login: "登录", logout: "登出", langCode: "CN", langName: "中文",
+                login: "登录", logout: "登出", langCode: "CN",
                 heroTitle: "用于空投自动化与<br>领取的通用工具。",
                 heroDesc: "使用强大的防女巫保护，一键刷取积分、扫描钱包额度并领取空投。",
-                farmBtn: "获取权限 ($160)", settingsBtn: "了解详情",
+                farmBtn: "获取权限", settingsBtn: "了解详情",
                 bannerText: "名额有限的私有软件，确保最高安全性和可靠性。",
                 featuresHeading: "平台功能", faqHeading: "常见问题",
                 c1t: "空投扫描与领取", c1d: "自动在所有连接的钱包中搜索可领取的空投和retro-drop。",
@@ -499,8 +614,7 @@
                 dashTitle: "空投搜索与领取面板",
                 dashDesc: "扫描您的钱包以查找未认领的奖励并启动自动化刷量农场。",
                 logInit: "[System] Core initialized...",
-                scanBtn: "🔍 运行自动领取 (Looter)", claimBtn: "全部领取",
-                exportBtn: "📥 导出农场报告 (JSON)",
+                scanBtn: "🔍 运行自动领取 (Looter)",
                 farmTabBtn: "自动刷量", tasksTabBtn: "活动任务", proxyTabBtn: "代理检测", statsTabBtn: "数据统计",
                 looterMenu: "Looter & Drops", farmMenu: "自动刷量", tasksMenu: "活动任务", proxyMenu: "代理检测", walletsMenu: "钱包管理", statsMenu: "数据统计", billingMenu: "账单与订阅", settingsMenu: "系统设置",
                 
@@ -515,12 +629,11 @@
                 
                 statsTitle: "📊 农场统计与报告",
                 statsDesc: "整体性能指标、成功领取记录及报告导出。",
+                exportBtn: "📥 导出农场报告 (JSON)",
                 
                 tasksTitle: "⚡ 实时任务队列",
                 tasksDesc: "监控各钱包正在运行的刷量脚本和领取状态。",
                 
-                tgLinkTitle: "🤖 Telegram 通知",
-                tgLinkDesc: "当软件发现大额空投或完成会话时，在 Telegram 中接收即时推送通知。",
                 tgConnectBtn: "绑定 Telegram 机器人",
                 tgConnectedText: "Telegram 绑定成功 (@RubyFarmer_bot) ✅"
             }
@@ -537,7 +650,6 @@
             loginBtn.innerText = t.login;
             loginBtn.style.borderColor = "rgba(157,78,221,0.3)";
             loginBtn.style.color = "#e0aaff";
-            loginBtn.onclick = function() { openModal('login'); };
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
 
@@ -575,12 +687,6 @@
                 document.getElementById('c1-t').innerText = t.c1t; document.getElementById('c1-d').innerText = t.c1d;
                 document.getElementById('c2-t').innerText = t.c2t; document.getElementById('c2-d').innerText = t.c2d;
                 document.getElementById('c3-t').innerText = t.c3t; document.getElementById('c3-d').innerText = t.c3d;
-
-                document.getElementById('q1').innerText = t.q1; document.getElementById('a1').innerText = t.a1;
-                document.getElementById('q2').innerText = t.q2; document.getElementById('a2').innerText = t.a2;
-                document.getElementById('q3').innerText = t.q3; document.getElementById('a3').innerText = t.a3;
-                document.getElementById('q4').innerText = t.q4; document.getElementById('a4').innerText = t.a4;
-                document.getElementById('q5').innerText = t.q5; document.getElementById('a5').innerText = t.a5;
             } else {
                 renderDashboardContent(currentSection);
             }
@@ -591,6 +697,20 @@
             document.getElementById('features-section').scrollIntoView({ behavior: 'smooth' });
         }
 
+        function openPricingModal() { document.getElementById('pricingModal').classList.add('show'); }
+        function closePricingModal() { document.getElementById('pricingModal').classList.remove('show'); }
+        function handlePricingOverlayClick(event) {
+            if (event.target.id === 'pricingModal') closePricingModal();
+        }
+
+        function selectPlanAndRegister(planName, price) {
+            closePricingModal();
+            userPlan = planName;
+            localStorage.setItem('selected_plan', planName);
+            localStorage.setItem('selected_price', price);
+            openModal('register');
+        }
+
         function openModal(type) {
             const modal = document.getElementById('authModal');
             const container = document.getElementById('modalContainer');
@@ -599,260 +719,90 @@
             if (type === 'login') {
                 container.innerHTML = `
                     <div class="modal-logo"><span>⚡ Войти</span></div>
-                    <div class="modal-desc">Новичок на AIRDROP-X? <span style="color:#c77dff; cursor:pointer; text-decoration:underline;" onclick="openModal('register')">Создать аккаунт</span></div>
-                    
+                    <div class="modal-desc">Новичок? <span style="color:#c77dff; cursor:pointer; text-decoration:underline;" onclick="openModal('register')">Создать аккаунт</span></div>
                     <div class="input-group">
-                        <label style="font-size: 11px; color: #b19cd9; display: block; margin-bottom: 4px;">Адрес эл. почты</label>
-                        <input type="email" class="auth-input" placeholder="Адрес эл. почты" id="loginEmail" autocomplete="email">
+                        <label style="font-size: 11px; color: #b19cd9; display: block; margin-bottom: 4px;">Эл. почта</label>
+                        <input type="email" class="auth-input" placeholder="Email" id="loginEmail">
                     </div>
-                    
                     <div class="input-group">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                            <label style="font-size: 11px; color: #b19cd9;">Пароль</label>
-                            <span style="font-size: 11px; color: #c77dff; cursor: pointer; text-decoration: underline;" onclick="openModal('forgot')">Сбросить пароль</span>
-                        </div>
-                        <div class="password-wrapper">
-                            <input type="password" class="auth-input" placeholder="Пароль" id="loginPass" autocomplete="current-password">
-                            <span class="password-toggle-icon" onclick="togglePassword('loginPass', this)">👁️‍🗨️</span>
-                        </div>
+                        <label style="font-size: 11px; color: #b19cd9; display: block; margin-bottom: 4px;">Пароль</label>
+                        <input type="password" class="auth-input" placeholder="Пароль" id="loginPass">
                     </div>
-
                     <button type="button" class="btn-modal-primary" onclick="validateLogin()">Войти</button>
-                    
-                    <div class="divider-container">OR</div>
-                    <button type="button" class="btn-google" onclick="alert('Google Auth подключен к airdrop.x.support@gmail.com')">
-                        <svg width="16" height="16" viewBox="0 0 24 24"><path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"/><path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.95H1.18v3.15C3.17 21.36 7.23 24 12 24z"/><path fill="#FBBC05" d="M5.28 14.25c-.25-.72-.38-1.49-.38-2.25s.13-1.53.38-2.25V6.6H1.18C.43 8.12 0 9.83 0 12s.43 3.88 1.18 5.4l4.1-3.15z"/><path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.23 0 3.17 2.64 1.18 6.6l4.1 3.15c.95-2.84 3.6-4.95 6.72-4.95z"/></svg>
-                        Продолжить через Google
-                    </button>
                     <div id="loginErrorContainer"></div>
                 `;
             } else if (type === 'register') {
+                const chosenPlan = localStorage.getItem('selected_plan') || 'Standard';
+                const chosenPrice = localStorage.getItem('selected_price') || '35';
                 container.innerHTML = `
-                    <div class="modal-logo"><span>⚡ Зарегистрироваться</span></div>
-                    <div class="modal-desc">Уже есть аккаунт? <span style="color:#c77dff; cursor:pointer; text-decoration:underline;" onclick="openModal('login')">Войти</span></div>
-                    
+                    <div class="modal-logo"><span>⚡ Тариф: ${chosenPlan} ($${chosenPrice})</span></div>
                     <div class="input-group">
-                        <label style="font-size: 11px; color: #b19cd9; display: block; margin-bottom: 4px;">Адрес эл. почты</label>
-                        <input type="email" class="auth-input" placeholder="Адрес эл. почты" id="regEmail" autocomplete="email">
+                        <label style="font-size: 11px; color: #b19cd9; display: block; margin-bottom: 4px;">Эл. почта</label>
+                        <input type="email" class="auth-input" placeholder="Email" id="regEmail">
                     </div>
-
                     <div class="input-group">
                         <label style="font-size: 11px; color: #b19cd9; display: block; margin-bottom: 4px;">Пароль</label>
-                        <div class="password-wrapper">
-                            <input type="password" class="auth-input" placeholder="Пароль" id="regPass" autocomplete="new-password">
-                            <span class="password-toggle-icon" onclick="togglePassword('regPass', this)">👁️‍🗨️</span>
-                        </div>
+                        <input type="password" class="auth-input" placeholder="Пароль" id="regPass">
                     </div>
-
-                    <div class="input-group">
-                        <label style="font-size: 11px; color: #b19cd9; display: block; margin-bottom: 4px;">Код подтверждения (на почту)</label>
-                        <div style="display: flex; gap: 8px;">
-                            <input type="text" class="auth-input" placeholder="Код из письма" id="regCode" style="flex: 1; margin: 0;">
-                            <button type="button" onclick="sendVerificationEmailCode()" style="background: #18102e; color: #c77dff; border: 1px solid rgba(157,78,221,0.4); padding: 0 14px; border-radius: 14px; font-size: 12px; font-weight: bold; cursor: pointer; white-space: nowrap;">Отправить</button>
-                        </div>
-                    </div>
-
-                    <button type="button" class="btn-modal-primary" onclick="validateRegister()" style="margin-top: 8px;">Зарегистрироваться</button>
-
-                    <div class="divider-container">OR</div>
-                    <button type="button" class="btn-google" onclick="alert('Google Auth подключен к airdrop.x.support@gmail.com')">
-                        <svg width="16" height="16" viewBox="0 0 24 24"><path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"/><path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.95H1.18v3.15C3.17 21.36 7.23 24 12 24z"/><path fill="#FBBC05" d="M5.28 14.25c-.25-.72-.38-1.49-.38-2.25s.13-1.53.38-2.25V6.6H1.18C.43 8.12 0 9.83 0 12s.43 3.88 1.18 5.4l4.1-3.15z"/><path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.23 0 3.17 2.64 1.18 6.6l4.1 3.15c.95-2.84 3.6-4.95 6.72-4.95z"/></svg>
-                        Продолжить через Google
-                    </button>
-                    <div id="errorContainer"></div>
-                `;
-            } else if (type === 'forgot') {
-                container.innerHTML = `
-                    <div class="modal-logo"><span>⚡ Сбросить пароль</span></div>
-                    <div class="modal-desc">Уже есть аккаунт? <span style="color:#c77dff; cursor:pointer; text-decoration:underline;" onclick="openModal('login')">Войти</span></div>
-                    
-                    <div class="input-group">
-                        <label style="font-size: 11px; color: #b19cd9; display: block; margin-bottom: 4px;">Адрес эл. почты</label>
-                        <input type="email" class="auth-input" placeholder="Адрес эл. почты" id="forgotEmail">
-                    </div>
-
                     <div class="input-group">
                         <label style="font-size: 11px; color: #b19cd9; display: block; margin-bottom: 4px;">Код подтверждения</label>
                         <div style="display: flex; gap: 8px;">
-                            <input type="text" class="auth-input" placeholder="Код из смс / почты" id="forgotCode" style="flex: 1; margin: 0;">
-                            <button type="button" onclick="sendResetCodeToEmail()" style="background: #18102e; color: #c77dff; border: 1px solid rgba(157,78,221,0.4); padding: 0 14px; border-radius: 14px; font-size: 12px; font-weight: bold; cursor: pointer; white-space: nowrap;">Отправить</button>
+                            <input type="text" class="auth-input" placeholder="Код из письма" id="regCode" style="flex: 1; margin: 0;">
+                            <button type="button" onclick="sendVerificationEmailCode()" style="background: #18102e; color: #c77dff; border: 1px solid rgba(157,78,221,0.4); padding: 0 14px; border-radius: 14px; font-size: 12px; font-weight: bold; cursor: pointer;">Отправить</button>
                         </div>
                     </div>
-
-                    <div class="input-group">
-                        <label style="font-size: 11px; color: #b19cd9; display: block; margin-bottom: 4px;">Новый пароль</label>
-                        <div class="password-wrapper">
-                            <input type="password" class="auth-input" placeholder="Новый пароль" id="forgotNewPass">
-                            <span class="password-toggle-icon" onclick="togglePassword('forgotNewPass', this)">👁️‍🗨️</span>
-                        </div>
-                    </div>
-
-                    <button type="button" class="btn-modal-primary" onclick="executePasswordReset()" style="margin-top: 8px;">Сбросить Пароль</button>
-                    <div id="forgotErrorContainer"></div>
+                    <button type="button" class="btn-modal-primary" onclick="validateRegister()" style="margin-top: 8px;">Зарегистрироваться</button>
+                    <div id="errorContainer"></div>
                 `;
             }
         }
 
         async function sendVerificationEmailCode() {
             const email = document.getElementById('regEmail').value.trim();
-            const errorContainer = document.getElementById('errorContainer');
-            if(!email) {
-                errorContainer.innerHTML = `<div class="error-toast" style="bottom: -55px;"><span>⚠️</span><span>Введите адрес электронной почты!</span></div>`;
-                return;
-            }
-            errorContainer.innerHTML = `<div class="error-toast" style="bottom: -55px; background: #1a1508; border-color: #ffaa00; color: #ffdd88;"><span>⏳</span><span>Отправка кода...</span></div>`;
-            try {
-                const response = await fetch('/api/send-code', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email: email })
-                });
-                const result = await response.json();
-                if (response.ok) {
-                    errorContainer.innerHTML = `<div class="error-toast" style="bottom: -55px; background-color: #122218; border-color: #00d95f; color: #88ffaa;"><span>✅</span><span>Код успешно отправлен на почту!</span></div>`;
-                } else {
-                    errorContainer.innerHTML = `<div class="error-toast" style="bottom: -55px;"><span>⚠️</span><span>${result.detail}</span></div>`;
-                }
-            } catch (e) {
-                errorContainer.innerHTML = `<div class="error-toast" style="bottom: -55px;"><span>⚠️</span><span>Ошибка связи с сервером!</span></div>`;
-            }
-        }
-
-        async function sendResetCodeToEmail() {
-            const email = document.getElementById('forgotEmail').value.trim();
-            const errorContainer = document.getElementById('forgotErrorContainer');
-            if(!email) {
-                errorContainer.innerHTML = `<div class="error-toast" style="bottom: -55px;"><span>⚠️</span><span>Введите адрес электронной почты!</span></div>`;
-                return;
-            }
-            errorContainer.innerHTML = `<div class="error-toast" style="bottom: -55px; background: #1a1508; border-color: #ffaa00; color: #ffdd88;"><span>⏳</span><span>Отправка кода...</span></div>`;
-            try {
-                const response = await fetch('/api/send-code', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email: email })
-                });
-                const result = await response.json();
-                if (response.ok) {
-                    errorContainer.innerHTML = `<div class="error-toast" style="bottom: -55px; background-color: #122218; border-color: #00d95f; color: #88ffaa;"><span>✅</span><span>Инструкция отправлена на почту!</span></div>`;
-                } else {
-                    errorContainer.innerHTML = `<div class="error-toast" style="bottom: -55px;"><span>⚠️</span><span>${result.detail}</span></div>`;
-                }
-            } catch (e) {
-                errorContainer.innerHTML = `<div class="error-toast" style="bottom: -55px;"><span>⚠️</span><span>Ошибка связи с сервером!</span></div>`;
-            }
-        }
-
-        function executePasswordReset() {
-            const email = document.getElementById('forgotEmail').value.trim();
-            const code = document.getElementById('forgotCode').value.trim();
-            const newPass = document.getElementById('forgotNewPass').value.trim();
-            const errEl = document.getElementById('forgotErrorContainer');
-
-            if(!email || !code || !newPass) {
-                errEl.innerHTML = `<div class="error-toast" style="bottom: -55px;"><span>⚠️</span><span>Заполните все поля!</span></div>`;
-                return;
-            }
-            errEl.innerHTML = `<div class="error-toast" style="bottom: -55px; background: #122218; border-color: #00d95f; color: #88ffaa;"><span>✅</span><span>Пароль успешно изменен! Вход...</span></div>`;
-            setTimeout(() => openModal('login'), 1500);
-        }
-
-        function togglePassword(fieldId, iconElement) {
-            const field = document.getElementById(fieldId);
-            if (field.type === "password") {
-                field.type = "text";
-                iconElement.style.color = "#c77dff";
-            } else {
-                field.type = "password";
-                iconElement.style.color = "#7b68ee";
-            }
-        }
-
-        function handleOverlayClick(event) {
-            if (event.target.id === 'authModal') document.getElementById('authModal').classList.remove('show');
-            if (event.target.id === 'walletActionModal') closeWalletActionModal();
-        }
-
-        function handleSheetOverlayClick(event) {
-            if (event.target.id === 'bottomSheetOverlay') closeBottomSheetMenu();
-        }
-
-        function openBottomSheetMenu() {
-            const t = translations[currentLang];
-            const container = document.getElementById('sheetMenuItemsContainer');
-            container.innerHTML = `
-                <div class="sheet-menu-item ${currentSection === 'Looter' ? 'active' : ''}" onclick="selectSheetMenu('Looter')">📦 ${t.looterMenu}</div>
-                <div class="sheet-menu-item ${currentSection === 'Farming' ? 'active' : ''}" onclick="selectSheetMenu('Farming')">🌾 ${t.farmTabBtn}</div>
-                <div class="sheet-menu-item ${currentSection === 'Tasks' ? 'active' : ''}" onclick="selectSheetMenu('Tasks')">⚡ ${t.tasksTabBtn}</div>
-                <div class="sheet-menu-item ${currentSection === 'Proxy' ? 'active' : ''}" onclick="selectSheetMenu('Proxy')">🌐 ${t.proxyMenu}</div>
-                <div class="sheet-menu-item ${currentSection === 'Statistics' ? 'active' : ''}" onclick="selectSheetMenu('Statistics')">📊 ${t.statsMenu}</div>
-                <div class="sheet-menu-item ${currentSection === 'Wallets' ? 'active' : ''}" onclick="selectSheetMenu('Wallets')">👥 ${t.walletsMenu}</div>
-                <div class="sheet-menu-item ${currentSection === 'Billing' ? 'active' : ''}" onclick="selectSheetMenu('Billing')">💳 ${t.billingMenu}</div>
-                <div class="sheet-menu-item ${currentSection === 'Settings' ? 'active' : ''}" onclick="selectSheetMenu('Settings')">⚙️ ${t.settingsMenu}</div>
-            `;
-            document.getElementById('bottomSheetOverlay').classList.add('show');
-        }
-
-        function closeBottomSheetMenu() { document.getElementById('bottomSheetOverlay').classList.remove('show'); }
-        function selectSheetMenu(sectionName) { closeBottomSheetMenu(); switchMenu(null, sectionName); }
-        function switchMobileNav(sectionName, btnElement) {
-            document.querySelectorAll('.mobile-nav-item').forEach(i => i.classList.remove('active'));
-            if (btnElement) btnElement.classList.add('active');
-            switchMenu(null, sectionName);
+            const err = document.getElementById('errorContainer');
+            if(!email) { err.innerHTML = `<div class="error-toast"><span>⚠️</span><span>Введите email!</span></div>`; return; }
+            await fetch('/api/send-code', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) });
+            err.innerHTML = `<div class="error-toast" style="background:#122218; border-color:#00d95f; color:#88ffaa;"><span>✅</span><span>Код отправлен на почту!</span></div>`;
         }
 
         async function validateRegister() {
-            const emailField = document.getElementById('regEmail');
-            const passField = document.getElementById('regPass');
-            const codeField = document.getElementById('regCode');
-            const errorContainer = document.getElementById('errorContainer');
-            
-            if (emailField.value.trim() === "" || passField.value.trim() === "" || codeField.value.trim() === "") {
-                errorContainer.innerHTML = `<div class="error-toast" style="bottom: -55px;"><span>⚠️</span><span>Заполните все поля!</span></div>`;
-                return;
-            }
-            try {
-                const response = await fetch('/api/register', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username: emailField.value.trim().split('@')[0], email: emailField.value.trim(), password: passField.value.trim() })
-                });
-                const result = await response.json();
-                if (response.ok) {
-                    errorContainer.innerHTML = `<div class="error-toast" style="bottom: -55px; background-color: #122218; border-color: #00d95f; color: #88ffaa;"><span>✅</span><span>Успешно! Переход...</span></div>`;
-                    setTimeout(() => openModal('login'), 1500);
-                } else {
-                    errorContainer.innerHTML = `<div class="error-toast" style="bottom: -55px;"><span>⚠️</span><span>${result.detail}</span></div>`;
-                }
-            } catch (e) {
-                errorContainer.innerHTML = `<div class="error-toast" style="bottom: -55px;"><span>⚠️</span><span>Ошибка связи с БД!</span></div>`;
+            const email = document.getElementById('regEmail').value.trim();
+            const pass = document.getElementById('regPass').value.trim();
+            const code = document.getElementById('regCode').value.trim();
+            const chosenPlan = localStorage.getItem('selected_plan') || 'Standard';
+            const err = document.getElementById('errorContainer');
+
+            if(!email || !pass || !code) { err.innerHTML = `<div class="error-toast"><span>⚠️</span><span>Заполните все поля!</span></div>`; return; }
+            const res = await fetch('/api/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: email.split('@')[0], email, password: pass, plan: chosenPlan })
+            });
+            if(res.ok) {
+                err.innerHTML = `<div class="error-toast" style="background:#122218; border-color:#00d95f; color:#88ffaa;"><span>✅</span><span>Успешно! Вход...</span></div>`;
+                setTimeout(() => openModal('login'), 1200);
+            } else {
+                const r = await res.json();
+                err.innerHTML = `<div class="error-toast"><span>⚠️</span><span>${r.detail}</span></div>`;
             }
         }
 
         async function validateLogin() {
-            const emailField = document.getElementById('loginEmail');
-            const passField = document.getElementById('loginPass');
-            const errorContainer = document.getElementById('loginErrorContainer');
-
-            if (emailField.value.trim() === "" || passField.value.trim() === "") {
-                errorContainer.innerHTML = `<div class="error-toast" style="bottom: -55px;"><span>⚠️</span><span>Введите почту и пароль!</span></div>`;
-                return;
-            }
-            try {
-                const response = await fetch('/api/login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username: emailField.value.trim().split('@')[0], password: passField.value.trim() })
-                });
-                const result = await response.json();
-                if (response.ok) {
-                    localStorage.setItem('airdrop_username', emailField.value.trim().split('@')[0]);
-                    handleLoginSuccess();
-                } else {
-                    errorContainer.innerHTML = `<div class="error-toast" style="bottom: -55px;"><span>⚠️</span><span>${result.detail}</span></div>`;
-                }
-            } catch (e) {
-                errorContainer.innerHTML = `<div class="error-toast" style="bottom: -55px;"><span>⚠️</span><span>Ошибка связи с сервером!</span></div>`;
+            const email = document.getElementById('loginEmail').value.trim();
+            const pass = document.getElementById('loginPass').value.trim();
+            const err = document.getElementById('loginErrorContainer');
+            const res = await fetch('/api/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: email.split('@')[0], password: pass })
+            });
+            const data = await res.json();
+            if(res.ok) {
+                localStorage.setItem('airdrop_username', email.split('@')[0]);
+                userPlan = data.plan || 'Standard';
+                handleLoginSuccess();
+            } else {
+                err.innerHTML = `<div class="error-toast"><span>⚠️</span><span>${data.detail}</span></div>`;
             }
         }
 
@@ -862,617 +812,169 @@
             document.getElementById('main-content').style.display = 'none';
             document.getElementById('dashboard-content').style.display = 'flex';
             document.getElementById('mobileNavBar').style.display = 'flex';
-            
-            const t = translations[currentLang];
-            const loginBtn = document.getElementById('login-btn');
-            loginBtn.innerText = t.logout;
-            loginBtn.style.borderColor = "rgba(255, 51, 102, 0.4)";
-            loginBtn.style.color = "#ff88aa";
-            loginBtn.onclick = function() { returnToMainSite(); };
-            
             renderDashboard('Looter');
         }
 
         function switchMenu(element, sectionName) {
             currentSection = sectionName;
-            document.querySelectorAll('.sidebar-menu-item').forEach(item => item.classList.remove('active'));
-            if (element) element.classList.add('active');
-            else {
-                const found = document.querySelector(`.sidebar-menu-item[data-section="${sectionName}"]`);
-                if (found) found.classList.add('active');
-            }
+            document.querySelectorAll('.sidebar-menu-item').forEach(i => i.classList.remove('active'));
+            if(element) element.classList.add('active');
             renderDashboardContent(sectionName);
         }
 
-        async function updateSelectedNetwork(selectElement) {
-            selectedNetwork = selectElement.value;
-            await fetchLiveGasPrice(selectedNetwork);
-        }
-
-        async function fetchLiveGasPrice(network) {
-            const gasBadge = document.getElementById('live-gas-badge');
-            if (!gasBadge) return;
-            
-            gasBadge.innerText = "⏳ Запрос газа...";
-            try {
-                const response = await fetch(`/api/gas/${network}`);
-                const data = await response.json();
-                if (response.ok && data.status === 'success') {
-                    gasBadge.innerText = `⚡ Текущий газ: ${data.gas_price}`;
-                } else {
-                    gasBadge.innerText = "⚡ Текущий газ: N/A";
-                }
-            } catch (e) {
-                gasBadge.innerText = "⚡ Текущий газ: Ошибка сети";
-            }
-        }
-
-        async function startAutoFarming() {
-            const log = document.getElementById('farm-console-logs');
-            const network = selectedNetwork;
-            
-            if (log) {
-                log.innerHTML += `<br><span style="color: #c77dff;">[${new Date().toLocaleTimeString()}] [Anti-Sybil] Запуск рандомизированного ядра в сети ${network}...</span>`;
-                log.scrollTop = log.scrollHeight;
-                
-                try {
-                    const response = await fetch('/api/start', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ wallet: "all", network: network }) 
-                    });
-                    const result = await response.json();
-                    
-                    if (response.ok && result.status === 'success') {
-                        log.innerHTML += `<br><span style="color: #00d95f; font-weight: bold;">[${new Date().toLocaleTimeString()}] [OK] ✅ Anti-Sybil сессия завершена успешно!</span>`;
-                        
-                        if (result.results && result.results.length > 0) {
-                            result.results.forEach(res => {
-                                if (res.status === 'Success') {
-                                    log.innerHTML += `<br><span style="color: #00d95f;">&nbsp;&nbsp;✔ Кошелек #${res.wallet_id}: Свап/Бридж со случайным таймингом выполнен!</span>`;
-                                } else {
-                                    log.innerHTML += `<br><span style="color: #ff3366; font-weight: bold;">&nbsp;&nbsp;❌ Кошелек #${res.wallet_id}: ${res.error || res.reason || 'Ошибка выполнения'}</span>`;
-                                }
-                            });
-                        }
-                        
-                        log.scrollTop = log.scrollHeight;
-                        addFarmExperience(30); 
-                    } else {
-                        log.innerHTML += `<br><span style="color: #ff3366;">[${new Date().toLocaleTimeString()}] [Error] ${result.message}</span>`;
-                        log.scrollTop = log.scrollHeight;
-                    }
-                } catch (error) {
-                    log.innerHTML += `<br><span style="color: #ff3366;">[${new Date().toLocaleTimeString()}] [Critical] Ошибка связи с сервером!</span>`;
-                    log.scrollTop = log.scrollHeight;
-                }
-            }
-        }
-
-        function toggleTelegramBot() {
-            telegramLinked = !telegramLinked;
-            renderDashboardContent('Settings');
-        }
-
-        function toggleCalendarDay(dayEl) {
-            dayEl.classList.toggle('active');
-        }
-
-        function toggleCalendarBlock() {
-            const toggleBox = document.getElementById('autoFarmToggle');
-            const calendarContainer = document.getElementById('calendarDaysContainer');
-            if (toggleBox.checked) {
-                calendarContainer.style.opacity = '1';
-                calendarContainer.style.pointerEvents = 'auto';
-            } else {
-                calendarContainer.style.opacity = '0.3';
-                calendarContainer.style.pointerEvents = 'none';
-            }
-        }
-        
-        async function loadUserSettingsIntoForm() {
-            const currentUser = localStorage.getItem('airdrop_username') || "Robert";
-            try {
-                const response = await fetch(`/api/settings/${currentUser}`);
-                const result = await response.json();
-                if (response.ok && result.settings) {
-                    const s = result.settings;
-                    const toggleBox = document.getElementById('autoFarmToggle');
-                    if(toggleBox) {
-                        toggleBox.checked = s.auto_farming_enabled === 1;
-                        toggleCalendarBlock();
-                    }
-                    if(document.getElementById('randomDelayInput')) document.getElementById('randomDelayInput').value = s.random_delay;
-                    if(document.getElementById('gasLimitInput')) document.getElementById('gasLimitInput').value = s.gas_limit_gwei;
-                    
-                    if (s.schedule_days) {
-                        const activeDays = s.schedule_days.split(',');
-                        document.querySelectorAll('.calendar-day').forEach(el => {
-                            if (activeDays.includes(el.getAttribute('data-day'))) {
-                                el.classList.add('active');
-                            } else {
-                                el.classList.remove('active');
-                            }
-                        });
-                    }
-                }
-            } catch(e) {}
-        }
-
-        async function saveUserSettingsFromForm() {
-            const currentUser = localStorage.getItem('airdrop_username') || "Robert";
-            const enabled = document.getElementById('autoFarmToggle').checked ? 1 : 0;
-            const delay = parseInt(document.getElementById('randomDelayInput').value) || 5;
-            const gas = parseInt(document.getElementById('gasLimitInput').value) || 30;
-            const msgEl = document.getElementById('settingsSaveMsg');
-
-            let selectedDays = [];
-            document.querySelectorAll('.calendar-day.active').forEach(el => {
-                selectedDays.push(el.getAttribute('data-day'));
-            });
-
-            try {
-                const response = await fetch('/api/settings/save', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        username: currentUser,
-                        master_wallet: "0x5e5316Dea1c44d220d4c60A5fcC2949E5A06Fc66",
-                        auto_farming_enabled: enabled,
-                        schedule_days: selectedDays.join(','),
-                        random_delay: delay,
-                        gas_limit_gwei: gas
-                    })
-                });
-                const result = await response.json();
-                if (response.ok) {
-                    msgEl.innerHTML = `<span style="color: #00d95f;">✅ ${result.message}</span>`;
-                } else {
-                    msgEl.innerHTML = `<span style="color: #ff3366;">⚠️ Ошибка сохранения настроек</span>`;
-                }
-            } catch(e) {
-                msgEl.innerHTML = `<span style="color: #ff3366;">⚠️ Ошибка соединения с бэкендом</span>`;
-            }
-        }
-
         async function addNewWalletToDB() {
-            const currentUser = localStorage.getItem('airdrop_username') || "Robert";
-            const addressField = document.getElementById('newWalletAddress');
-            const pkField = document.getElementById('newWalletPk');
-            const proxyField = document.getElementById('newWalletProxy');
-            const msgContainer = document.getElementById('walletResponseMsg');
+            const username = localStorage.getItem('airdrop_username') || "Robert";
+            const address = document.getElementById('newWalletAddress').value.trim();
+            const pk = document.getElementById('newWalletPk').value.trim();
+            const proxy = document.getElementById('newWalletProxy').value.trim();
+            const msg = document.getElementById('walletResponseMsg');
 
-            if (!addressField.value || !pkField.value || !proxyField.value) {
-                msgContainer.innerHTML = `<span style="color: #ff3366;">⚠️ Заполните все поля!</span>`;
-                return;
-            }
-
-            try {
-                const response = await fetch('/api/wallets/add', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username: currentUser, wallet_address: addressField.value.trim(), encrypted_pk: pkField.value.trim(), proxy: proxyField.value.trim() })
-                });
-                const result = await response.json();
-                if (response.ok) {
-                    msgContainer.innerHTML = `<span style="color: #00d95f;">✅ ${result.message}</span>`;
-                    addressField.value = ''; pkField.value = ''; proxyField.value = '';
-                    setTimeout(loadWalletsFromDB, 1000);
-                    addFarmExperience(20);
-                } else {
-                    msgContainer.innerHTML = `<span style="color: #ff3366;">⚠️ ${result.detail}</span>`;
-                }
-            } catch (e) {
-                msgContainer.innerHTML = `<span style="color: #ff3366;">⚠️ Ошибка связи с сервером!</span>`;
+            const res = await fetch('/api/wallets/add', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, wallet_address: address, encrypted_pk: pk, proxy })
+            });
+            const data = await res.json();
+            if(res.ok) {
+                msg.innerHTML = `<span style="color: #00d95f;">✅ Кошелек добавлен!</span>`;
+                document.getElementById('newWalletAddress').value = '';
+                document.getElementById('newWalletPk').value = '';
+                document.getElementById('newWalletProxy').value = '';
+                loadWalletsFromDB();
+            } else {
+                msg.innerHTML = `<span style="color: #ff3366;">${data.detail}</span>`;
             }
         }
 
         async function loadWalletsFromDB() {
-            const currentUser = localStorage.getItem('airdrop_username') || "Robert";
+            const username = localStorage.getItem('airdrop_username') || "Robert";
             const container = document.getElementById('walletsListContainer');
             if(!container) return;
-
-            try {
-                const response = await fetch(`/api/wallets/${currentUser}`);
-                const result = await response.json();
-                if (response.ok && result.wallets && result.wallets.length > 0) {
-                    container.innerHTML = '';
-                    result.wallets.forEach((w) => {
-                        const gridId = `balances-grid-${w.id}`;
-                        container.innerHTML += `
-                            <div style="background: #07050c; border: 1px solid rgba(157,78,221,0.3); padding: 16px; border-radius: 16px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.5);">
-                                <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px;">
-                                    <div style="overflow: hidden; flex: 1;">
-                                        <div style="color: #fff; font-weight: bold; font-size: 15px; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${w.wallet_address}</div>
-                                        <div style="color: #b19cd9; font-size: 11px;">🌐 ${w.proxy}</div>
-                                    </div>
-                                    <div style="display: flex; gap: 6px; align-items: center;">
-                                        <button type="button" onclick="openWalletActionModal(${w.id}, '${w.wallet_address}', '${w.proxy}')" style="background: #00d95f; color: #000; border: none; width: 32px; height: 32px; border-radius: 16px; font-size: 14px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 10px rgba(0,217,95,0.4);" title="Пополнить с мастер-аккаунта">+</button>
-                                        <button type="button" onclick="openWalletActionModal(${w.id}, '${w.wallet_address}', '${w.proxy}')" style="background: linear-gradient(135deg, #7b2cbf, #9d4edd); color: #fff; border: none; padding: 8px 16px; border-radius: 16px; font-size: 12px; font-weight: bold; cursor: pointer; box-shadow: 0 0 10px rgba(157,78,221,0.4);">⚙️ Меню</button>
-                                    </div>
-                                </div>
-                                <div id="${gridId}" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 6px; border-top: 1px solid rgba(157,78,221,0.15); padding-top: 10px;">
-                                    <span style="color: #7b68ee; font-size: 11px;">Загрузка балансов по всем сетям...</span>
-                                </div>
-                            </div>
-                        `;
-                        fetchAllNetworkBalancesForWallet(w.wallet_address, w.proxy, gridId);
-                    });
-                } else {
-                    container.innerHTML = `<span style="color: #7b68ee; font-size: 13px;">У вас пока нет кошельков. Добавьте их ниже.</span>`;
-                }
-            } catch(e) {}
-        }
-
-        async function fetchAllNetworkBalancesForWallet(address, proxy, gridElementId) {
-            const gridEl = document.getElementById(gridElementId);
-            if (!gridEl) return;
-            try {
-                const response = await fetch(`/api/wallet/balances/${address}?proxy=${encodeURIComponent(proxy)}`);
-                const data = await response.json();
-                if (response.ok && data.status === 'success') {
-                    let html = '';
-                    for (const [net, bal] of Object.entries(data.balances)) {
-                        const hasVal = parseFloat(bal) > 0;
-                        html += `
-                            <div style="background: #120c22; border: 1px solid rgba(157,78,221,0.2); padding: 6px 8px; border-radius: 10px; text-align: center;">
-                                <div style="font-size: 10px; color: #b19cd9; margin-bottom: 2px;">${net}</div>
-                                <div style="font-size: 11px; font-weight: bold; color: ${hasVal ? '#00d95f' : '#fff'};">${bal} ETH</div>
-                            </div>
-                        `;
-                    }
-                    gridEl.innerHTML = html;
-                } else {
-                    gridEl.innerHTML = `<span style="color: #ff3366; font-size: 11px;">Ошибка загрузки балансов</span>`;
-                }
-            } catch(e) {
-                gridEl.innerHTML = `<span style="color: #ff3366; font-size: 11px;">Ошибка сети</span>`;
+            const res = await fetch(`/api/wallets/${username}`);
+            const data = await res.json();
+            userPlan = data.plan;
+            document.getElementById('slot-info-badge').innerText = `Лимит слотов: ${data.wallets.length} / ${data.max_slots} (${data.plan})`;
+            
+            if(data.wallets.length > 0) {
+                container.innerHTML = data.wallets.map(w => `
+                    <div style="background: #07050c; border: 1px solid rgba(157,78,221,0.3); padding: 14px; border-radius: 14px; display: flex; justify-content: space-between; align-items: center;">
+                        <div>
+                            <div style="color: #fff; font-weight: bold; font-size: 14px;">${w.wallet_address}</div>
+                            <div style="color: #b19cd9; font-size: 11px;">Proxy: ${w.proxy}</div>
+                        </div>
+                        <button type="button" onclick="deleteWallet(${w.id})" style="background: rgba(255,51,102,0.2); color: #ff88aa; border: 1px solid rgba(255,51,102,0.4); padding: 6px 12px; border-radius: 10px; font-size: 12px;">Удалить</button>
+                    </div>
+                `).join('');
+            } else {
+                container.innerHTML = `<div style="color: #b19cd9; font-size: 13px;">Кошельков пока нет.</div>`;
             }
         }
 
-        async function openWalletActionModal(walletId, address, proxy) {
-            activeSelectedWalletId = walletId;
-            document.getElementById('editWalletAddress').value = address;
-            document.getElementById('editWalletPk').value = "";
-            document.getElementById('editWalletProxy').value = proxy;
-            document.getElementById('walletActionMsg').innerHTML = '';
-            document.getElementById('walletActionModal').classList.add('show');
+        async function deleteWallet(id) {
+            await fetch(`/api/wallets/delete/${id}`, { method: 'DELETE' });
+            loadWalletsFromDB();
         }
 
-        function closeWalletActionModal() {
-            document.getElementById('walletActionModal').classList.remove('show');
-            activeSelectedWalletId = null;
-        }
+        async function startAutoFarming() {
+            const net = document.getElementById('farmNetwork').value;
+            const username = localStorage.getItem('airdrop_username') || "Robert";
+            const log = document.getElementById('farm-console-logs');
 
-        async function executeWalletDeposit() {
-            const net = document.getElementById('depositNetwork').value;
-            const amount = parseFloat(document.getElementById('depositAmount').value);
-            const msgEl = document.getElementById('walletActionMsg');
-
-            if (isNaN(amount) || amount <= 0) {
-                msgEl.innerHTML = `<span style="color: #ff3366;">⚠️ Введите корректную сумму пополнения!</span>`;
-                return;
-            }
-
-            msgEl.innerHTML = `<span style="color: #00d95f;">⏳ Перевод с мастер-кошелька 0x5e53...F66 в сети ${net}...</span>`;
-
-            try {
-                const response = await fetch('/api/wallet/deposit', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        wallet_id: activeSelectedWalletId,
-                        amount_eth: amount,
-                        network: net,
-                        master_address: "0x5e5316Dea1c44d220d4c60A5fcC2949E5A06Fc66"
-                    })
-                });
-                const result = await response.json();
-                if (response.ok) {
-                    msgEl.innerHTML = `<span style="color: #00d95f;">✅ ${result.message}<br><small style="color:#c77dff;">Tx: ${result.tx_hash.slice(0,16)}...</small></span>`;
-                    setTimeout(() => {
-                        closeWalletActionModal();
-                        loadWalletsFromDB();
-                    }, 3000);
-                } else {
-                    msgEl.innerHTML = `<span style="color: #ff3366;">⚠️ ${result.detail}</span>`;
-                }
-            } catch (e) {
-                msgEl.innerHTML = `<span style="color: #ff3366;">⚠️ Ошибка соединения с сервером!</span>`;
+            log.innerHTML += `<br><span style="color: #c77dff;">Запуск фарма в сети ${net}...</span>`;
+            const res = await fetch('/api/start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ wallet: "all", network: net, username })
+            });
+            const data = await res.json();
+            if(res.ok) {
+                log.innerHTML += `<br><span style="color: #00d95f;">✅ Фарм сессия успешно завершена!</span>`;
+            } else {
+                log.innerHTML += `<br><span style="color: #ff3366; font-weight: bold;">${data.detail}</span>`;
             }
         }
 
-        async function executeWalletUpdate() {
-            const newAddr = document.getElementById('editWalletAddress').value.trim();
-            const newPk = document.getElementById('editWalletPk').value.trim();
-            const newProxy = document.getElementById('editWalletProxy').value.trim();
-            const msgEl = document.getElementById('walletActionMsg');
-
-            if (!newAddr || !newProxy) {
-                msgEl.innerHTML = `<span style="color: #ff3366;">⚠️ Название/адрес и прокси обязательны!</span>`;
-                return;
-            }
-
-            try {
-                const response = await fetch(`/api/wallets/update/${activeSelectedWalletId}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        wallet_address: newAddr,
-                        encrypted_pk: newPk || "unchanged",
-                        proxy: newProxy
-                    })
-                });
-                const result = await response.json();
-                if (response.ok) {
-                    msgEl.innerHTML = `<span style="color: #00d95f;">✅ ${result.message}</span>`;
-                    setTimeout(() => {
-                        closeWalletActionModal();
-                        loadWalletsFromDB();
-                    }, 1000);
-                } else {
-                    msgEl.innerHTML = `<span style="color: #ff3366;">⚠️ ${result.detail}</span>`;
-                }
-            } catch (e) {
-                msgEl.innerHTML = `<span style="color: #ff3366;">⚠️ Ошибка соединения с сервером!</span>`;
-            }
-        }
-
-        async function executeWalletDeleteFromModal() {
-            if (!activeSelectedWalletId) return;
-            try {
-                const response = await fetch(`/api/wallets/delete/${activeSelectedWalletId}`, { method: 'DELETE' });
-                const result = await response.json();
-                if (response.ok) {
-                    showLevelUpNotification("Кошелек успешно удален!");
-                    closeWalletActionModal();
-                    loadWalletsFromDB();
-                }
-            } catch(e) {}
-        }
-
-        function showLevelUpNotification(message) {
-            const toast = document.createElement('div');
-            toast.style.cssText = `position: fixed; bottom: 30px; right: 30px; background: #100a1c; border: 1px solid rgba(157,78,221,0.5); border-radius: 16px; padding: 16px 20px; color: #fff; font-size: 14px; z-index: 9999; display: flex; align-items: center; gap: 12px; box-shadow: 0 0 25px rgba(123, 44, 191, 0.4);`;
-            toast.innerHTML = `<div>🎉</div><div><div style="font-weight: bold; color: #c77dff;">Уведомление</div><div style="color: #b19cd9; font-size: 12px;">${message}</div></div>`;
-            document.body.appendChild(toast);
-            setTimeout(() => toast.remove(), 4000);
-        }
-
-        function addFarmExperience(amount) {
-            let currentXp = parseInt(localStorage.getItem('farmer_xp') || '1450') + amount;
-            let currentLevel = parseInt(localStorage.getItem('farmer_level') || '3');
-            localStorage.setItem('farmer_xp', currentXp);
-            localStorage.setItem('farmer_level', currentLevel);
-        }
-
-        async function startScanningDrops() {
-            const log = document.getElementById('drop-logs');
-            const currentUser = localStorage.getItem('airdrop_username') || "Robert";
-            log.innerHTML += `<br><span style="color: #c77dff;">[${new Date().toLocaleTimeString()}] 🔍 Сканирование блокчейна и запуск Claim Looter...</span>`;
-            try {
-                const response = await fetch(`/api/scan/${currentUser}`, { method: 'POST' });
-                const result = await response.json();
-                if (response.ok) {
-                    log.innerHTML += `<br><span style="color: #00d95f;">[${new Date().toLocaleTimeString()}] ✅ Проверено кошельков: ${result.data.total_wallets_scanned}</span>`;
-                    if (result.data.found_drops && result.data.found_drops.length > 0) {
-                        result.data.found_drops.forEach(drop => {
-                            log.innerHTML += `<br><span style="color: #00d95f;">&nbsp;&nbsp;💰 [Claimed] ${drop.wallet} — ${drop.protocol} (${drop.amount}) ✅</span>`;
-                        });
-                    } else {
-                        log.innerHTML += `<br><span style="color: #b19cd9;">&nbsp;&nbsp;ℹ️ Новых доступных дропов не найдено.</span>`;
-                    }
-                    log.scrollTop = log.scrollHeight;
-                    addFarmExperience(30);
-                }
-            } catch(e) {}
-        }
-
-        async function exportReportJSON() {
-            const response = await fetch('/api/report');
-            const data = await response.json();
-            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data, null, 2));
-            const downloadAnchor = document.createElement('a');
-            downloadAnchor.setAttribute("href", dataStr);
-            downloadAnchor.setAttribute("download", "report.json");
-            document.body.appendChild(downloadAnchor);
-            downloadAnchor.click();
-            downloadAnchor.remove();
-        }
-
-        function renderDashboard(activeTab) { renderDashboardContent(activeTab); }
+        function renderDashboard(tab) { renderDashboardContent(tab); }
 
         function renderDashboardContent(section) {
             currentSection = section;
             const t = translations[currentLang];
-            const dashboardContent = document.getElementById('dashboard-content');
-            const activeUser = localStorage.getItem('airdrop_username') || "Robert";
-            const currentXp = localStorage.getItem('farmer_xp') || '1450';
-            const currentLevel = localStorage.getItem('farmer_level') || '3';
+            const content = document.getElementById('dashboard-content');
+            const username = localStorage.getItem('airdrop_username') || "Robert";
 
             let centerHtml = '';
-
             if (section === 'Looter') {
                 centerHtml = `
-                    <div style="background-color: #100a1c; border: 1px solid rgba(157,78,221,0.3); border-radius: 20px; padding: 20px; width: 100%; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
-                        <h3 style="margin: 0 0 16px 0; font-size: 18px; color: #fff;">🚀 ${t.dashTitle}</h3>
-                        <p style="color: #b19cd9; font-size: 14px; margin-bottom: 20px;">${t.dashDesc}</p>
-                        <div style="display: flex; gap: 10px; flex-direction: column;">
-                            <button type="button" onclick="startScanningDrops()" style="background: linear-gradient(135deg, #7b2cbf, #9d4edd); color: #fff; border: none; padding: 13px; border-radius: 16px; font-weight: bold; cursor: pointer; box-shadow: 0 0 15px rgba(157,78,221,0.4);">${t.scanBtn}</button>
-                        </div>
-                        <div id="drop-logs" style="margin-top: 20px; background-color: #07050c; border: 1px solid rgba(157,78,221,0.2); padding: 16px; border-radius: 14px; font-family: monospace; font-size: 12px; color: #b19cd9; max-height: 180px; overflow-y: auto;">${t.logInit}</div>
+                    <div style="background: #100a1c; border: 1px solid rgba(157,78,221,0.3); border-radius: 20px; padding: 20px;">
+                        <h3 style="color: #fff; margin-top: 0;">🚀 ${t.dashTitle}</h3>
+                        <p style="color: #b19cd9; font-size: 14px;">${t.dashDesc}</p>
+                        <button type="button" onclick="startScanningDrops()" class="btn-purple-lg" style="width: auto; padding: 12px 20px; font-size: 13px;">${t.scanBtn}</button>
+                        <div id="drop-logs" style="margin-top: 15px; background: #07050c; padding: 14px; border-radius: 14px; font-family: monospace; font-size: 12px; color: #b19cd9; max-height: 160px; overflow-y: auto;">${t.logInit}</div>
                     </div>
                 `;
             } else if (section === 'Farming') {
                 centerHtml = `
-                    <div style="background-color: #100a1c; border: 1px solid rgba(157,78,221,0.3); border-radius: 20px; padding: 20px; width: 100%; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
-                        <h3 style="margin-top: 0; color: #fff; font-size: 18px;">${t.farmTitle}</h3>
-                        <p style="color: #b19cd9; font-size: 13px;">${t.farmDesc}</p>
-                        
-                        <div style="display: grid; grid-template-columns: 1fr; gap: 14px; margin-top: 20px;">
-                            <div class="input-group">
-                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                                    <label style="color: #b19cd9; font-size: 12px;">${t.netSelectLabel}</label>
-                                    
-                                    <div class="tooltip-container">
-                                        <span id="live-gas-badge" style="color: #00d95f; font-size: 11px; font-weight: bold; background: #07050c; padding: 4px 10px; border-radius: 10px; border: 1px solid rgba(157,78,221,0.3);">⚡ Загрузка газа...</span>
-                                        <span class="tooltip-text"><b>Gwei</b> — это миллиардная доля ETH (1 Gwei = 0.000000001 ETH). В нем измеряется комиссия за транзакции в блокчейне. Софт автоматически подбирает безопасный Gwei для защиты от переплат.</span>
-                                    </div>
-                                </div>
-                                <select class="auth-input" id="farmNetwork" onchange="updateSelectedNetwork(this)">
-                                    <option value="Base" ${selectedNetwork === 'Base' ? 'selected' : ''}>Base L2 (Coinbase)</option>
-                                    <option value="Arbitrum" ${selectedNetwork === 'Arbitrum' ? 'selected' : ''}>Arbitrum One</option>
-                                    <option value="ZkSync" ${selectedNetwork === 'ZkSync' ? 'selected' : ''}>ZkSync Era</option>
-                                    <option value="Scroll" ${selectedNetwork === 'Scroll' ? 'selected' : ''}>Scroll Network</option>
-                                    <option value="Linea" ${selectedNetwork === 'Linea' ? 'selected' : ''}>Linea (Consensys)</option>
-                                    <option value="Blast" ${selectedNetwork === 'Blast' ? 'selected' : ''}>Blast L2 (Yield)</option>
-                                    <option value="Mantle" ${selectedNetwork === 'Mantle' ? 'selected' : ''}>Mantle Network</option>
-                                    <option value="Berachain" ${selectedNetwork === 'Berachain' ? 'selected' : ''}>Berachain (BArtio)</option>
-                                    <option value="Solana" ${selectedNetwork === 'Solana' ? 'selected' : ''}>Solana (SVM)</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <button type="button" onclick="startAutoFarming()" style="background: linear-gradient(135deg, #7b2cbf, #9d4edd); color: #fff; border: none; padding: 13px; border-radius: 16px; font-weight: bold; cursor: pointer; width: 100%; margin-top: 10px; box-shadow: 0 0 15px rgba(157,78,221,0.4);">${t.startFarmBtn}</button>
-
-                        <div id="farm-console-logs" style="margin-top: 20px; background-color: #07050c; border: 1px solid rgba(157,78,221,0.2); padding: 14px; border-radius: 14px; font-family: monospace; font-size: 12px; color: #00d95f; max-height: 180px; overflow-y: auto;">
-                            [Farm Console] Ожидание запуска задачи... Anti-Sybil Shield активен.
-                        </div>
-                    </div>
-                `;
-                setTimeout(() => fetchLiveGasPrice(selectedNetwork), 100);
-            } else if (section === 'Proxy') {
-                centerHtml = `
-                    <div style="background-color: #100a1c; border: 1px solid rgba(157,78,221,0.3); border-radius: 20px; padding: 20px; width: 100%; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
-                        <h3 style="margin-top: 0; color: #fff; font-size: 18px;">${t.proxyTitle}</h3>
-                        <button type="button" onclick="checkProxiesLive()" style="background: linear-gradient(135deg, #7b2cbf, #9d4edd); color: #fff; border: none; padding: 12px; border-radius: 16px; font-weight: bold; cursor: pointer; width: 100%; margin-top: 14px; box-shadow: 0 0 15px rgba(157,78,221,0.4);">${t.checkProxyBtn}</button>
-                        <div id="proxy-logs" style="margin-top: 20px; background-color: #07050c; border: 1px solid rgba(157,78,221,0.2); padding: 14px; border-radius: 14px; font-family: monospace; font-size: 12px; color: #b19cd9;">Готово к проверке.</div>
-                    </div>
-                `;
-            } else if (section === 'Statistics') {
-                centerHtml = `
-                    <div style="background-color: #100a1c; border: 1px solid rgba(157,78,221,0.3); border-radius: 20px; padding: 20px; width: 100%; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
-                        <h3 style="margin-top: 0; color: #fff; font-size: 18px;">${t.statsTitle}</h3>
-                        <button type="button" onclick="exportReportJSON()" style="background: linear-gradient(135deg, #7b2cbf, #9d4edd); color: #fff; border: none; padding: 13px; border-radius: 16px; font-weight: bold; cursor: pointer; width: 100%; margin-top: 14px; box-shadow: 0 0 15px rgba(157,78,221,0.4);">${t.exportBtn}</button>
-                    </div>
-                `;
-            } else if (section === 'Tasks') {
-                centerHtml = `
-                    <div style="background-color: #100a1c; border: 1px solid rgba(157,78,221,0.3); border-radius: 20px; padding: 20px; width: 100%; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
-                        <h3 style="margin-top: 0; color: #fff; font-size: 18px;">${t.tasksTitle}</h3>
-                        <div style="background: #07050c; padding: 14px; border-radius: 14px; border: 1px solid rgba(157,78,221,0.2); margin-top: 10px; color: #b19cd9;">Активных очередей нет.</div>
+                    <div style="background: #100a1c; border: 1px solid rgba(157,78,221,0.3); border-radius: 20px; padding: 20px;">
+                        <h3 style="color: #fff; margin-top: 0;">${t.farmTitle}</h3>
+                        <p style="color: #b19cd9; font-size: 13px;">${t.farmDesc} (Ваш тариф: <b>${userPlan}</b>)</p>
+                        <label style="color: #b19cd9; font-size: 12px; display: block; margin-bottom: 6px;">${t.netSelectLabel}</label>
+                        <select class="auth-input" id="farmNetwork" style="margin-bottom: 14px;">
+                            <option value="Base">Base L2 (Доступно на Standard и PRO)</option>
+                            <option value="Arbitrum">Arbitrum One (Эксклюзив PRO / Premium)</option>
+                            <option value="ZkSync">ZkSync Era (Эксклюзив PRO / Premium)</option>
+                            <option value="Solana">Solana (Эксклюзив Premium)</option>
+                        </select>
+                        <button type="button" onclick="startAutoFarming()" class="btn-purple-lg" style="width: auto; padding: 12px 20px; font-size: 13px;">${t.startFarmBtn}</button>
+                        <div id="farm-console-logs" style="margin-top: 15px; background: #07050c; padding: 14px; border-radius: 14px; font-family: monospace; font-size: 12px; color: #00d95f; max-height: 160px; overflow-y: auto;">Ожидание...</div>
                     </div>
                 `;
             } else if (section === 'Wallets') {
                 centerHtml = `
-                    <div style="background-color: #100a1c; border: 1px solid rgba(157,78,221,0.3); border-radius: 20px; padding: 20px; width: 100%; margin-bottom: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+                    <div style="background: #100a1c; border: 1px solid rgba(157,78,221,0.3); border-radius: 20px; padding: 20px; margin-bottom: 16px;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                            <h3 style="margin: 0; color: #fff; font-size: 18px;">👥 Управление кошельками</h3>
-                            <span style="font-size: 11px; color: #e0aaff; background: rgba(157,78,221,0.2); padding: 4px 10px; border-radius: 10px; border: 1px solid rgba(157,78,221,0.3);">Мульти-сетевой сканер</span>
+                            <h3 style="color: #fff; margin: 0;">👥 Кошельки воркеров</h3>
+                            <span id="slot-info-badge" style="font-size: 12px; background: rgba(157,78,221,0.2); color: #c77dff; padding: 4px 10px; border-radius: 10px;">Загрузка слотов...</span>
                         </div>
-                        <div id="walletsListContainer" style="margin-top: 15px; display: flex; flex-direction: column; gap: 12px;">Загрузка кошельков...</div>
+                        <div id="walletsListContainer" style="display: flex; flex-direction: column; gap: 10px;">Загрузка...</div>
                     </div>
-                    <div style="background: #100a1c; padding: 20px; border-radius: 20px; border: 1px solid rgba(157,78,221,0.3); width: 100%; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
-                        <h3 style="color: #fff; margin-top: 0; margin-bottom: 15px;">➕ Добавить новый кошелек</h3>
+                    <div style="background: #100a1c; border: 1px solid rgba(157,78,221,0.3); border-radius: 20px; padding: 20px;">
+                        <h3 style="color: #fff; margin-top: 0;">➕ Добавить воркера</h3>
                         <div style="display: flex; flex-direction: column; gap: 10px;">
-                            <input type="text" id="newWalletAddress" placeholder="Название или адрес кошелька" class="auth-input" autocomplete="off" name="custom_wallet_address_field">
-                            <input type="password" id="newWalletPk" placeholder="Приватный ключ (Private Key)" class="auth-input" autocomplete="new-password" name="custom_private_key_field">
-                            <input type="text" id="newWalletProxy" placeholder="Прокси (ip:port:login:pass)" class="auth-input" autocomplete="off" name="custom_proxy_field">
-                            <button type="button" onclick="addNewWalletToDB()" class="btn-modal-primary" style="margin-top: 4px;">Сохранить кошелек</button>
+                            <input type="text" id="newWalletAddress" placeholder="Адрес кошелька" class="auth-input">
+                            <input type="password" id="newWalletPk" placeholder="Приватный ключ" class="auth-input">
+                            <input type="text" id="newWalletProxy" placeholder="Прокси (ip:port:login:pass)" class="auth-input">
+                            <button type="button" onclick="addNewWalletToDB()" class="btn-modal-primary">Добавить в ферму</button>
                         </div>
                         <div id="walletResponseMsg" style="margin-top: 10px;"></div>
                     </div>
                 `;
                 setTimeout(loadWalletsFromDB, 50);
-            } else if (section === 'Billing') {
-                centerHtml = `<div style="background: #100a1c; padding: 25px; border-radius: 20px; border: 1px solid rgba(157,78,221,0.3); width: 100%; box-shadow: 0 10px 30px rgba(0,0,0,0.5);"><h3 style="color: #fff; margin-top:0;">💳 Тариф PRO</h3></div>`;
-            } else if (section === 'Settings') {
-                centerHtml = `
-                    <div style="background-color: #100a1c; border: 1px solid rgba(157,78,221,0.3); border-radius: 20px; padding: 20px; width: 100%; box-shadow: 0 10px 30px rgba(0,0,0,0.5); display: flex; flex-direction: column; gap: 16px;">
-                        <h3 style="margin: 0; color: #fff; font-size: 18px;">⚙️ Автоматический фоновый планировщик</h3>
-                        <p style="color: #b19cd9; font-size: 13px; margin: 0;">Настройте расписание («настроил и забыл»), чтобы софт сам запускал фарминг в фоновом режиме по вашим правилам.</p>
-                        
-                        <div style="display: flex; justify-content: space-between; align-items: center; background: #07050c; padding: 14px; border-radius: 14px; border: 1px solid rgba(157,78,221,0.2);">
-                            <div>
-                                <div style="font-weight: bold; font-size: 14px; color: #fff;">⏰ Авто-фарминг по календарю</div>
-                                <div style="font-size: 11px; color: #b19cd9;">Включение и отключение фонового расписания</div>
-                            </div>
-                            <label style="position: relative; display: inline-block; width: 50px; height: 26px;">
-                                <input type="checkbox" id="autoFarmToggle" onchange="toggleCalendarBlock()" style="opacity: 0; width: 0; height: 0;">
-                                <span style="cursor: pointer; position: absolute; inset: 0; background-color: #1a102e; border: 1px solid rgba(157,78,221,0.4); transition: .4s; border-radius: 26px;"></span>
-                            </label>
-                        </div>
-
-                        <div id="calendarDaysContainer" style="background: #07050c; padding: 14px; border-radius: 14px; border: 1px solid rgba(157,78,221,0.2); transition: 0.3s;">
-                            <div style="font-size: 12px; font-weight: bold; color: #e0aaff; margin-bottom: 6px;">📅 Календарь активных дней запуска (кликни для включения):</div>
-                            <div class="calendar-grid">
-                                <div class="calendar-day active" data-day="Mon" onclick="toggleCalendarDay(this)">Пн</div>
-                                <div class="calendar-day" data-day="Tue" onclick="toggleCalendarDay(this)">Вт</div>
-                                <div class="calendar-day active" data-day="Wed" onclick="toggleCalendarDay(this)">Ср</div>
-                                <div class="calendar-day" data-day="Thu" onclick="toggleCalendarDay(this)">Чт</div>
-                                <div class="calendar-day active" data-day="Fri" onclick="toggleCalendarDay(this)">Пт</div>
-                                <div class="calendar-day" data-day="Sat" onclick="toggleCalendarDay(this)">Сб</div>
-                                <div class="calendar-day" data-day="Sun" onclick="toggleCalendarDay(this)">Вс</div>
-                            </div>
-                        </div>
-
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-                            <div class="input-group" style="margin: 0;">
-                                <div class="tooltip-container" style="display: block; margin-bottom: 4px;">
-                                    <label style="font-size: 11px; color: #b19cd9; cursor: help;">⏳ Рандомная задержка (ч) 🛈</label>
-                                    <span class="tooltip-text"><b>Случайная задержка времени:</b> Софт делает случайные паузы между запусками воркеров (в заданном диапазоне часов), чтобы антифрод-системы бирж и мостов не пометили ваши аккаунты как бот-ферму.</span>
-                                </div>
-                                <input type="number" id="randomDelayInput" class="auth-input" value="5" min="1" max="24">
-                            </div>
-                            <div class="input-group" style="margin: 0;">
-                                <div class="tooltip-container" style="display: block; margin-bottom: 4px;">
-                                    <label style="font-size: 11px; color: #b19cd9; cursor: help;">⚡ Лимит газа (Gwei) 🛈</label>
-                                    <span class="tooltip-text"><b>Ограничение по газу:</b> Максимальная цена в Gwei, которую софт готов заплатить за транзакцию. Если сеть перегружена и газ выше лимита, софт переждет скачок, экономя ваши деньги.</span>
-                                </div>
-                                <input type="number" id="gasLimitInput" class="auth-input" value="30">
-                            </div>
-                        </div>
-
-                        <button type="button" onclick="saveUserSettingsFromForm()" class="btn-modal-primary" style="padding: 12px;">💾 Сохранить конфигурацию</button>
-                        <div id="settingsSaveMsg" style="text-align: center; font-size: 12px;"></div>
-
-                        <div style="border-top: 1px solid rgba(157,78,221,0.2); padding-top: 14px; margin-top: 6px;">
-                            <button type="button" onclick="toggleTelegramBot()" style="background: ${telegramLinked ? '#18102e' : 'linear-gradient(135deg, #7b2cbf, #9d4edd)'}; color: ${telegramLinked ? '#00d95f' : '#fff'}; border: 1px solid rgba(157,78,221,0.4); padding: 12px; border-radius: 16px; font-weight: bold; width: 100%; cursor: pointer;">${telegramLinked ? t.tgConnectedText : t.tgConnectBtn}</button>
-                        </div>
-                    </div>
-                `;
-                setTimeout(loadUserSettingsIntoForm, 50);
+            } else {
+                centerHtml = `<div style="background: #100a1c; border: 1px solid rgba(157,78,221,0.3); border-radius: 20px; padding: 20px;"><h3 style="color:#fff; margin-top:0;">Раздел в разработке</h3></div>`;
             }
 
-            dashboardContent.innerHTML = `
-                <div class="desktop-sidebar" style="width: 280px; display: flex; flex-direction: column; gap: 14px; flex-shrink: 0;">
-                    <div style="background-color: #100a1c; border: 1px solid rgba(157,78,221,0.3); border-radius: 20px; padding: 16px; box-shadow: 0 5px 20px rgba(0,0,0,0.5); display: flex; flex-direction: column; gap: 10px;">
-                        <div>
-                            <div style="font-weight: 700; font-size: 15px; color: #fff;">${activeUser}</div>
-                            <div style="font-size: 11px; color: #c77dff; font-weight: 600; text-shadow: 0 0 10px rgba(199,125,255,0.4);">🔥 Pro Cyber Farmer</div>
-                        </div>
-                        <div style="border-top: 1px solid rgba(157,78,221,0.2); padding-top: 8px; display: flex; justify-content: space-between; align-items: center; font-size: 12px;">
-                            <span style="color: #b19cd9;">⚡ Уровень / XP:</span>
-                            <span style="color: #e0aaff; font-weight: bold;">Lvl ${currentLevel} (${currentXp} XP)</span>
-                        </div>
-                        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px;">
-                            <span style="color: #b19cd9;">💰 Баланс сайта:</span>
-                            <span style="color: #00d95f; font-weight: bold;">$160.00 (PRO)</span>
-                        </div>
+            content.innerHTML = `
+                <div class="desktop-sidebar" style="width: 260px; display: flex; flex-direction: column; gap: 10px; flex-shrink: 0;">
+                    <div style="background: #100a1c; border: 1px solid rgba(157,78,221,0.3); border-radius: 20px; padding: 16px;">
+                        <div style="font-weight: bold; color: #fff;">${username}</div>
+                        <div style="font-size: 11px; color: #c77dff;">Тариф: ${userPlan}</div>
                     </div>
-                    <div style="background-color: #100a1c; border: 1px solid rgba(157,78,221,0.3); border-radius: 20px; padding: 10px; display: flex; flex-direction: column; gap: 4px; box-shadow: 0 5px 20px rgba(0,0,0,0.5);">
-                        <div class="sidebar-menu-item ${section === 'Looter' ? 'active' : ''}" onclick="switchMenu(this, 'Looter')">📦 ${t.looterMenu}</div>
-                        <div class="sidebar-menu-item ${section === 'Farming' ? 'active' : ''}" onclick="switchMenu(this, 'Farming')">🌾 ${t.farmTabBtn}</div>
-                        <div class="sidebar-menu-item ${section === 'Tasks' ? 'active' : ''}" onclick="switchMenu(this, 'Tasks')">⚡ ${t.tasksTabBtn}</div>
-                        <div class="sidebar-menu-item ${section === 'Proxy' ? 'active' : ''}" onclick="switchMenu(this, 'Proxy')">🌐 ${t.proxyMenu}</div>
-                        <div class="sidebar-menu-item ${section === 'Statistics' ? 'active' : ''}" onclick="switchMenu(this, 'Statistics')">📊 ${t.statsMenu}</div>
-                        <div class="sidebar-menu-item ${section === 'Wallets' ? 'active' : ''}" onclick="switchMenu(this, 'Wallets')">👥 ${t.walletsMenu}</div>
-                        <div class="sidebar-menu-item ${section === 'Billing' ? 'active' : ''}" onclick="switchMenu(this, 'Billing')">💳 ${t.billingMenu}</div>
-                        <div class="sidebar-menu-item ${section === 'Settings' ? 'active' : ''}" onclick="switchMenu(this, 'Settings')">⚙️ ${t.settingsMenu}</div>
+                    <div style="background: #100a1c; border: 1px solid rgba(157,78,221,0.3); border-radius: 16px; padding: 10px; display: flex; flex-direction: column; gap: 4px;">
+                        <div class="sidebar-menu-item ${section === 'Looter' ? 'active' : ''}" onclick="switchMenu(this, 'Looter')">📦 Looter</div>
+                        <div class="sidebar-menu-item ${section === 'Farming' ? 'active' : ''}" onclick="switchMenu(this, 'Farming')">🌾 Фарминг</div>
+                        <div class="sidebar-menu-item ${section === 'Wallets' ? 'active' : ''}" onclick="switchMenu(this, 'Wallets')">👥 Кошельки</div>
                     </div>
                 </div>
                 <div style="flex: 1; display: flex; flex-direction: column; gap: 16px; min-width: 0;">${centerHtml}</div>
             `;
+        }
+
+        async function startScanningDrops() {
+            const log = document.getElementById('drop-logs');
+            const username = localStorage.getItem('airdrop_username') || "Robert";
+            const res = await fetch(`/api/scan/${username}`, { method: 'POST' });
+            const data = await res.json();
+            log.innerHTML += `<br><span style="color: #00d95f;">✅ Просканировано кошельков: ${data.data.total_wallets_scanned}. Найдено дропов: ${data.data.found_drops.length}</span>`;
         }
     </script>
 </body>
