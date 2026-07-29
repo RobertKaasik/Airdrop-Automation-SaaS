@@ -986,35 +986,38 @@
         }
 
         async function startAutoFarming() {
-            const log = document.getElementById('drop-logs');
-            const network = document.getElementById('farmNetwork').value;
+    const log = document.getElementById('drop-logs');
+    // Считываем выбранную сеть из выпадающего списка
+    const networkSelect = document.getElementById('farmNetwork');
+    const network = networkSelect ? networkSelect.value : "Base";
+    
+    if (log) {
+        log.innerHTML += `<br><span style="color: #ff6600;">[${new Date().toLocaleTimeString()}] [API] Отправка запроса на запуск ядра (Сеть: ${network})...</span>`;
+        log.scrollTop = log.scrollHeight;
+        
+        try {
+            const response = await fetch('/api/start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                // Передаем выбранную сеть прямиком в FastAPI
+                body: JSON.stringify({ wallet: "all", network: network }) 
+            });
+            const result = await response.json();
             
-            if (log) {
-                log.innerHTML += `<br><span style="color: #ff6600;">[${new Date().toLocaleTimeString()}] [API] Отправка запроса на запуск ядра (${network})...</span>`;
+            if (response.ok && result.status === 'success') {
+                log.innerHTML += `<br><span style="color: #00d95f; font-weight: bold;">[${new Date().toLocaleTimeString()}] [OK] ✅ ${result.message}</span>`;
                 log.scrollTop = log.scrollHeight;
-                
-                try {
-                    const response = await fetch('/api/start', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ wallet: "all" })
-                    });
-                    const result = await response.json();
-                    
-                    if (result.status === 'success') {
-                        log.innerHTML += `<br><span style="color: #00d95f; font-weight: bold;">[${new Date().toLocaleTimeString()}] [OK] ✅ Все системы в норме! ${result.message} Проверяй JSON-отчет.</span>`;
-                        log.scrollTop = log.scrollHeight;
-                        addFarmExperience(250);
-                    } else {
-                        log.innerHTML += `<br><span style="color: #ff3333;">[${new Date().toLocaleTimeString()}] [Error] ${result.message}</span>`;
-                        log.scrollTop = log.scrollHeight;
-                    }
-                } catch (error) {
-                    log.innerHTML += `<br><span style="color: #ff3333;">[${new Date().toLocaleTimeString()}] [Critical] Ошибка связи с сервером!</span>`;
-                    log.scrollTop = log.scrollHeight;
-                }
+                addFarmExperience(250);
+            } else {
+                log.innerHTML += `<br><span style="color: #ff3333;">[${new Date().toLocaleTimeString()}] [Error] ${result.message || "Ошибка запуска"}</span>`;
+                log.scrollTop = log.scrollHeight;
             }
+        } catch (error) {
+            log.innerHTML += `<br><span style="color: #ff3333;">[${new Date().toLocaleTimeString()}] [Critical] Ошибка связи с сервером!</span>`;
+            log.scrollTop = log.scrollHeight;
         }
+    }
+}
 
         function toggleTelegramBot() {
             telegramLinked = !telegramLinked;
