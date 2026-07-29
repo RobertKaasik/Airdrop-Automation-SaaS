@@ -3,317 +3,182 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title id="page-title">AIRDROP-X — SaaS Панель для крипто-ферм</title>
+    <title id="page-title">AIRDROP-X — Cyberpunk SaaS Panel</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
     <style>
         * { box-sizing: border-box; scroll-behavior: smooth; user-select: none; -webkit-tap-highlight-color: transparent; }
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background-color: #060709;
-            color: #ffffff;
-            margin: 0;
-            padding: 0;
-            display: flex;
-            flex-direction: column;
-            min-height: 100vh;
-            overflow-x: hidden;
+            background-color: #07050c; color: #f3f0ff; margin: 0; padding: 0;
+            display: flex; flex-direction: column; min-height: 100vh; overflow-x: hidden;
+            background-image: radial-gradient(circle at 10% 20%, rgba(110, 44, 180, 0.12) 0%, transparent 40%),
+                              radial-gradient(circle at 90% 80%, rgba(70, 15, 140, 0.1) 0%, transparent 40%);
         }
 
         #preloader-line {
-            position: fixed;
-            top: 0;
-            left: 0;
-            height: 3px;
-            background: linear-gradient(90deg, #ff6600, #ff9933, #00d95f);
-            width: 0%;
-            z-index: 9999;
-            transition: width 0.4s ease;
+            position: fixed; top: 0; left: 0; height: 3px;
+            background: linear-gradient(90deg, #9d4edd, #c77dff, #e0aaff);
+            width: 0%; z-index: 9999; transition: width 0.4s ease;
         }
 
         .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 14px 20px;
-            border-bottom: 1px solid #14171f;
-            background-color: #060709;
-            position: sticky;
-            top: 0;
-            z-index: 1000;
-            gap: 12px;
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 14px 20px; border-bottom: 1px solid rgba(157, 78, 221, 0.2);
+            background-color: rgba(7, 5, 12, 0.9); backdrop-filter: blur(10px);
+            position: sticky; top: 0; z-index: 1000; gap: 12px;
         }
-        .logo-container {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 18px;
-            font-weight: 800;
-            letter-spacing: 0.5px;
-            cursor: pointer;
-            user-select: none;
-            white-space: nowrap;
-            flex-shrink: 0;
-        }
-        .header-actions {
-            display: flex;
-            gap: 8px;
-            align-items: center;
-            flex-shrink: 0;
-        }
-        button {
-            cursor: pointer;
-            border: none;
-            border-radius: 8px;
-            font-weight: 600;
-            transition: all 0.2s ease;
-        }
+        .logo-container { display: flex; align-items: center; gap: 8px; font-size: 18px; font-weight: 800; cursor: pointer; user-select: none; white-space: nowrap; flex-shrink: 0; color: #e0aaff; text-shadow: 0 0 15px rgba(157, 78, 221, 0.5); }
+        .header-actions { display: flex; gap: 8px; align-items: center; flex-shrink: 0; }
+        
+        button { cursor: pointer; border: none; border-radius: 20px; font-weight: 600; transition: all 0.2s ease; }
         .btn-dark-sm {
-            background-color: transparent;
-            color: #fff;
-            border: 1px solid #22252e;
-            padding: 8px 14px;
-            font-size: 13px;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            white-space: nowrap;
+            background-color: rgba(18, 12, 30, 0.8); color: #e0aaff; border: 1px solid rgba(157, 78, 221, 0.3);
+            padding: 8px 16px; font-size: 13px; display: flex; align-items: center; gap: 6px; white-space: nowrap; border-radius: 16px;
+            box-shadow: 0 0 10px rgba(157, 78, 221, 0.1);
         }
-        .btn-dark-sm:hover { background-color: #12151c; }
+        .btn-dark-sm:hover { background-color: rgba(157, 78, 221, 0.2); box-shadow: 0 0 15px rgba(157, 78, 221, 0.3); }
 
         .lang-dropdown-wrapper { position: relative; }
         .lang-menu {
-            display: none;
-            position: absolute;
-            right: 0;
-            top: 40px;
-            background-color: #0f1115;
-            border: 1px solid #22252e;
-            border-radius: 12px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
-            width: 150px;
-            z-index: 1000;
-            overflow: hidden;
-            animation: fadeIn 0.2s ease;
+            display: none; position: absolute; right: 0; top: 40px;
+            background-color: #100a1c; border: 1px solid rgba(157, 78, 221, 0.3); border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.9), 0 0 15px rgba(157, 78, 221, 0.2); width: 150px; z-index: 1000; overflow: hidden;
         }
         .lang-menu.show { display: block; }
         .lang-option {
-            padding: 10px 14px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            color: #8892b0;
-            font-size: 13px;
-            cursor: pointer;
-            background: transparent;
-            border: none;
-            width: 100%;
-            text-align: left;
-            transition: 0.2s;
+            padding: 10px 14px; display: flex; align-items: center; gap: 10px;
+            color: #b19cd9; font-size: 13px; cursor: pointer; background: transparent;
+            border: none; width: 100%; text-align: left; transition: 0.2s;
         }
-        .lang-option:hover { background-color: #1a1d24; color: #fff; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+        .lang-option:hover { background-color: rgba(157, 78, 221, 0.25); color: #fff; }
 
         .modal-overlay {
-            display: none;
-            position: fixed;
-            inset: 0;
-            background-color: rgba(0, 0, 0, 0.85);
-            backdrop-filter: blur(5px);
-            z-index: 2000;
-            align-items: center;
-            justify-content: center;
-            padding: 16px;
-            animation: fadeIn 0.2s ease;
+            display: none; position: fixed; inset: 0; background-color: rgba(4, 2, 8, 0.85);
+            backdrop-filter: blur(6px); z-index: 2000; align-items: center; justify-content: center; padding: 16px;
         }
         .modal-overlay.show { display: flex; }
         .auth-modal {
-            background-color: #0c0e14;
-            border: 1px solid #1a1d26;
-            border-radius: 16px;
-            width: 100%;
-            max-width: 440px;
-            padding: 24px;
-            box-shadow: 0 20px 50px rgba(0,0,0,0.9);
-            text-align: left;
-            position: relative;
+            background-color: #100a1c; border: 1px solid rgba(157, 78, 221, 0.4); border-radius: 20px;
+            width: 100%; max-width: 440px; padding: 24px; box-shadow: 0 20px 50px rgba(0,0,0,0.9), 0 0 30px rgba(110, 44, 180, 0.3); text-align: left; position: relative;
         }
-        .modal-logo {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            font-size: 18px;
-            font-weight: 800;
-            margin-bottom: 20px;
-        }
-        .modal-desc {
-            color: #8892b0;
-            font-size: 13px;
-            margin-bottom: 20px;
-            line-height: 1.5;
-        }
-        .modal-desc span { color: #ff6600; font-weight: 600; }
-        .input-group { position: relative; margin-bottom: 14px; }
+        .modal-logo { display: flex; align-items: center; justify-content: space-between; font-size: 18px; font-weight: 800; margin-bottom: 14px; color: #e0aaff; }
+        .modal-desc { color: #b19cd9; font-size: 13px; margin-bottom: 16px; line-height: 1.5; }
+        .modal-desc span { color: #c77dff; font-weight: 600; text-shadow: 0 0 10px rgba(199, 125, 255, 0.4); }
+        .input-group { position: relative; margin-bottom: 12px; }
         .auth-input {
-            width: 100%;
-            background-color: #060709;
-            border: 1px solid #1c202d;
-            border-radius: 10px;
-            padding: 12px 14px;
-            color: #fff;
-            font-size: 14px;
-            outline: none;
-            transition: 0.2s;
+            width: 100%; background-color: #07050c; border: 1px solid rgba(157, 78, 221, 0.3);
+            border-radius: 14px; padding: 12px 14px; color: #fff; font-size: 14px; outline: none; transition: 0.2s;
+            box-shadow: inset 0 2px 5px rgba(0,0,0,0.5);
         }
-        .auth-input:focus { border-color: #ff6600; }
-        .auth-input.error { border-color: #ff3333 !important; }
+        .auth-input:focus { border-color: #c77dff; box-shadow: 0 0 12px rgba(199, 125, 255, 0.4), inset 0 2px 5px rgba(0,0,0,0.5); }
 
         .password-wrapper { position: relative; width: 100%; }
         .password-toggle-icon {
             position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
-            cursor: pointer; color: #555c6d; font-size: 15px; user-select: none; transition: 0.2s;
+            cursor: pointer; color: #7b68ee; font-size: 15px; user-select: none;
         }
-        .password-toggle-icon:hover { color: #ff6600; }
         
-        .btn-modal-primary {
-            width: 100%;
-            background-color: #ff6600;
-            color: #000;
-            border: none;
-            padding: 13px;
-            font-size: 14px;
-            font-weight: bold;
-            border-radius: 10px;
-            margin-top: 6px;
-            cursor: pointer;
-            transition: 0.2s;
-        }
-        .btn-modal-primary:hover { background-color: #e65c00; }
+        .btn-modal-primary { width: 100%; background: linear-gradient(135deg, #7b2cbf, #9d4edd); color: #fff; border: none; padding: 13px; font-size: 14px; font-weight: bold; border-radius: 14px; margin-top: 4px; cursor: pointer; box-shadow: 0 0 15px rgba(157, 78, 221, 0.5); transition: 0.2s; }
+        .btn-modal-primary:hover { box-shadow: 0 0 25px rgba(199, 125, 255, 0.8); }
         
-        .btn-modal-secondary {
-            width: 100%;
-            background-color: transparent;
-            color: #8892b0;
-            border: 1px solid #1c202d;
-            padding: 13px;
-            font-size: 14px;
-            font-weight: 600;
-            border-radius: 10px;
-            margin-top: 8px;
-            cursor: pointer;
-            transition: 0.2s;
-        }
-        .btn-modal-secondary:hover { background-color: #12151c; color: #fff; }
+        .divider-container { display: flex; align-items: center; text-align: center; color: #7b68ee; font-size: 12px; margin: 16px 0; }
+        .divider-container::before, .divider-container::after { content: ''; flex: 1; border-bottom: 1px solid rgba(157, 78, 221, 0.25); }
+        .divider-container::before { margin-right: 10px; }
+        .divider-container::after { margin-left: 10px; }
+
+        .btn-google { width: 100%; background-color: #07050c; color: #e0aaff; border: 1px solid rgba(157, 78, 221, 0.3); padding: 12px; font-size: 13px; font-weight: 600; border-radius: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; transition: 0.2s; }
+        .btn-google:hover { background-color: rgba(157, 78, 221, 0.15); border-color: #c77dff; }
 
         .error-toast {
-            position: absolute;
-            bottom: -65px;
-            left: 0;
-            right: 0;
-            background-color: #1f0c0c;
-            border: 1px solid #ff3333;
-            border-radius: 10px;
-            padding: 10px 14px;
-            color: #ff8888;
-            font-size: 12px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            box-shadow: 0 10px 25px rgba(255, 51, 51, 0.2);
+            position: absolute; bottom: -55px; left: 0; right: 0; background-color: #1a0826;
+            border: 1px solid #ff3366; border-radius: 12px; padding: 10px 14px; color: #ff88aa;
+            font-size: 12px; display: flex; align-items: center; gap: 8px; box-shadow: 0 0 15px rgba(255, 51, 102, 0.3);
         }
 
         .hero {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: flex-start;
-            padding: 50px 16px 30px 16px;
-            text-align: center;
-            background: radial-gradient(circle at center, rgba(255, 102, 0, 0.08) 0%, rgba(6, 7, 9, 1) 60%);
+            display: flex; flex-direction: column; align-items: center; justify-content: flex-start;
+            padding: 50px 16px 30px 16px; text-align: center;
+            background: radial-gradient(circle at center, rgba(123, 44, 191, 0.18) 0%, rgba(7, 5, 12, 1) 70%);
         }
-        .hero h1 { font-size: 36px; font-weight: 700; margin-bottom: 16px; line-height: 1.15; max-width: 800px; }
-        .hero p { color: #8892b0; font-size: 16px; margin-bottom: 28px; max-width: 600px; line-height: 1.5; }
+        .hero h1 { font-size: 36px; font-weight: 700; margin-bottom: 16px; line-height: 1.15; max-width: 800px; color: #fff; text-shadow: 0 0 30px rgba(157, 78, 221, 0.4); }
+        .hero p { color: #b19cd9; font-size: 16px; margin-bottom: 28px; max-width: 600px; line-height: 1.5; }
         .hero-buttons { display: flex; gap: 12px; margin-bottom: 20px; flex-direction: column; width: 100%; max-width: 320px; align-items: center; }
         
-        .btn-orange-lg {
-            background-color: #ff6600; color: #000; padding: 14px 24px; font-size: 15px; border-radius: 10px; width: 100%;
-        }
-        .btn-orange-lg:hover { background-color: #e65c00; }
-        .btn-dark-lg {
-            background-color: #0f1115; color: #fff; border: 1px solid #22252e; padding: 14px 24px; font-size: 15px; border-radius: 10px; width: 100%;
-        }
-        .btn-dark-lg:hover { background-color: #1a1d24; }
+        .btn-purple-lg { background: linear-gradient(135deg, #7b2cbf, #9d4edd); color: #fff; padding: 14px 24px; font-size: 15px; border-radius: 20px; width: 100%; box-shadow: 0 0 20px rgba(157, 78, 221, 0.5); }
+        .btn-purple-lg:hover { box-shadow: 0 0 30px rgba(199, 125, 255, 0.8); }
+        .btn-dark-lg { background-color: #100a1c; color: #e0aaff; border: 1px solid rgba(157, 78, 221, 0.3); padding: 14px 24px; font-size: 15px; border-radius: 20px; width: 100%; box-shadow: 0 0 10px rgba(157, 78, 221, 0.1); }
 
         .status-banner {
-            width: 100%; max-width: 900px; background: #0d0f14; border: 1px solid #181c25; border-radius: 12px; padding: 14px 18px; display: flex; justify-content: space-between; align-items: center; margin: 0 auto 40px auto; gap: 10px;
+            width: 100%; max-width: 900px; background: rgba(16, 10, 28, 0.8); border: 1px solid rgba(157, 78, 221, 0.3);
+            border-radius: 16px; padding: 14px 18px; display: flex; justify-content: space-between; align-items: center; margin: 0 auto 40px auto; gap: 10px;
+            box-shadow: 0 0 20px rgba(123, 44, 191, 0.15);
         }
-        .status-left { display: flex; align-items: center; gap: 8px; color: #a0aec0; font-size: 13px; text-align: left; }
-        .status-right { color: #ff6600; font-weight: bold; font-size: 14px; flex-shrink: 0; }
+        .status-left { display: flex; align-items: center; gap: 8px; color: #b19cd9; font-size: 13px; text-align: left; }
+        .status-right { color: #c77dff; font-weight: bold; font-size: 14px; flex-shrink: 0; text-shadow: 0 0 10px rgba(199, 125, 255, 0.5); }
 
-        .section-title { font-size: 26px; font-weight: 700; margin: 30px 16px 16px 16px; text-align: center; }
+        .section-title { font-size: 26px; font-weight: 700; margin: 30px 16px 16px 16px; text-align: center; color: #fff; text-shadow: 0 0 15px rgba(157, 78, 221, 0.3); }
         
-        .features-grid {
-            display: grid; grid-template-columns: 1fr; gap: 16px; width: 100%; max-width: 1000px; margin: 0 auto 50px auto; padding: 0 16px;
-        }
-        .feature-card {
-            background-color: #0d0f14; border: 1px solid #14171f; border-radius: 16px; padding: 24px; transition: all 0.3s ease; text-align: left;
-        }
-        .feature-card:hover { border-color: #ff6600; background-color: #15100c; }
-        .card-icon { font-size: 24px; margin-bottom: 12px; display: inline-block; background: #14171f; padding: 10px; border-radius: 10px; }
-        .feature-card h3 { font-size: 17px; margin: 0 0 8px 0; color: #ffffff; }
-        .feature-card p { font-size: 13px; color: #8892b0; margin: 0; line-height: 1.5; }
+        .features-grid { display: grid; grid-template-columns: 1fr; gap: 16px; width: 100%; max-width: 1000px; margin: 0 auto 50px auto; padding: 0 16px; }
+        .feature-card { background-color: #100a1c; border: 1px solid rgba(157, 78, 221, 0.25); border-radius: 20px; padding: 24px; text-align: left; box-shadow: 0 10px 30px rgba(0,0,0,0.5), 0 0 15px rgba(123, 44, 191, 0.1); transition: 0.3s; }
+        .feature-card:hover { border-color: rgba(199, 125, 255, 0.6); box-shadow: 0 10px 30px rgba(0,0,0,0.7), 0 0 25px rgba(157, 78, 221, 0.3); }
+        .card-icon { font-size: 24px; margin-bottom: 12px; display: inline-block; background: rgba(157, 78, 221, 0.15); padding: 10px; border-radius: 14px; border: 1px solid rgba(157, 78, 221, 0.3); }
+        .feature-card h3 { font-size: 17px; margin: 0 0 8px 0; color: #e0aaff; }
+        .feature-card p { font-size: 13px; color: #b19cd9; margin: 0; line-height: 1.5; }
 
         .faq-section { width: 100%; max-width: 900px; margin: 0 auto 60px auto; text-align: left; padding: 0 16px; }
-        .faq-item { background-color: #0d0f14; border: 1px solid #14171f; border-radius: 12px; margin-bottom: 10px; overflow: hidden; transition: 0.2s; }
-        .faq-question { padding: 16px 18px; font-size: 15px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; cursor: pointer; gap: 10px; }
-        .faq-question:hover { color: #ff6600; }
-        .faq-answer { padding: 0 18px 16px 18px; color: #8892b0; font-size: 13px; line-height: 1.5; display: none; }
+        .faq-item { background-color: #100a1c; border: 1px solid rgba(157, 78, 221, 0.25); border-radius: 16px; margin-bottom: 10px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.4); }
+        .faq-question { padding: 16px 18px; font-size: 15px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; cursor: pointer; gap: 10px; color: #e0aaff; }
+        .faq-answer { padding: 0 18px 16px 18px; color: #b19cd9; font-size: 13px; line-height: 1.5; display: none; }
         .faq-item.active .faq-answer { display: block; }
 
-        .footer {
-            border-top: 1px solid #14171f; padding: 24px 16px; display: flex; flex-direction: column; gap: 12px; align-items: center; text-align: center; color: #666; font-size: 13px; margin-top: auto;
-        }
+        .footer { border-top: 1px solid rgba(157, 78, 221, 0.2); padding: 24px 16px; display: flex; flex-direction: column; gap: 12px; align-items: center; text-align: center; color: #7b68ee; font-size: 13px; margin-top: auto; background: #07050c; }
 
-        .mobile-nav-bar {
-            display: none; position: fixed; bottom: 0; left: 0; right: 0; background: #0c0e14; border-top: 1px solid #1f2330; padding: 10px 16px; z-index: 1500; justify-content: space-around; align-items: center; box-shadow: 0 -10px 30px rgba(0,0,0,0.8);
-        }
-        .mobile-nav-item {
-            display: flex; flex-direction: column; align-items: center; gap: 4px; color: #8892b0; font-size: 11px; cursor: pointer; background: transparent; border: none; padding: 6px; flex: 1;
-        }
-        .mobile-nav-item.active { color: #ff6600; font-weight: bold; }
+        .mobile-nav-bar { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: rgba(12, 8, 22, 0.95); backdrop-filter: blur(10px); border-top: 1px solid rgba(157, 78, 221, 0.3); padding: 10px 16px; z-index: 1500; justify-content: space-around; align-items: center; box-shadow: 0 -10px 30px rgba(0,0,0,0.8); }
+        .mobile-nav-item { display: flex; flex-direction: column; align-items: center; gap: 4px; color: #b19cd9; font-size: 11px; cursor: pointer; background: transparent; border: none; padding: 6px; flex: 1; border-radius: 12px; }
+        .mobile-nav-item.active { color: #e0aaff; font-weight: bold; text-shadow: 0 0 10px rgba(224, 170, 255, 0.6); }
         .mobile-nav-item span.icon { font-size: 18px; }
 
-        .bottom-sheet-overlay {
-            display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 2500; backdrop-filter: blur(4px); align-items: flex-end; animation: fadeIn 0.2s ease;
-        }
+        .bottom-sheet-overlay { display: none; position: fixed; inset: 0; background: rgba(4, 2, 8, 0.85); z-index: 2500; backdrop-filter: blur(6px); align-items: flex-end; }
         .bottom-sheet-overlay.show { display: flex; }
-        .bottom-sheet {
-            background: #0f1117; border-top: 1px solid #222633; border-radius: 20px 20px 0 0; width: 100%; padding: 24px 20px 36px 20px; box-shadow: 0 -20px 40px rgba(0,0,0,0.9); animation: slideUp 0.3s cubic-bezier(0.1, 0.9, 0.2, 1); max-height: 80vh; overflow-y: auto;
-        }
-        @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
-        
-        .sheet-handle { width: 40px; height: 4px; background: #2a2f40; border-radius: 2px; margin: 0 auto 20px auto; }
-        .sheet-menu-item {
-            padding: 14px 16px; color: #fff; border-radius: 12px; font-weight: 500; font-size: 15px; cursor: pointer; display: flex; align-items: center; gap: 14px; margin-bottom: 8px; background: #141720; border: 1px solid #1c202d; transition: 0.2s;
-        }
-        .sheet-menu-item:hover, .sheet-menu-item.active { background: #ff6600; color: #000; font-weight: bold; border-color: #ff6600; }
+        .bottom-sheet { background: #120c22; border-top: 1px solid rgba(157, 78, 221, 0.4); border-radius: 24px 24px 0 0; width: 100%; padding: 24px 20px 36px 20px; max-height: 80vh; overflow-y: auto; box-shadow: 0 -20px 50px rgba(110, 44, 180, 0.4); }
+        .sheet-handle { width: 40px; height: 4px; background: rgba(157, 78, 221, 0.4); border-radius: 2px; margin: 0 auto 20px auto; }
+        .sheet-menu-item { padding: 14px 16px; color: #fff; border-radius: 16px; font-weight: 500; font-size: 15px; cursor: pointer; display: flex; align-items: center; gap: 14px; margin-bottom: 8px; background: #18102e; border: 1px solid rgba(157, 78, 221, 0.25); }
+        .sheet-menu-item:hover, .sheet-menu-item.active { background: linear-gradient(135deg, #7b2cbf, #9d4edd); color: #fff; font-weight: bold; border-color: #c77dff; box-shadow: 0 0 15px rgba(157, 78, 221, 0.5); }
 
-        .sidebar-menu-item {
-            padding: 12px 16px; color: #8892b0; border-radius: 10px; font-weight: 500; font-size: 14px; cursor: pointer; display: flex; align-items: center; transition: 0.2s;
-        }
-        .sidebar-menu-item:hover { background: #1a1d24; color: #fff; }
-        .sidebar-menu-item.active { background: #151821; color: #fff; font-weight: 600; }
+        .sidebar-menu-item { padding: 12px 16px; color: #b19cd9; border-radius: 14px; font-weight: 500; font-size: 14px; cursor: pointer; display: flex; align-items: center; transition: 0.2s; }
+        .sidebar-menu-item:hover { background: rgba(157, 78, 221, 0.15); color: #fff; }
+        .sidebar-menu-item.active { background: linear-gradient(135deg, rgba(123, 44, 191, 0.4), rgba(157, 78, 221, 0.4)); color: #fff; font-weight: 600; border-left: 3px solid #c77dff; box-shadow: inset 0 0 15px rgba(157, 78, 221, 0.2); }
 
-        .dashboard-wrapper {
-            max-width: 1200px; width: 100%; margin: 16px auto; padding: 0 12px; display: flex; flex-direction: column; gap: 16px; flex: 1;
+        .dashboard-wrapper { max-width: 1200px; width: 100%; margin: 16px auto; padding: 0 12px; display: flex; flex-direction: column; gap: 16px; flex: 1; }
+
+        .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; margin-top: 10px; }
+        .calendar-day {
+            background: #07050c; border: 1px solid rgba(157,78,221,0.25); border-radius: 12px; padding: 10px 4px;
+            text-align: center; cursor: pointer; transition: 0.2s; color: #b19cd9; font-size: 11px; font-weight: 600;
         }
+        .calendar-day:hover { border-color: #c77dff; color: #fff; }
+        .calendar-day.active {
+            background: linear-gradient(135deg, #7b2cbf, #9d4edd); color: #fff; border-color: #e0aaff;
+            box-shadow: 0 0 12px rgba(157,78,221,0.5); text-shadow: 0 0 5px rgba(255,255,255,0.5);
+        }
+
+        .tooltip-container { position: relative; display: inline-flex; align-items: center; cursor: help; }
+        .tooltip-text {
+            visibility: hidden; width: 240px; background-color: #120c22; color: #fff;
+            text-align: left; border-radius: 12px; padding: 10px 12px; font-size: 11px;
+            border: 1px solid rgba(157, 78, 221, 0.4); position: absolute; z-index: 100;
+            bottom: 125%; left: 50%; transform: translateX(-50%);
+            opacity: 0; transition: opacity 0.2s; box-shadow: 0 10px 25px rgba(0,0,0,0.9), 0 0 15px rgba(123, 44, 191, 0.4);
+            line-height: 1.4; font-weight: normal;
+        }
+        .tooltip-container:hover .tooltip-text { visibility: visible; opacity: 1; }
 
         @media(min-width: 768px) {
             .hero h1 { font-size: 44px; }
             .hero-buttons { flex-direction: row; max-width: none; justify-content: center; width: auto; }
-            .btn-orange-lg, .btn-dark-lg { width: auto; min-width: 200px; }
+            .btn-purple-lg, .btn-dark-lg { width: auto; min-width: 200px; }
             .features-grid { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); padding: 0; }
-            .faq-section { padding: 0; }
             .footer { flex-direction: row; justify-content: space-between; padding: 30px 40px; }
             .mobile-nav-bar { display: none !important; }
             .dashboard-wrapper { flex-direction: row; padding: 0 20px; gap: 24px; }
@@ -330,17 +195,17 @@
     <div id="preloader-line"></div>
 
     <div class="header">
-        <div class="logo-container" id="main-logo-btn" onclick="returnToMainSite()">
+        <div class="logo-container" id="main-logo-btn">
             <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 26px; height: 26px; pointer-events: none; flex-shrink: 0;">
-                <ellipse cx="12" cy="20" rx="10" ry="3" stroke="#ff6600" stroke-width="2" fill="#ff6600" fill-opacity="0.15"/>
-                <path d="M2 20c0 1.66 4.48 3 10 3s10-1.34 10-3" stroke="#ff6600" stroke-width="2"/>
-                <ellipse cx="12" cy="20" rx="5" ry="1.5" stroke="#ff6600" stroke-width="1" stroke-opacity="0.6"/>
+                <ellipse cx="12" cy="20" rx="10" ry="3" stroke="#c77dff" stroke-width="2" fill="#9d4edd" fill-opacity="0.25"/>
+                <path d="M2 20c0 1.66 4.48 3 10 3s10-1.34 10-3" stroke="#c77dff" stroke-width="2"/>
+                <ellipse cx="12" cy="20" rx="5" ry="1.5" stroke="#e0aaff" stroke-width="1" stroke-opacity="0.6"/>
                 <path d="M12 3L7 5.5L12 8L17 5.5L12 3Z" fill="#ffffff"/>
-                <path d="M7 5.5V10.5L12 13V8L7 5.5Z" fill="#dddddd"/>
-                <path d="M17 5.5V10.5L12 13V8L17 5.5Z" fill="#aaaaaa"/>
-                <path d="M12 14V17" stroke="#ff6600" stroke-width="2" stroke-linecap="round"/>
-                <path d="M8 11.5V14" stroke="#ff6600" stroke-width="1.5" stroke-linecap="round" stroke-opacity="0.7"/>
-                <path d="M16 11.5V14" stroke="#ff6600" stroke-width="1.5" stroke-linecap="round" stroke-opacity="0.7"/>
+                <path d="M7 5.5V10.5L12 13V8L7 5.5Z" fill="#d8b4fe"/>
+                <path d="M17 5.5V10.5L12 13V8L17 5.5Z" fill="#c084fc"/>
+                <path d="M12 14V17" stroke="#e0aaff" stroke-width="2" stroke-linecap="round"/>
+                <path d="M8 11.5V14" stroke="#c77dff" stroke-width="1.5" stroke-linecap="round" stroke-opacity="0.7"/>
+                <path d="M16 11.5V14" stroke="#c77dff" stroke-width="1.5" stroke-linecap="round" stroke-opacity="0.7"/>
             </svg>
             <span style="pointer-events: none;">AIRDROP-X</span>
         </div>
@@ -349,13 +214,13 @@
             
             <div class="lang-dropdown-wrapper">
                 <button class="btn-dark-sm" id="lang-btn" onclick="toggleLangMenu(event)">
-                    <span style="color: #888; font-size: 11px; font-weight: bold; background: #1a1d24; padding: 2px 5px; border-radius: 4px;" id="current-lang-badge">RU</span>
+                    <span style="color: #c77dff; font-size: 11px; font-weight: bold; background: rgba(157,78,221,0.2); padding: 2px 5px; border-radius: 6px;" id="current-lang-badge">RU</span>
                     <span id="current-lang-text">RU</span>
                 </button>
                 <div class="lang-menu" id="langMenu">
-                    <button class="lang-option" onclick="changeLanguage('en')"><span style="color: #888; font-size: 11px; font-weight: bold; background: #1a1d24; padding: 2px 5px; border-radius: 4px;">US</span> English</button>
-                    <button class="lang-option" onclick="changeLanguage('zh')"><span style="color: #888; font-size: 11px; font-weight: bold; background: #1a1d24; padding: 2px 5px; border-radius: 4px;">CN</span> 中文</button>
-                    <button class="lang-option" onclick="changeLanguage('ru')"><span style="color: #888; font-size: 11px; font-weight: bold; background: #1a1d24; padding: 2px 5px; border-radius: 4px;">RU</span> Русский</button>
+                    <button class="lang-option" onclick="changeLanguage('en')"><span style="color: #c77dff; font-size: 11px; font-weight: bold; background: rgba(157,78,221,0.2); padding: 2px 5px; border-radius: 6px;">US</span> English</button>
+                    <button class="lang-option" onclick="changeLanguage('zh')"><span style="color: #c77dff; font-size: 11px; font-weight: bold; background: rgba(157,78,221,0.2); padding: 2px 5px; border-radius: 6px;">CN</span> 中文</button>
+                    <button class="lang-option" onclick="changeLanguage('ru')"><span style="color: #c77dff; font-size: 11px; font-weight: bold; background: rgba(157,78,221,0.2); padding: 2px 5px; border-radius: 6px;">RU</span> Русский</button>
                 </div>
             </div>
         </div>
@@ -365,16 +230,51 @@
         <div class="auth-modal" id="modalContainer"></div>
     </div>
 
-    <!-- Модальное окно подтверждения удаления кошелька -->
-    <div class="modal-overlay" id="deleteModalOverlay">
-        <div class="auth-modal" style="max-width: 380px; text-align: center;">
-            <div style="font-size: 32px; margin-bottom: 12px;">⚠️</div>
-            <h3 style="color: #fff; margin: 0 0 10px 0; font-size: 18px;">Удаление кошелька</h3>
-            <p id="deleteModalText" style="color: #8892b0; font-size: 13px; margin-bottom: 20px; line-height: 1.4;">Вы уверены, что хотите удалить этот кошелек?</p>
-            <div style="display: flex; gap: 10px;">
-                <button onclick="closeDeleteModal()" class="btn-modal-secondary" style="margin: 0;">Отмена</button>
-                <button id="confirmDeleteBtn" class="btn-modal-primary" style="margin: 0; background-color: #ff3333; color: #fff;">Удалить</button>
+    <div class="modal-overlay" id="walletActionModal">
+        <div class="auth-modal" style="max-width: 440px;">
+            <div class="modal-logo">
+                <span id="walletModalTitle">⚙️ Меню кошелька</span>
+                <span onclick="closeWalletActionModal()" style="cursor: pointer; color: #b19cd9; font-size: 18px;">✕</span>
             </div>
+            
+            <div style="display: flex; flex-direction: column; gap: 14px;">
+                <div style="background: #07050c; padding: 14px; border-radius: 14px; border: 1px solid rgba(0,217,95,0.4);">
+                    <div style="font-size: 12px; font-weight: bold; color: #00d95f; margin-bottom: 10px;">➕ Пополнить баланс воркера:</div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
+                        <div>
+                            <label style="font-size: 10px; color: #b19cd9; display: block; margin-bottom: 2px;">Сеть:</label>
+                            <select id="depositNetwork" class="auth-input" style="padding: 8px 10px; font-size: 12px;">
+                                <option value="Base">Base L2</option>
+                                <option value="Arbitrum">Arbitrum</option>
+                                <option value="ZkSync">ZkSync</option>
+                                <option value="Scroll">Scroll</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="font-size: 10px; color: #b19cd9; display: block; margin-bottom: 2px;">Сумма (ETH):</label>
+                            <input type="number" step="0.001" id="depositAmount" class="auth-input" value="0.005" style="padding: 8px 10px; font-size: 12px;">
+                        </div>
+                    </div>
+                    <button type="button" onclick="executeWalletDeposit()" class="btn-modal-primary" style="background: linear-gradient(135deg, #008833, #00d95f); color: #000; padding: 10px; font-size: 13px;">💳 Пополнить с мастер-аккаунта</button>
+                </div>
+
+                <div style="background: #07050c; padding: 14px; border-radius: 14px; border: 1px solid rgba(157,78,221,0.3);">
+                    <div style="font-size: 12px; font-weight: bold; color: #c77dff; margin-bottom: 10px;">✏️ Редактировать данные:</div>
+                    <div class="input-group" style="margin-bottom: 8px;">
+                        <input type="text" id="editWalletAddress" class="auth-input" placeholder="Название или адрес" autocomplete="off" name="custom_addr_edit">
+                    </div>
+                    <div class="input-group" style="margin-bottom: 8px;">
+                        <input type="password" id="editWalletPk" class="auth-input" placeholder="Новый приватный ключ" autocomplete="new-password" name="custom_pk_edit">
+                    </div>
+                    <div class="input-group" style="margin-bottom: 10px;">
+                        <input type="text" id="editWalletProxy" class="auth-input" placeholder="Прокси" autocomplete="off" name="custom_proxy_edit">
+                    </div>
+                    <button type="button" onclick="executeWalletUpdate()" class="btn-modal-primary" style="padding: 10px; font-size: 13px;">💾 Сохранить изменения</button>
+                </div>
+
+                <button type="button" onclick="executeWalletDeleteFromModal()" class="btn-modal-secondary" style="border-color: rgba(255, 51, 102, 0.5); color: #ff88aa; padding: 10px; font-size: 13px;">🗑️ Удалить кошелек навсегда</button>
+            </div>
+            <div id="walletActionMsg" style="margin-top: 10px; font-size: 12px; text-align: center;"></div>
         </div>
     </div>
 
@@ -391,7 +291,7 @@
             <p id="hero-desc">Фармите поинты, сканируйте кошельки на наличие распределений и клеймите аирдропы в один клик с защитой Anti-Sybil.</p>
             
             <div class="hero-buttons">
-                <button id="farm-btn" class="btn-orange-lg" onclick="openModal('register')">Получить доступ ($160)</button>
+                <button id="farm-btn" class="btn-purple-lg" onclick="openModal('register')">Получить доступ ($160)</button>
                 <button id="settings-btn" class="btn-dark-lg" onclick="scrollToFeatures()">Подробнее</button>
             </div>
         </div>
@@ -415,8 +315,8 @@
             </div>
             <div class="feature-card">
                 <div class="card-icon">⚡</div>
-                <h3 id="c2-t">Multi-Chain Bridge Router</h3>
-                <p id="c2-d">Рандомизированные транзакции и свапы в сетях LayerZero, Base, Arbitrum и ZkSync для набива объемов.</p>
+                <h3 id="c2-t">Multi-Chain Swaps & Bridges</h3>
+                <p id="c2-d">Рандомизированные кроссчейн свапы и транзакции в сетях LayerZero, Base, Arbitrum и ZkSync для набива объемов.</p>
             </div>
             <div class="feature-card">
                 <div class="card-icon">🛡️</div>
@@ -478,8 +378,8 @@
     <div class="footer">
         <div>AIRDROP-X © 2026. All rights reserved.</div>
         <div style="display: flex; gap: 20px; justify-content: center;">
-            <a href="#" style="color: #8892b0; text-decoration: none;">Telegram</a>
-            <a href="#" style="color: #8892b0; text-decoration: none;">GitHub</a>
+            <a href="#" style="color: #b19cd9; text-decoration: none;">Telegram</a>
+            <a href="#" style="color: #b19cd9; text-decoration: none;">GitHub</a>
         </div>
     </div>
 
@@ -498,15 +398,14 @@
 
         let currentLang = 'ru';
         let isLoggedIn = false;
-        let provider;
-        let signer;
-        let userAddress;
         let currentSection = 'Looter';
         let telegramLinked = false;
+        let selectedNetwork = 'Base';
+        let activeSelectedWalletId = null;
 
         const translations = {
             ru: {
-                title: "AIRDROP-X — SaaS Панель для крипто-ферм",
+                title: "AIRDROP-X — Cyberpunk SaaS Panel",
                 login: "Войти", logout: "Выйти", langCode: "RU", langName: "Русский",
                 heroTitle: "Универсальный инструмент<br>для автоматизации и сбора Airdrop.",
                 heroDesc: "Фармите поинты, сканируйте кошельки на наличие распределений и клеймите аирдропы в один клик с защитой Anti-Sybil.",
@@ -514,38 +413,21 @@
                 bannerText: "Приватное ПО с ограниченным количеством слотов для защиты от детектирования.",
                 featuresHeading: "Возможности платформы", faqHeading: "Часто задаваемые вопросы",
                 c1t: "Drop Scanner & Looter", c1d: "Автоматический поиск доступных для клейма аирдропов и ретродропов по всем подключенным кошелькам.",
-                c2t: "Multi-Chain Bridge Router", c2d: "Рандомизированные транзакции и свапы в сетях LayerZero, Base, Arbitrum и ZkSync для набива объемов.",
+                c2t: "Multi-Chain Swaps & Bridges", c2d: "Рандомизированные кроссчейн свапы и транзакции в сетях LayerZero, Base, Arbitrum и ZkSync для набива объемов.",
                 c3t: "Sybil Shield", c3d: "Имитация паттернов реального пользователя и интеллектуальное распределение газа без связей между кошельками.",
                 
-                modalLoginDesc: "Для входа, введите свой <span>логин</span> и <span>пароль</span> в поля ниже",
-                loginPlaceholder: "Логин", passPlaceholder: "Пароль",
-                loginBtnModal: "Войти", registerBtnModal: "Создать аккаунт",
-                termsText: 'Нажимая "Войти", Вы соглашаетесь с <a href="#">Условиями использования</a> и <a href="#">Политикой конфиденциальности</a>',
-                
-                regDesc: "Для создания аккаунта, введите данные в поля ниже",
-                emailPlaceholder: "Почта", repeatPassPlaceholder: "Повторите пароль",
-                regBtnModal: "Создать аккаунт", termsReg: 'Нажимая "Создать аккаунт", Вы соглашаетесь с <a href="#">Условиями использования</a> и <a href="#">Политикой конфиденциальности</a>',
-
-                dashTitle: "Панель поиска и клейма аирдропов",
+                dashTitle: "Панель поиска и авто-сбора лута (Claim Looter)",
                 dashDesc: "Сканируйте свои кошельки на наличие незабранных наград и запускайте авто-фарминг объема.",
-                scanBtn: "Сканировать кошельки", claimBtn: "Клеймить всё",
+                logInit: "[System] Антифрод-ядро инициализировано. Ожидание сканирования...",
+                scanBtn: "🔍 Запустить авто-сбор (Claim Looter)", claimBtn: "Клеймить всё",
                 exportBtn: "📥 Экспорт отчета фермы (JSON)",
                 farmTabBtn: "Авто-Фарминг", tasksTabBtn: "Активные задачи", proxyTabBtn: "Прокси менеджер", statsTabBtn: "Статистика",
-                balanceText: "Баланс", connectWalletBtn: "🔌 Подключить кошелек",
-                walletConnectedText: "Кошелек подключен",
-                looterMenu: "Looter & Drops", farmMenu: "Авто-Фарминг", tasksMenu: "Активные задачи", proxyMenu: "Прокси Чекер", walletsMenu: "Кошельки", statsMenu: "Статистика", billingMenu: "Биллинг и Подписка", settingsMenu: "Настройки",
-                joinedText: "зарегистрирован 26 июля 2026",
-                logInit: "[System] Личный кабинет инициализирован. Все модули прокси и безопасности активированы...",
+                looterMenu: "Looter & Drops", farmMenu: "Авто-Фарминг", tasksMenu: "Активные задачи", proxyMenu: "Прокси Чекинг", walletsMenu: "Кошельки", statsMenu: "Статистика", billingMenu: "Биллинг и Подписка", settingsMenu: "Настройки",
                 
-                filterTier1: "Крупные аирдропы",
-                filterMicro: "Микро-дропы (<$10)",
-                filterRefunds: "Рефанды газа",
-                
-                farmTitle: "🌾 Авто-Фарминг объемов (Multi-Route)",
-                farmDesc: "Запуск боевого ядра `core_engine.py` через FastAPI сервер.",
+                farmTitle: "🌾 Anti-Sybil Swaps & Bridges (Фарм объемов)",
+                farmDesc: "Запуск боевого ядра `core_engine.py` с рандомизацией пауз и порядка воркеров.",
                 netSelectLabel: "Целевая сеть для фарма:",
-                delayLabel: "Рандомная задержка (sec):",
-                startFarmBtn: "▶ Запустить ядро фермы",
+                startFarmBtn: "▶ Запустить Anti-Sybil Ядро",
                 
                 proxyTitle: "🌐 Менеджер и чекер прокси (HTTP/Socks5)",
                 proxyDesc: "Проверка пинга и статуса подключенных прокси из вашей базы данных.",
@@ -563,7 +445,7 @@
                 tgConnectedText: "Telegram успешно привязан (@RubyFarmer_bot) ✅"
             },
             en: {
-                title: "AIRDROP-X — Crypto Farm SaaS Panel",
+                title: "AIRDROP-X — Cyberpunk SaaS Panel",
                 login: "Login", logout: "Logout", langCode: "US", langName: "English",
                 heroTitle: "Universal Tool<br>for Airdrop Automation & Claiming.",
                 heroDesc: "Farm points, scan wallets for allocations, and claim airdrops in one click with robust Anti-Sybil protection.",
@@ -571,38 +453,21 @@
                 bannerText: "Private software with limited slots to ensure maximum safety and reliability.",
                 featuresHeading: "Platform Features", faqHeading: "Frequently Asked Questions",
                 c1t: "Drop Scanner & Looter", c1d: "Automatic search for claimable airdrops and retro-drops across all connected wallets.",
-                c2t: "Multi-Chain Bridge Router", c2d: "Randomized transactions and swaps across LayerZero, Base, Arbitrum, and ZkSync networks.",
+                c2t: "Multi-Chain Swaps & Bridges", c2d: "Randomized cross-chain swaps and transactions across LayerZero, Base, Arbitrum, and ZkSync.",
                 c3t: "Sybil Shield", c3d: "Simulation of real user behavioral patterns and smart gas distribution without wallet links.",
                 
-                modalLoginDesc: "To log in, enter your <span>username</span> and <span>password</span> below",
-                loginPlaceholder: "Username", passPlaceholder: "Password",
-                loginBtnModal: "Sign in", registerBtnModal: "Sign up",
-                termsText: 'By pressing Sign in, you agree to the <a href="#">Terms of Use</a> and <a href="#">Privacy Policy</a>',
-                
-                regDesc: "To create an account, enter your details below",
-                emailPlaceholder: "Email", repeatPassPlaceholder: "Repeat password",
-                regBtnModal: "Sign up", termsReg: 'By pressing Sign up, you agree to the <a href="#">Terms of Use</a> and <a href="#">Privacy Policy</a>',
-
                 dashTitle: "Airdrop Search & Claim Dashboard",
                 dashDesc: "Scan your wallets for unclaimed rewards and launch automated volume farming.",
-                scanBtn: "Scan Wallets", claimBtn: "Claim All",
+                logInit: "[System] Anti-sybil core initialized. Waiting for scan...",
+                scanBtn: "🔍 Run Claim Looter", claimBtn: "Claim All",
                 exportBtn: "📥 Export Farm Report (JSON)",
                 farmTabBtn: "Auto-Farming", tasksTabBtn: "Active Tasks", proxyTabBtn: "Proxy Checker", statsTabBtn: "Statistics",
-                balanceText: "Balance", connectWalletBtn: "🔌 Connect Wallet",
-                walletConnectedText: "Wallet Connected",
                 looterMenu: "Looter & Drops", farmMenu: "Auto-Farming", tasksMenu: "Active Tasks", proxyMenu: "Proxy Checker", walletsMenu: "Wallets", statsMenu: "Statistics", billingMenu: "Billing & Subscription", settingsMenu: "Settings",
-                joinedText: "joined July 26, 2026",
-                logInit: "[System] Dashboard initialized. Proxy & security modules active...",
                 
-                filterTier1: "Tier-1 Airdrops",
-                filterMicro: "Micro-drops (<$10)",
-                filterRefunds: "Gas Refunds",
-                
-                farmTitle: "🌾 Auto-Farming (Multi-Route)",
-                farmDesc: "Launch core engine via FastAPI backend.",
+                farmTitle: "🌾 Anti-Sybil Swaps & Bridges",
+                farmDesc: "Launch core engine via FastAPI backend with randomized delays.",
                 netSelectLabel: "Target Network:",
-                delayLabel: "Random Delay (sec):",
-                startFarmBtn: "▶ Start Farm Engine",
+                startFarmBtn: "▶ Start Anti-Sybil Engine",
                 
                 proxyTitle: "🌐 Proxy Manager & Checker (HTTP/Socks5)",
                 proxyDesc: "Test latency and status of connected proxies from your database.",
@@ -620,7 +485,7 @@
                 tgConnectedText: "Telegram successfully linked (@RubyFarmer_bot) ✅"
             },
             zh: {
-                title: "AIRDROP-X — 加密农场 SaaS 面板",
+                title: "AIRDROP-X — Cyberpunk SaaS Panel",
                 login: "登录", logout: "登出", langCode: "CN", langName: "中文",
                 heroTitle: "用于空投自动化与<br>领取的通用工具。",
                 heroDesc: "使用强大的防女巫保护，一键刷取积分、扫描钱包额度并领取空投。",
@@ -628,38 +493,21 @@
                 bannerText: "名额有限的私有软件，确保最高安全性和可靠性。",
                 featuresHeading: "平台功能", faqHeading: "常见问题",
                 c1t: "空投扫描与领取", c1d: "自动在所有连接的钱包中搜索可领取的空投和retro-drop。",
-                c2t: "多链跨链路由", c2d: "在 LayerZero、Base、Arbitrum 和 ZkSync 网络中进行随机交易与兑换。",
+                c2t: "多链 跨链与兑换", c2d: "在 LayerZero、Base、Arbitrum 和 ZkSync 网络中进行随机跨链兑换与交易。",
                 c3t: "防女巫盾", c3d: "模拟真实用户的行为特征模式，智能分配gas且无钱包关联。",
                 
-                modalLoginDesc: "要登录，请在下方输入您的<span>用户名</span>和<span>密码</span>",
-                loginPlaceholder: "用户名", passPlaceholder: "密码",
-                loginBtnModal: "登录", registerBtnModal: "注册账户",
-                termsText: '点击登录即表示您同意 <a href="#">使用条款</a> 和 <a href="#">隐私政策</a>',
-                
-                regDesc: "要创建账户，请在下方输入您的详细信息",
-                emailPlaceholder: "电子邮箱", repeatPassPlaceholder: "重复密码",
-                regBtnModal: "注册账户", termsReg: '点击注册即表示您同意 <a href="#">使用条款</a> 和 <a href="#">隐私政策</a>',
-
                 dashTitle: "空投搜索与领取面板",
                 dashDesc: "扫描您的钱包以查找未认领的奖励并启动自动化刷量农场。",
-                scanBtn: "扫描钱包", claimBtn: "全部领取",
+                logInit: "[System] Core initialized...",
+                scanBtn: "🔍 运行自动领取 (Looter)", claimBtn: "全部领取",
                 exportBtn: "📥 导出农场报告 (JSON)",
                 farmTabBtn: "自动刷量", tasksTabBtn: "活动任务", proxyTabBtn: "代理检测", statsTabBtn: "数据统计",
-                balanceText: "余额", connectWalletBtn: "🔌 连接钱包",
-                walletConnectedText: "钱包已连接",
                 looterMenu: "Looter & Drops", farmMenu: "自动刷量", tasksMenu: "活动任务", proxyMenu: "代理检测", walletsMenu: "钱包管理", statsMenu: "数据统计", billingMenu: "账单与订阅", settingsMenu: "系统设置",
-                joinedText: "加入于 2026年7月26日",
-                logInit: "[System] 控制面板已初始化。代理与安全模块已就绪...",
                 
-                filterTier1: "顶级空投",
-                filterMicro: "微型空投 (<$10)",
-                filterRefunds: "Gas 退款",
-                
-                farmTitle: "🌾 自动刷量 (多路由)",
+                farmTitle: "🌾 多链跨链与兑换",
                 farmDesc: "通过 FastAPI 后端启动核心引擎。",
                 netSelectLabel: "目标网络：",
-                delayLabel: "随机延迟 (秒)：",
-                startFarmBtn: "▶ 启动农场引擎",
+                startFarmBtn: "▶ 启动防女巫引擎",
                 
                 proxyTitle: "🌐 代理管理器与检测 (HTTP/Socks5)",
                 proxyDesc: "测试数据库中连接的代理的延迟和状态。",
@@ -687,25 +535,21 @@
             const t = translations[currentLang];
             const loginBtn = document.getElementById('login-btn');
             loginBtn.innerText = t.login;
-            loginBtn.style.borderColor = "#22252e";
-            loginBtn.style.color = "#fff";
+            loginBtn.style.borderColor = "rgba(157,78,221,0.3)";
+            loginBtn.style.color = "#e0aaff";
             loginBtn.onclick = function() { openModal('login'); };
-            
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
 
         function toggleLangMenu(event) {
             if (event) event.stopPropagation();
-            const menu = document.getElementById('langMenu');
-            menu.classList.toggle('show');
+            document.getElementById('langMenu').classList.toggle('show');
         }
 
         window.addEventListener('click', function(event) {
             if (!event.target.closest('.lang-dropdown-wrapper')) {
                 const menu = document.getElementById('langMenu');
-                if (menu && menu.classList.contains('show')) {
-                    menu.classList.remove('show');
-                }
+                if (menu) menu.classList.remove('show');
             }
         });
 
@@ -719,51 +563,28 @@
             
             if (!isLoggedIn) {
                 document.getElementById('page-title').innerText = t.title;
-                const loginBtn = document.getElementById('login-btn');
-                if (loginBtn) loginBtn.innerText = t.login;
+                document.getElementById('login-btn').innerText = t.login;
+                document.getElementById('hero-title').innerHTML = t.heroTitle;
+                document.getElementById('hero-desc').innerText = t.heroDesc;
+                document.getElementById('farm-btn').innerText = t.farmBtn;
+                document.getElementById('settings-btn').innerText = t.settingsBtn;
+                document.getElementById('banner-text').innerText = t.bannerText;
+                document.getElementById('features-section').innerText = t.featuresHeading;
+                document.getElementById('faq-heading').innerText = t.faqHeading;
                 
-                const heroTitle = document.getElementById('hero-title');
-                const heroDesc = document.getElementById('hero-desc');
-                if (heroTitle) heroTitle.innerHTML = t.heroTitle;
-                if (heroDesc) heroDesc.innerText = t.heroDesc;
-                
-                const farmBtn = document.getElementById('farm-btn');
-                if (farmBtn) farmBtn.innerText = t.farmBtn;
-                
-                const settingsBtn = document.getElementById('settings-btn');
-                if (settingsBtn) settingsBtn.innerText = t.settingsBtn;
+                document.getElementById('c1-t').innerText = t.c1t; document.getElementById('c1-d').innerText = t.c1d;
+                document.getElementById('c2-t').innerText = t.c2t; document.getElementById('c2-d').innerText = t.c2d;
+                document.getElementById('c3-t').innerText = t.c3t; document.getElementById('c3-d').innerText = t.c3d;
 
-                const bannerText = document.getElementById('banner-text');
-                if (bannerText) bannerText.innerText = t.bannerText;
-
-                const featuresSection = document.getElementById('features-section');
-                if (featuresSection) featuresSection.innerText = t.featuresHeading;
-
-                const faqHeading = document.getElementById('faq-heading');
-                if (faqHeading) faqHeading.innerText = t.faqHeading;
-                
-                if (document.getElementById('c1-t')) {
-                    document.getElementById('c1-t').innerText = t.c1t; 
-                    document.getElementById('c1-d').innerText = t.c1d;
-                    document.getElementById('c2-t').innerText = t.c2t; 
-                    document.getElementById('c2-d').innerText = t.c2d;
-                    document.getElementById('c3-t').innerText = t.c3t; 
-                    document.getElementById('c3-d').innerText = t.c3d;
-                }
-
-                if (document.getElementById('q1')) {
-                    document.getElementById('q1').innerText = t.q1; document.getElementById('a1').innerText = t.a1;
-                    document.getElementById('q2').innerText = t.q2; document.getElementById('a2').innerText = t.a2;
-                    document.getElementById('q3').innerText = t.q3; document.getElementById('a3').innerText = t.a3;
-                    document.getElementById('q4').innerText = t.q4; document.getElementById('a4').innerText = t.a4;
-                    document.getElementById('q5').innerText = t.q5; document.getElementById('a5').innerText = t.a5;
-                }
+                document.getElementById('q1').innerText = t.q1; document.getElementById('a1').innerText = t.a1;
+                document.getElementById('q2').innerText = t.q2; document.getElementById('a2').innerText = t.a2;
+                document.getElementById('q3').innerText = t.q3; document.getElementById('a3').innerText = t.a3;
+                document.getElementById('q4').innerText = t.q4; document.getElementById('a4').innerText = t.a4;
+                document.getElementById('q5').innerText = t.q5; document.getElementById('a5').innerText = t.a5;
             } else {
                 renderDashboardContent(currentSection);
             }
-
-            const menu = document.getElementById('langMenu');
-            if (menu) menu.classList.remove('show');
+            document.getElementById('langMenu').classList.remove('show');
         }
 
         function scrollToFeatures() {
@@ -773,64 +594,187 @@
         function openModal(type) {
             const modal = document.getElementById('authModal');
             const container = document.getElementById('modalContainer');
-            if (!modal || !container) return; 
-            
             modal.classList.add('show');
-            const t = translations[currentLang];
 
             if (type === 'login') {
                 container.innerHTML = `
-                    <div class="modal-logo"><span>⚡ AIRDROP-X</span></div>
-                    <div class="modal-desc">${t.modalLoginDesc}</div>
-                    <div class="input-group"><input type="text" class="auth-input" placeholder="${t.loginPlaceholder}" id="loginUser"></div>
-                    <div class="input-group password-wrapper">
-                        <input type="password" class="auth-input" placeholder="${t.passPlaceholder}" id="loginPass">
-                        <span class="password-toggle-icon" onclick="togglePassword('loginPass', this)">👁️‍🗨️</span>
+                    <div class="modal-logo"><span>⚡ Войти</span></div>
+                    <div class="modal-desc">Новичок на AIRDROP-X? <span style="color:#c77dff; cursor:pointer; text-decoration:underline;" onclick="openModal('register')">Создать аккаунт</span></div>
+                    
+                    <div class="input-group">
+                        <label style="font-size: 11px; color: #b19cd9; display: block; margin-bottom: 4px;">Адрес эл. почты</label>
+                        <input type="email" class="auth-input" placeholder="Адрес эл. почты" id="loginEmail" autocomplete="email">
                     </div>
-                    <button class="btn-modal-primary" onclick="validateLogin()">${t.loginBtnModal}</button>
-                    <button class="btn-modal-secondary" onclick="openModal('register')">${t.registerBtnModal}</button>
-                    <div class="modal-footer-text" style="font-size: 11px; color: #555c6d; margin-top: 12px; text-align: center;">${t.termsText}</div>
+                    
+                    <div class="input-group">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                            <label style="font-size: 11px; color: #b19cd9;">Пароль</label>
+                            <span style="font-size: 11px; color: #c77dff; cursor: pointer; text-decoration: underline;" onclick="openModal('forgot')">Сбросить пароль</span>
+                        </div>
+                        <div class="password-wrapper">
+                            <input type="password" class="auth-input" placeholder="Пароль" id="loginPass" autocomplete="current-password">
+                            <span class="password-toggle-icon" onclick="togglePassword('loginPass', this)">👁️‍🗨️</span>
+                        </div>
+                    </div>
+
+                    <button type="button" class="btn-modal-primary" onclick="validateLogin()">Войти</button>
+                    
+                    <div class="divider-container">OR</div>
+                    <button type="button" class="btn-google" onclick="alert('Google Auth подключен к airdrop.x.support@gmail.com')">
+                        <svg width="16" height="16" viewBox="0 0 24 24"><path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"/><path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.95H1.18v3.15C3.17 21.36 7.23 24 12 24z"/><path fill="#FBBC05" d="M5.28 14.25c-.25-.72-.38-1.49-.38-2.25s.13-1.53.38-2.25V6.6H1.18C.43 8.12 0 9.83 0 12s.43 3.88 1.18 5.4l4.1-3.15z"/><path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.23 0 3.17 2.64 1.18 6.6l4.1 3.15c.95-2.84 3.6-4.95 6.72-4.95z"/></svg>
+                        Продолжить через Google
+                    </button>
                     <div id="loginErrorContainer"></div>
                 `;
             } else if (type === 'register') {
                 container.innerHTML = `
-                    <div class="modal-logo"><span>⚡ AIRDROP-X</span></div>
-                    <div class="modal-desc">${t.regDesc}</div>
-                    <div class="input-group"><input type="email" class="auth-input" placeholder="${t.emailPlaceholder}" id="regEmail"></div>
-                    <div class="input-group"><input type="text" class="auth-input" placeholder="${t.loginPlaceholder}" id="regUser"></div>
-                    <div class="input-group password-wrapper">
-                        <input type="password" class="auth-input" placeholder="${t.passPlaceholder}" id="regPass">
-                        <span class="password-toggle-icon" onclick="togglePassword('regPass', this)">👁️‍🗨️</span>
+                    <div class="modal-logo"><span>⚡ Зарегистрироваться</span></div>
+                    <div class="modal-desc">Уже есть аккаунт? <span style="color:#c77dff; cursor:pointer; text-decoration:underline;" onclick="openModal('login')">Войти</span></div>
+                    
+                    <div class="input-group">
+                        <label style="font-size: 11px; color: #b19cd9; display: block; margin-bottom: 4px;">Адрес эл. почты</label>
+                        <input type="email" class="auth-input" placeholder="Адрес эл. почты" id="regEmail" autocomplete="email">
                     </div>
-                    <button class="btn-modal-primary" onclick="validateRegister()">${t.regBtnModal}</button>
-                    <button class="btn-modal-secondary" onclick="openModal('login')">${t.loginBtnModal}</button>
-                    <div class="modal-footer-text" style="font-size: 11px; color: #555c6d; margin-top: 12px; text-align: center;">${t.termsReg}</div>
+
+                    <div class="input-group">
+                        <label style="font-size: 11px; color: #b19cd9; display: block; margin-bottom: 4px;">Пароль</label>
+                        <div class="password-wrapper">
+                            <input type="password" class="auth-input" placeholder="Пароль" id="regPass" autocomplete="new-password">
+                            <span class="password-toggle-icon" onclick="togglePassword('regPass', this)">👁️‍🗨️</span>
+                        </div>
+                    </div>
+
+                    <div class="input-group">
+                        <label style="font-size: 11px; color: #b19cd9; display: block; margin-bottom: 4px;">Код подтверждения (на почту)</label>
+                        <div style="display: flex; gap: 8px;">
+                            <input type="text" class="auth-input" placeholder="Код из письма" id="regCode" style="flex: 1; margin: 0;">
+                            <button type="button" onclick="sendVerificationEmailCode()" style="background: #18102e; color: #c77dff; border: 1px solid rgba(157,78,221,0.4); padding: 0 14px; border-radius: 14px; font-size: 12px; font-weight: bold; cursor: pointer; white-space: nowrap;">Отправить</button>
+                        </div>
+                    </div>
+
+                    <button type="button" class="btn-modal-primary" onclick="validateRegister()" style="margin-top: 8px;">Зарегистрироваться</button>
+
+                    <div class="divider-container">OR</div>
+                    <button type="button" class="btn-google" onclick="alert('Google Auth подключен к airdrop.x.support@gmail.com')">
+                        <svg width="16" height="16" viewBox="0 0 24 24"><path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"/><path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.95H1.18v3.15C3.17 21.36 7.23 24 12 24z"/><path fill="#FBBC05" d="M5.28 14.25c-.25-.72-.38-1.49-.38-2.25s.13-1.53.38-2.25V6.6H1.18C.43 8.12 0 9.83 0 12s.43 3.88 1.18 5.4l4.1-3.15z"/><path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.23 0 3.17 2.64 1.18 6.6l4.1 3.15c.95-2.84 3.6-4.95 6.72-4.95z"/></svg>
+                        Продолжить через Google
+                    </button>
                     <div id="errorContainer"></div>
                 `;
+            } else if (type === 'forgot') {
+                container.innerHTML = `
+                    <div class="modal-logo"><span>⚡ Сбросить пароль</span></div>
+                    <div class="modal-desc">Уже есть аккаунт? <span style="color:#c77dff; cursor:pointer; text-decoration:underline;" onclick="openModal('login')">Войти</span></div>
+                    
+                    <div class="input-group">
+                        <label style="font-size: 11px; color: #b19cd9; display: block; margin-bottom: 4px;">Адрес эл. почты</label>
+                        <input type="email" class="auth-input" placeholder="Адрес эл. почты" id="forgotEmail">
+                    </div>
+
+                    <div class="input-group">
+                        <label style="font-size: 11px; color: #b19cd9; display: block; margin-bottom: 4px;">Код подтверждения</label>
+                        <div style="display: flex; gap: 8px;">
+                            <input type="text" class="auth-input" placeholder="Код из смс / почты" id="forgotCode" style="flex: 1; margin: 0;">
+                            <button type="button" onclick="sendResetCodeToEmail()" style="background: #18102e; color: #c77dff; border: 1px solid rgba(157,78,221,0.4); padding: 0 14px; border-radius: 14px; font-size: 12px; font-weight: bold; cursor: pointer; white-space: nowrap;">Отправить</button>
+                        </div>
+                    </div>
+
+                    <div class="input-group">
+                        <label style="font-size: 11px; color: #b19cd9; display: block; margin-bottom: 4px;">Новый пароль</label>
+                        <div class="password-wrapper">
+                            <input type="password" class="auth-input" placeholder="Новый пароль" id="forgotNewPass">
+                            <span class="password-toggle-icon" onclick="togglePassword('forgotNewPass', this)">👁️‍🗨️</span>
+                        </div>
+                    </div>
+
+                    <button type="button" class="btn-modal-primary" onclick="executePasswordReset()" style="margin-top: 8px;">Сбросить Пароль</button>
+                    <div id="forgotErrorContainer"></div>
+                `;
             }
+        }
+
+        async function sendVerificationEmailCode() {
+            const email = document.getElementById('regEmail').value.trim();
+            const errorContainer = document.getElementById('errorContainer');
+            if(!email) {
+                errorContainer.innerHTML = `<div class="error-toast" style="bottom: -55px;"><span>⚠️</span><span>Введите адрес электронной почты!</span></div>`;
+                return;
+            }
+            errorContainer.innerHTML = `<div class="error-toast" style="bottom: -55px; background: #1a1508; border-color: #ffaa00; color: #ffdd88;"><span>⏳</span><span>Отправка кода...</span></div>`;
+            try {
+                const response = await fetch('/api/send-code', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: email })
+                });
+                const result = await response.json();
+                if (response.ok) {
+                    errorContainer.innerHTML = `<div class="error-toast" style="bottom: -55px; background-color: #122218; border-color: #00d95f; color: #88ffaa;"><span>✅</span><span>Код успешно отправлен на почту!</span></div>`;
+                } else {
+                    errorContainer.innerHTML = `<div class="error-toast" style="bottom: -55px;"><span>⚠️</span><span>${result.detail}</span></div>`;
+                }
+            } catch (e) {
+                errorContainer.innerHTML = `<div class="error-toast" style="bottom: -55px;"><span>⚠️</span><span>Ошибка связи с сервером!</span></div>`;
+            }
+        }
+
+        async function sendResetCodeToEmail() {
+            const email = document.getElementById('forgotEmail').value.trim();
+            const errorContainer = document.getElementById('forgotErrorContainer');
+            if(!email) {
+                errorContainer.innerHTML = `<div class="error-toast" style="bottom: -55px;"><span>⚠️</span><span>Введите адрес электронной почты!</span></div>`;
+                return;
+            }
+            errorContainer.innerHTML = `<div class="error-toast" style="bottom: -55px; background: #1a1508; border-color: #ffaa00; color: #ffdd88;"><span>⏳</span><span>Отправка кода...</span></div>`;
+            try {
+                const response = await fetch('/api/send-code', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: email })
+                });
+                const result = await response.json();
+                if (response.ok) {
+                    errorContainer.innerHTML = `<div class="error-toast" style="bottom: -55px; background-color: #122218; border-color: #00d95f; color: #88ffaa;"><span>✅</span><span>Инструкция отправлена на почту!</span></div>`;
+                } else {
+                    errorContainer.innerHTML = `<div class="error-toast" style="bottom: -55px;"><span>⚠️</span><span>${result.detail}</span></div>`;
+                }
+            } catch (e) {
+                errorContainer.innerHTML = `<div class="error-toast" style="bottom: -55px;"><span>⚠️</span><span>Ошибка связи с сервером!</span></div>`;
+            }
+        }
+
+        function executePasswordReset() {
+            const email = document.getElementById('forgotEmail').value.trim();
+            const code = document.getElementById('forgotCode').value.trim();
+            const newPass = document.getElementById('forgotNewPass').value.trim();
+            const errEl = document.getElementById('forgotErrorContainer');
+
+            if(!email || !code || !newPass) {
+                errEl.innerHTML = `<div class="error-toast" style="bottom: -55px;"><span>⚠️</span><span>Заполните все поля!</span></div>`;
+                return;
+            }
+            errEl.innerHTML = `<div class="error-toast" style="bottom: -55px; background: #122218; border-color: #00d95f; color: #88ffaa;"><span>✅</span><span>Пароль успешно изменен! Вход...</span></div>`;
+            setTimeout(() => openModal('login'), 1500);
         }
 
         function togglePassword(fieldId, iconElement) {
             const field = document.getElementById(fieldId);
             if (field.type === "password") {
                 field.type = "text";
-                iconElement.style.color = "#ff6600";
+                iconElement.style.color = "#c77dff";
             } else {
                 field.type = "password";
-                iconElement.style.color = "#555c6d";
+                iconElement.style.color = "#7b68ee";
             }
         }
 
         function handleOverlayClick(event) {
-            if (event.target.id === 'authModal') {
-                document.getElementById('authModal').classList.remove('show');
-            }
+            if (event.target.id === 'authModal') document.getElementById('authModal').classList.remove('show');
+            if (event.target.id === 'walletActionModal') closeWalletActionModal();
         }
 
         function handleSheetOverlayClick(event) {
-            if (event.target.id === 'bottomSheetOverlay') {
-                closeBottomSheetMenu();
-            }
+            if (event.target.id === 'bottomSheetOverlay') closeBottomSheetMenu();
         }
 
         function openBottomSheetMenu() {
@@ -849,115 +793,72 @@
             document.getElementById('bottomSheetOverlay').classList.add('show');
         }
 
-        function closeBottomSheetMenu() {
-            document.getElementById('bottomSheetOverlay').classList.remove('show');
-        }
-
-        function selectSheetMenu(sectionName) {
-            closeBottomSheetMenu();
-            switchMenu(null, sectionName);
-        }
-
+        function closeBottomSheetMenu() { document.getElementById('bottomSheetOverlay').classList.remove('show'); }
+        function selectSheetMenu(sectionName) { closeBottomSheetMenu(); switchMenu(null, sectionName); }
         function switchMobileNav(sectionName, btnElement) {
-            const items = document.querySelectorAll('.mobile-nav-item');
-            items.forEach(i => i.classList.remove('active'));
+            document.querySelectorAll('.mobile-nav-item').forEach(i => i.classList.remove('active'));
             if (btnElement) btnElement.classList.add('active');
             switchMenu(null, sectionName);
         }
 
         async function validateRegister() {
             const emailField = document.getElementById('regEmail');
-            const userField = document.getElementById('regUser');
             const passField = document.getElementById('regPass');
+            const codeField = document.getElementById('regCode');
             const errorContainer = document.getElementById('errorContainer');
             
-            emailField.classList.remove('error');
-            userField.classList.remove('error');
-            passField.classList.remove('error');
-            errorContainer.innerHTML = '';
-
-            if (userField.value.trim() === "" || passField.value.trim() === "" || emailField.value.trim() === "") {
-                emailField.classList.add('error');
-                userField.classList.add('error');
-                passField.classList.add('error');
-                errorContainer.innerHTML = `<div class="error-toast"><span>⚠️</span><span>Заполните все поля!</span></div>`;
+            if (emailField.value.trim() === "" || passField.value.trim() === "" || codeField.value.trim() === "") {
+                errorContainer.innerHTML = `<div class="error-toast" style="bottom: -55px;"><span>⚠️</span><span>Заполните все поля!</span></div>`;
                 return;
             }
-
-            if (!emailField.value.includes('@') || !emailField.value.includes('.')) {
-                emailField.classList.add('error');
-                errorContainer.innerHTML = `<div class="error-toast"><span>⚠️</span><span>Введите корректный адрес электронной почты!</span></div>`;
-                return;
-            }
-
             try {
                 const response = await fetch('/api/register', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        username: userField.value.trim(),
-                        email: emailField.value.trim(),
-                        password: passField.value.trim()
-                    })
+                    body: JSON.stringify({ username: emailField.value.trim().split('@')[0], email: emailField.value.trim(), password: passField.value.trim() })
                 });
                 const result = await response.json();
-
                 if (response.ok) {
-                    localStorage.setItem('airdrop_username', userField.value.trim());
-                    errorContainer.innerHTML = `
-                        <div class="error-toast" style="background-color: #0b1f14; border-color: #00d95f; color: #00d95f;">
-                            <span>✅</span><span>Регистрация успешна! Переход к входу...</span>
-                        </div>
-                    `;
-                    setTimeout(() => {
-                        openModal('login');
-                    }, 1500);
+                    errorContainer.innerHTML = `<div class="error-toast" style="bottom: -55px; background-color: #122218; border-color: #00d95f; color: #88ffaa;"><span>✅</span><span>Успешно! Переход...</span></div>`;
+                    setTimeout(() => openModal('login'), 1500);
                 } else {
-                    errorContainer.innerHTML = `<div class="error-toast"><span>⚠️</span><span>${result.detail || "Ошибка регистрации"}</span></div>`;
+                    errorContainer.innerHTML = `<div class="error-toast" style="bottom: -55px;"><span>⚠️</span><span>${result.detail}</span></div>`;
                 }
             } catch (e) {
-                errorContainer.innerHTML = `<div class="error-toast"><span>⚠️</span><span>Ошибка связи с сервером БД!</span></div>`;
+                errorContainer.innerHTML = `<div class="error-toast" style="bottom: -55px;"><span>⚠️</span><span>Ошибка связи с БД!</span></div>`;
             }
         }
 
         async function validateLogin() {
-            const userField = document.getElementById('loginUser');
+            const emailField = document.getElementById('loginEmail');
             const passField = document.getElementById('loginPass');
             const errorContainer = document.getElementById('loginErrorContainer');
 
-            if (userField.value.trim() === "" || passField.value.trim() === "") {
-                userField.classList.add('error');
-                passField.classList.add('error');
-                errorContainer.innerHTML = `<div class="error-toast" style="bottom: -65px;"><span>⚠️</span><span>Введите логин и пароль!</span></div>`;
+            if (emailField.value.trim() === "" || passField.value.trim() === "") {
+                errorContainer.innerHTML = `<div class="error-toast" style="bottom: -55px;"><span>⚠️</span><span>Введите почту и пароль!</span></div>`;
                 return;
             }
-
             try {
                 const response = await fetch('/api/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        username: userField.value.trim(),
-                        password: passField.value.trim()
-                    })
+                    body: JSON.stringify({ username: emailField.value.trim().split('@')[0], password: passField.value.trim() })
                 });
                 const result = await response.json();
-
                 if (response.ok) {
-                    localStorage.setItem('airdrop_username', userField.value.trim());
+                    localStorage.setItem('airdrop_username', emailField.value.trim().split('@')[0]);
                     handleLoginSuccess();
                 } else {
-                    errorContainer.innerHTML = `<div class="error-toast" style="bottom: -65px;"><span>⚠️</span><span>${result.detail || "Неверный логин или пароль"}</span></div>`;
+                    errorContainer.innerHTML = `<div class="error-toast" style="bottom: -55px;"><span>⚠️</span><span>${result.detail}</span></div>`;
                 }
             } catch (e) {
-                errorContainer.innerHTML = `<div class="error-toast" style="bottom: -65px;"><span>⚠️</span><span>Ошибка связи с сервером!</span></div>`;
+                errorContainer.innerHTML = `<div class="error-toast" style="bottom: -55px;"><span>⚠️</span><span>Ошибка связи с сервером!</span></div>`;
             }
         }
 
         function handleLoginSuccess() {
             isLoggedIn = true;
             document.getElementById('authModal').classList.remove('show');
-            
             document.getElementById('main-content').style.display = 'none';
             document.getElementById('dashboard-content').style.display = 'flex';
             document.getElementById('mobileNavBar').style.display = 'flex';
@@ -965,8 +866,8 @@
             const t = translations[currentLang];
             const loginBtn = document.getElementById('login-btn');
             loginBtn.innerText = t.logout;
-            loginBtn.style.borderColor = "#ff3333";
-            loginBtn.style.color = "#ff3333";
+            loginBtn.style.borderColor = "rgba(255, 51, 102, 0.4)";
+            loginBtn.style.color = "#ff88aa";
             loginBtn.onclick = function() { returnToMainSite(); };
             
             renderDashboard('Looter');
@@ -974,68 +875,175 @@
 
         function switchMenu(element, sectionName) {
             currentSection = sectionName;
-            const items = document.querySelectorAll('.sidebar-menu-item');
-            items.forEach(item => item.classList.remove('active'));
-            if (element) {
-                element.classList.add('active');
-            } else {
+            document.querySelectorAll('.sidebar-menu-item').forEach(item => item.classList.remove('active'));
+            if (element) element.classList.add('active');
+            else {
                 const found = document.querySelector(`.sidebar-menu-item[data-section="${sectionName}"]`);
                 if (found) found.classList.add('active');
             }
             renderDashboardContent(sectionName);
         }
 
-        async function startAutoFarming() {
-    const log = document.getElementById('drop-logs');
-    // Считываем выбранную сеть из выпадающего списка
-    const networkSelect = document.getElementById('farmNetwork');
-    const network = networkSelect ? networkSelect.value : "Base";
-    
-    if (log) {
-        log.innerHTML += `<br><span style="color: #ff6600;">[${new Date().toLocaleTimeString()}] [API] Отправка запроса на запуск ядра (Сеть: ${network})...</span>`;
-        log.scrollTop = log.scrollHeight;
-        
-        try {
-            const response = await fetch('/api/start', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                // Передаем выбранную сеть прямиком в FastAPI
-                body: JSON.stringify({ wallet: "all", network: network }) 
-            });
-            const result = await response.json();
-            
-            if (response.ok && result.status === 'success') {
-                log.innerHTML += `<br><span style="color: #00d95f; font-weight: bold;">[${new Date().toLocaleTimeString()}] [OK] ✅ ${result.message}</span>`;
-                log.scrollTop = log.scrollHeight;
-                addFarmExperience(250);
-            } else {
-                log.innerHTML += `<br><span style="color: #ff3333;">[${new Date().toLocaleTimeString()}] [Error] ${result.message || "Ошибка запуска"}</span>`;
-                log.scrollTop = log.scrollHeight;
-            }
-        } catch (error) {
-            log.innerHTML += `<br><span style="color: #ff3333;">[${new Date().toLocaleTimeString()}] [Critical] Ошибка связи с сервером!</span>`;
-            log.scrollTop = log.scrollHeight;
+        async function updateSelectedNetwork(selectElement) {
+            selectedNetwork = selectElement.value;
+            await fetchLiveGasPrice(selectedNetwork);
         }
-    }
-}
+
+        async function fetchLiveGasPrice(network) {
+            const gasBadge = document.getElementById('live-gas-badge');
+            if (!gasBadge) return;
+            
+            gasBadge.innerText = "⏳ Запрос газа...";
+            try {
+                const response = await fetch(`/api/gas/${network}`);
+                const data = await response.json();
+                if (response.ok && data.status === 'success') {
+                    gasBadge.innerText = `⚡ Текущий газ: ${data.gas_price}`;
+                } else {
+                    gasBadge.innerText = "⚡ Текущий газ: N/A";
+                }
+            } catch (e) {
+                gasBadge.innerText = "⚡ Текущий газ: Ошибка сети";
+            }
+        }
+
+        async function startAutoFarming() {
+            const log = document.getElementById('farm-console-logs');
+            const network = selectedNetwork;
+            
+            if (log) {
+                log.innerHTML += `<br><span style="color: #c77dff;">[${new Date().toLocaleTimeString()}] [Anti-Sybil] Запуск рандомизированного ядра в сети ${network}...</span>`;
+                log.scrollTop = log.scrollHeight;
+                
+                try {
+                    const response = await fetch('/api/start', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ wallet: "all", network: network }) 
+                    });
+                    const result = await response.json();
+                    
+                    if (response.ok && result.status === 'success') {
+                        log.innerHTML += `<br><span style="color: #00d95f; font-weight: bold;">[${new Date().toLocaleTimeString()}] [OK] ✅ Anti-Sybil сессия завершена успешно!</span>`;
+                        
+                        if (result.results && result.results.length > 0) {
+                            result.results.forEach(res => {
+                                if (res.status === 'Success') {
+                                    log.innerHTML += `<br><span style="color: #00d95f;">&nbsp;&nbsp;✔ Кошелек #${res.wallet_id}: Свап/Бридж со случайным таймингом выполнен!</span>`;
+                                } else {
+                                    log.innerHTML += `<br><span style="color: #ff3366; font-weight: bold;">&nbsp;&nbsp;❌ Кошелек #${res.wallet_id}: ${res.error || res.reason || 'Ошибка выполнения'}</span>`;
+                                }
+                            });
+                        }
+                        
+                        log.scrollTop = log.scrollHeight;
+                        addFarmExperience(30); 
+                    } else {
+                        log.innerHTML += `<br><span style="color: #ff3366;">[${new Date().toLocaleTimeString()}] [Error] ${result.message}</span>`;
+                        log.scrollTop = log.scrollHeight;
+                    }
+                } catch (error) {
+                    log.innerHTML += `<br><span style="color: #ff3366;">[${new Date().toLocaleTimeString()}] [Critical] Ошибка связи с сервером!</span>`;
+                    log.scrollTop = log.scrollHeight;
+                }
+            }
+        }
 
         function toggleTelegramBot() {
             telegramLinked = !telegramLinked;
             renderDashboardContent('Settings');
         }
+
+        function toggleCalendarDay(dayEl) {
+            dayEl.classList.toggle('active');
+        }
+
+        function toggleCalendarBlock() {
+            const toggleBox = document.getElementById('autoFarmToggle');
+            const calendarContainer = document.getElementById('calendarDaysContainer');
+            if (toggleBox.checked) {
+                calendarContainer.style.opacity = '1';
+                calendarContainer.style.pointerEvents = 'auto';
+            } else {
+                calendarContainer.style.opacity = '0.3';
+                calendarContainer.style.pointerEvents = 'none';
+            }
+        }
         
+        async function loadUserSettingsIntoForm() {
+            const currentUser = localStorage.getItem('airdrop_username') || "Robert";
+            try {
+                const response = await fetch(`/api/settings/${currentUser}`);
+                const result = await response.json();
+                if (response.ok && result.settings) {
+                    const s = result.settings;
+                    const toggleBox = document.getElementById('autoFarmToggle');
+                    if(toggleBox) {
+                        toggleBox.checked = s.auto_farming_enabled === 1;
+                        toggleCalendarBlock();
+                    }
+                    if(document.getElementById('randomDelayInput')) document.getElementById('randomDelayInput').value = s.random_delay;
+                    if(document.getElementById('gasLimitInput')) document.getElementById('gasLimitInput').value = s.gas_limit_gwei;
+                    
+                    if (s.schedule_days) {
+                        const activeDays = s.schedule_days.split(',');
+                        document.querySelectorAll('.calendar-day').forEach(el => {
+                            if (activeDays.includes(el.getAttribute('data-day'))) {
+                                el.classList.add('active');
+                            } else {
+                                el.classList.remove('active');
+                            }
+                        });
+                    }
+                }
+            } catch(e) {}
+        }
+
+        async function saveUserSettingsFromForm() {
+            const currentUser = localStorage.getItem('airdrop_username') || "Robert";
+            const enabled = document.getElementById('autoFarmToggle').checked ? 1 : 0;
+            const delay = parseInt(document.getElementById('randomDelayInput').value) || 5;
+            const gas = parseInt(document.getElementById('gasLimitInput').value) || 30;
+            const msgEl = document.getElementById('settingsSaveMsg');
+
+            let selectedDays = [];
+            document.querySelectorAll('.calendar-day.active').forEach(el => {
+                selectedDays.push(el.getAttribute('data-day'));
+            });
+
+            try {
+                const response = await fetch('/api/settings/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username: currentUser,
+                        master_wallet: "0x5e5316Dea1c44d220d4c60A5fcC2949E5A06Fc66",
+                        auto_farming_enabled: enabled,
+                        schedule_days: selectedDays.join(','),
+                        random_delay: delay,
+                        gas_limit_gwei: gas
+                    })
+                });
+                const result = await response.json();
+                if (response.ok) {
+                    msgEl.innerHTML = `<span style="color: #00d95f;">✅ ${result.message}</span>`;
+                } else {
+                    msgEl.innerHTML = `<span style="color: #ff3366;">⚠️ Ошибка сохранения настроек</span>`;
+                }
+            } catch(e) {
+                msgEl.innerHTML = `<span style="color: #ff3366;">⚠️ Ошибка соединения с бэкендом</span>`;
+            }
+        }
+
         async function addNewWalletToDB() {
             const currentUser = localStorage.getItem('airdrop_username') || "Robert";
-            
             const addressField = document.getElementById('newWalletAddress');
             const pkField = document.getElementById('newWalletPk');
             const proxyField = document.getElementById('newWalletProxy');
             const msgContainer = document.getElementById('walletResponseMsg');
 
-            if (!addressField || !pkField || !proxyField) return;
-
             if (!addressField.value || !pkField.value || !proxyField.value) {
-                msgContainer.innerHTML = `<span style="color: #ff3333;">⚠️ Заполните все поля!</span>`;
+                msgContainer.innerHTML = `<span style="color: #ff3366;">⚠️ Заполните все поля!</span>`;
                 return;
             }
 
@@ -1043,28 +1051,19 @@
                 const response = await fetch('/api/wallets/add', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        username: currentUser,
-                        wallet_address: addressField.value.trim(),
-                        encrypted_pk: pkField.value.trim(),
-                        proxy: proxyField.value.trim()
-                    })
+                    body: JSON.stringify({ username: currentUser, wallet_address: addressField.value.trim(), encrypted_pk: pkField.value.trim(), proxy: proxyField.value.trim() })
                 });
-                
                 const result = await response.json();
-
                 if (response.ok) {
                     msgContainer.innerHTML = `<span style="color: #00d95f;">✅ ${result.message}</span>`;
-                    addressField.value = '';
-                    pkField.value = '';
-                    proxyField.value = '';
+                    addressField.value = ''; pkField.value = ''; proxyField.value = '';
                     setTimeout(loadWalletsFromDB, 1000);
-                    addFarmExperience(100);
+                    addFarmExperience(20);
                 } else {
-                    msgContainer.innerHTML = `<span style="color: #ff3333;">⚠️ ${result.detail || "Ошибка сохранения"}</span>`;
+                    msgContainer.innerHTML = `<span style="color: #ff3366;">⚠️ ${result.detail}</span>`;
                 }
             } catch (e) {
-                msgContainer.innerHTML = `<span style="color: #ff3333;">⚠️ Ошибка связи с сервером!</span>`;
+                msgContainer.innerHTML = `<span style="color: #ff3366;">⚠️ Ошибка связи с сервером!</span>`;
             }
         }
 
@@ -1076,520 +1075,404 @@
             try {
                 const response = await fetch(`/api/wallets/${currentUser}`);
                 const result = await response.json();
-
                 if (response.ok && result.wallets && result.wallets.length > 0) {
                     container.innerHTML = '';
-                    result.wallets.forEach(w => {
+                    result.wallets.forEach((w) => {
+                        const gridId = `balances-grid-${w.id}`;
                         container.innerHTML += `
-                            <div id="wallet-card-${w.id}" style="background: #060709; border: 1px solid #1c202d; padding: 12px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; gap: 10px;">
-                                <div style="overflow: hidden; flex: 1;">
-                                    <div style="color: #fff; font-weight: bold; font-size: 14px; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${w.wallet_address}</div>
-                                    <div style="color: #8892b0; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">🌐 ${w.proxy}</div>
+                            <div style="background: #07050c; border: 1px solid rgba(157,78,221,0.3); padding: 16px; border-radius: 16px; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.5);">
+                                <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px;">
+                                    <div style="overflow: hidden; flex: 1;">
+                                        <div style="color: #fff; font-weight: bold; font-size: 15px; margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${w.wallet_address}</div>
+                                        <div style="color: #b19cd9; font-size: 11px;">🌐 ${w.proxy}</div>
+                                    </div>
+                                    <div style="display: flex; gap: 6px; align-items: center;">
+                                        <button type="button" onclick="openWalletActionModal(${w.id}, '${w.wallet_address}', '${w.proxy}')" style="background: #00d95f; color: #000; border: none; width: 32px; height: 32px; border-radius: 16px; font-size: 14px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 10px rgba(0,217,95,0.4);" title="Пополнить с мастер-аккаунта">+</button>
+                                        <button type="button" onclick="openWalletActionModal(${w.id}, '${w.wallet_address}', '${w.proxy}')" style="background: linear-gradient(135deg, #7b2cbf, #9d4edd); color: #fff; border: none; padding: 8px 16px; border-radius: 16px; font-size: 12px; font-weight: bold; cursor: pointer; box-shadow: 0 0 10px rgba(157,78,221,0.4);">⚙️ Меню</button>
+                                    </div>
                                 </div>
-                                <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
-                                    <span style="background: #151821; color: #00d95f; padding: 4px 8px; border-radius: 4px; font-size: 11px;">Active</span>
-                                    <button onclick="promptDeleteWallet(${w.id}, '${w.wallet_address}')" style="background: #1f0c0c; color: #ff3333; border: 1px solid #ff3333; padding: 4px 8px; border-radius: 4px; font-size: 11px; cursor: pointer;">🗑️ Удалити</button>
+                                <div id="${gridId}" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 6px; border-top: 1px solid rgba(157,78,221,0.15); padding-top: 10px;">
+                                    <span style="color: #7b68ee; font-size: 11px;">Загрузка балансов по всем сетям...</span>
                                 </div>
                             </div>
                         `;
+                        fetchAllNetworkBalancesForWallet(w.wallet_address, w.proxy, gridId);
                     });
                 } else {
-                    container.innerHTML = `<span style="color: #555c6d; font-size: 13px;">У вас пока нет сохраненных кошельков. Добавьте их ниже.</span>`;
+                    container.innerHTML = `<span style="color: #7b68ee; font-size: 13px;">У вас пока нет кошельков. Добавьте их ниже.</span>`;
                 }
-            } catch(e) {
-                container.innerHTML = `<span style="color: #ff3333; font-size: 13px;">⚠️ Ошибка загрузки кошельков</span>`;
-            }
+            } catch(e) {}
         }
 
-        // ЛОГИКА УДАЛЕНИЯ КОШЕЛЬКА С МОДАЛЬНЫМ ОКНОМ ПОДТВЕРЖДЕНИЯ
-        let walletToDeleteId = null;
-
-        function promptDeleteWallet(walletId, walletAddress) {
-            walletToDeleteId = walletId;
-            document.getElementById('deleteModalText').innerHTML = `Вы уверены, что хотите удалить кошелек <b>${walletAddress}</b> из базы данных?`;
-            document.getElementById('deleteModalOverlay').classList.add('show');
-            
-            document.getElementById('confirmDeleteBtn').onclick = async function() {
-                await executeDeleteWallet(walletId);
-            };
-        }
-
-        function closeDeleteModal() {
-            document.getElementById('deleteModalOverlay').classList.remove('show');
-            walletToDeleteId = null;
-        }
-
-        async function executeDeleteWallet(walletId) {
+        async function fetchAllNetworkBalancesForWallet(address, proxy, gridElementId) {
+            const gridEl = document.getElementById(gridElementId);
+            if (!gridEl) return;
             try {
-                const response = await fetch(`/api/wallets/delete/${walletId}`, {
-                    method: 'DELETE'
-                });
-                const result = await response.json();
-                
-                closeDeleteModal();
-
-                if (response.ok) {
-                    showLevelUpNotification(result.message || "Кошелек успешно удален из базы!");
-                    setTimeout(loadWalletsFromDB, 300);
+                const response = await fetch(`/api/wallet/balances/${address}?proxy=${encodeURIComponent(proxy)}`);
+                const data = await response.json();
+                if (response.ok && data.status === 'success') {
+                    let html = '';
+                    for (const [net, bal] of Object.entries(data.balances)) {
+                        const hasVal = parseFloat(bal) > 0;
+                        html += `
+                            <div style="background: #120c22; border: 1px solid rgba(157,78,221,0.2); padding: 6px 8px; border-radius: 10px; text-align: center;">
+                                <div style="font-size: 10px; color: #b19cd9; margin-bottom: 2px;">${net}</div>
+                                <div style="font-size: 11px; font-weight: bold; color: ${hasVal ? '#00d95f' : '#fff'};">${bal} ETH</div>
+                            </div>
+                        `;
+                    }
+                    gridEl.innerHTML = html;
                 } else {
-                    alert(result.detail || "Не удалось удалить кошелек");
+                    gridEl.innerHTML = `<span style="color: #ff3366; font-size: 11px;">Ошибка загрузки балансов</span>`;
                 }
             } catch(e) {
-                closeDeleteModal();
-                alert("Ошибка связи с сервером при удалении кошелька.");
+                gridEl.innerHTML = `<span style="color: #ff3366; font-size: 11px;">Ошибка сети</span>`;
             }
         }
 
-        // КОРРЕКТНЫЙ ЧЕКЕР ПРОКСИ ПО БАЗЕ ДАННЫХ КОШЕЛЬКОВ
-        async function checkProxiesLive() {
-            const pLogs = document.getElementById('proxy-logs');
-            const currentUser = localStorage.getItem('airdrop_username') || "Robert";
-            if(!pLogs) return;
-
-            pLogs.innerHTML = `[Proxy Checker] Запрос списка прокси из базы данных...`;
-
-            try {
-                const response = await fetch(`/api/wallets/${currentUser}`);
-                const result = await response.json();
-
-                if (response.ok && result.wallets && result.wallets.length > 0) {
-                    pLogs.innerHTML = `[Proxy Checker] Найдено кошельков с прокси: ${result.wallets.length}. Запуск пинга...`;
-                    
-                    setTimeout(() => {
-                        let logHtml = `[Proxy Checker] Тестирование завершено успешно:<br>`;
-                        result.wallets.forEach((w, idx) => {
-                            logHtml += `&nbsp;&nbsp;🔸 Кошелек #${idx+1} (${w.wallet_address.substring(0,6)}...) — Прокси: <span style="color: #00d95f;">ACTIVE (Ping: 34ms)</span><br>`;
-                        });
-                        pLogs.innerHTML = logHtml;
-                        addFarmExperience(50); // XP за успешный тест прокси
-                    }, 1200);
-                } else {
-                    pLogs.innerHTML = `[Proxy Checker] ⚠️ У вас нет сохраненных кошельков с прокси в базе. Добавьте их во вкладке «Кошельки».`;
-                }
-            } catch(e) {
-                pLogs.innerHTML = `[Proxy Checker] ❌ Ошибка проверки прокси через сервер!`;
-            }
+        async function openWalletActionModal(walletId, address, proxy) {
+            activeSelectedWalletId = walletId;
+            document.getElementById('editWalletAddress').value = address;
+            document.getElementById('editWalletPk').value = "";
+            document.getElementById('editWalletProxy').value = proxy;
+            document.getElementById('walletActionMsg').innerHTML = '';
+            document.getElementById('walletActionModal').classList.add('show');
         }
 
-        function showLevelUpNotification(message) {
-            const existingToast = document.getElementById('custom-level-toast');
-            if (existingToast) existingToast.remove();
-
-            const toast = document.createElement('div');
-            toast.id = 'custom-level-toast';
-            toast.style.cssText = `
-                position: fixed;
-                bottom: 30px;
-                right: 30px;
-                background: linear-gradient(135deg, #0c0e14, #1a1d26);
-                border: 1px solid #ff6600;
-                box-shadow: 0 10px 30px rgba(255, 102, 0, 0.3);
-                border-radius: 12px;
-                padding: 16px 20px;
-                color: #fff;
-                font-size: 14px;
-                z-index: 9999;
-                display: flex;
-                align-items: center;
-                gap: 12px;
-                animation: slideUpToast 0.3s cubic-bezier(0.1, 0.9, 0.2, 1);
-            `;
-            
-            toast.innerHTML = `
-                <div style="font-size: 22px; background: rgba(255,102,0,0.1); padding: 8px; border-radius: 8px;">🎉</div>
-                <div>
-                    <div style="font-weight: bold; color: #ff6600; margin-bottom: 2px;">Уведомление системы</div>
-                    <div style="color: #8892b0; font-size: 12px;">${message}</div>
-                </div>
-            `;
-
-            document.body.appendChild(toast);
-
-            setTimeout(() => {
-                toast.style.opacity = '0';
-                toast.style.transition = 'opacity 0.5s ease';
-                setTimeout(() => toast.remove(), 500);
-            }, 4000);
+        function closeWalletActionModal() {
+            document.getElementById('walletActionModal').classList.remove('show');
+            activeSelectedWalletId = null;
         }
 
-        if (!document.getElementById('toast-anim-style')) {
-            const styleSheet = document.createElement("style");
-            styleSheet.id = 'toast-anim-style';
-            styleSheet.innerText = `
-                @keyframes slideUpToast {
-                    from { transform: translateY(100px); opacity: 0; }
-                    to { transform: translateY(0); opacity: 1; }
-                }
-            `;
-            document.head.appendChild(styleSheet);
-        }
+        async function executeWalletDeposit() {
+            const net = document.getElementById('depositNetwork').value;
+            const amount = parseFloat(document.getElementById('depositAmount').value);
+            const msgEl = document.getElementById('walletActionMsg');
 
-        function addFarmExperience(amount) {
-            const lastScanTime = parseInt(localStorage.getItem('last_xp_claim_time') || '0');
-            const now = Date.now();
-            
-            if (amount === 150 && (now - lastScanTime < 60000)) {
+            if (isNaN(amount) || amount <= 0) {
+                msgEl.innerHTML = `<span style="color: #ff3366;">⚠️ Введите корректную сумму пополнения!</span>`;
                 return;
             }
 
-            if (amount === 150) {
-                localStorage.setItem('last_xp_claim_time', now);
+            msgEl.innerHTML = `<span style="color: #00d95f;">⏳ Перевод с мастер-кошелька 0x5e53...F66 в сети ${net}...</span>`;
+
+            try {
+                const response = await fetch('/api/wallet/deposit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        wallet_id: activeSelectedWalletId,
+                        amount_eth: amount,
+                        network: net,
+                        master_address: "0x5e5316Dea1c44d220d4c60A5fcC2949E5A06Fc66"
+                    })
+                });
+                const result = await response.json();
+                if (response.ok) {
+                    msgEl.innerHTML = `<span style="color: #00d95f;">✅ ${result.message}<br><small style="color:#c77dff;">Tx: ${result.tx_hash.slice(0,16)}...</small></span>`;
+                    setTimeout(() => {
+                        closeWalletActionModal();
+                        loadWalletsFromDB();
+                    }, 3000);
+                } else {
+                    msgEl.innerHTML = `<span style="color: #ff3366;">⚠️ ${result.detail}</span>`;
+                }
+            } catch (e) {
+                msgEl.innerHTML = `<span style="color: #ff3366;">⚠️ Ошибка соединения с сервером!</span>`;
+            }
+        }
+
+        async function executeWalletUpdate() {
+            const newAddr = document.getElementById('editWalletAddress').value.trim();
+            const newPk = document.getElementById('editWalletPk').value.trim();
+            const newProxy = document.getElementById('editWalletProxy').value.trim();
+            const msgEl = document.getElementById('walletActionMsg');
+
+            if (!newAddr || !newProxy) {
+                msgEl.innerHTML = `<span style="color: #ff3366;">⚠️ Название/адрес и прокси обязательны!</span>`;
+                return;
             }
 
-            let currentXp = parseInt(localStorage.getItem('farmer_xp') || '1450');
+            try {
+                const response = await fetch(`/api/wallets/update/${activeSelectedWalletId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        wallet_address: newAddr,
+                        encrypted_pk: newPk || "unchanged",
+                        proxy: newProxy
+                    })
+                });
+                const result = await response.json();
+                if (response.ok) {
+                    msgEl.innerHTML = `<span style="color: #00d95f;">✅ ${result.message}</span>`;
+                    setTimeout(() => {
+                        closeWalletActionModal();
+                        loadWalletsFromDB();
+                    }, 1000);
+                } else {
+                    msgEl.innerHTML = `<span style="color: #ff3366;">⚠️ ${result.detail}</span>`;
+                }
+            } catch (e) {
+                msgEl.innerHTML = `<span style="color: #ff3366;">⚠️ Ошибка соединения с сервером!</span>`;
+            }
+        }
+
+        async function executeWalletDeleteFromModal() {
+            if (!activeSelectedWalletId) return;
+            try {
+                const response = await fetch(`/api/wallets/delete/${activeSelectedWalletId}`, { method: 'DELETE' });
+                const result = await response.json();
+                if (response.ok) {
+                    showLevelUpNotification("Кошелек успешно удален!");
+                    closeWalletActionModal();
+                    loadWalletsFromDB();
+                }
+            } catch(e) {}
+        }
+
+        function showLevelUpNotification(message) {
+            const toast = document.createElement('div');
+            toast.style.cssText = `position: fixed; bottom: 30px; right: 30px; background: #100a1c; border: 1px solid rgba(157,78,221,0.5); border-radius: 16px; padding: 16px 20px; color: #fff; font-size: 14px; z-index: 9999; display: flex; align-items: center; gap: 12px; box-shadow: 0 0 25px rgba(123, 44, 191, 0.4);`;
+            toast.innerHTML = `<div>🎉</div><div><div style="font-weight: bold; color: #c77dff;">Уведомление</div><div style="color: #b19cd9; font-size: 12px;">${message}</div></div>`;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 4000);
+        }
+
+        function addFarmExperience(amount) {
+            let currentXp = parseInt(localStorage.getItem('farmer_xp') || '1450') + amount;
             let currentLevel = parseInt(localStorage.getItem('farmer_level') || '3');
-            let maxXp = currentLevel * 666;
-
-            currentXp += amount;
-
-            if (currentXp >= maxXp) {
-                currentLevel += 1;
-                currentXp = currentXp - maxXp;
-                showLevelUpNotification(`Ваша ферма достигла Level ${currentLevel}! Так держать.`);
-            }
-
             localStorage.setItem('farmer_xp', currentXp);
             localStorage.setItem('farmer_level', currentLevel);
-
-            renderDashboardContent(currentSection);
         }
 
         async function startScanningDrops() {
             const log = document.getElementById('drop-logs');
             const currentUser = localStorage.getItem('airdrop_username') || "Robert";
-            if(!log) return;
-            
-            log.innerHTML += `<br><span style="color: #ff6600;">[${new Date().toLocaleTimeString()}] 🔍 Запрос к сканеру базы данных (${currentUser})...</span>`;
-            log.scrollTop = log.scrollHeight;
-            
+            log.innerHTML += `<br><span style="color: #c77dff;">[${new Date().toLocaleTimeString()}] 🔍 Сканирование блокчейна и запуск Claim Looter...</span>`;
             try {
                 const response = await fetch(`/api/scan/${currentUser}`, { method: 'POST' });
                 const result = await response.json();
-
-                if (response.ok && result.status === 'success') {
-                    log.innerHTML += `<br><span style="color: #00d95f;">[${new Date().toLocaleTimeString()}] ✅ Успешно! Проверено кошельков из базы: ${result.data.total_wallets_scanned}</span>`;
-                    result.data.found_drops.forEach(item => {
-                        log.innerHTML += `<br><span style="color: #fff;">👉 Кошелек: <b>${item.wallet_name}</b> (Прокси: ${item.proxy_used})</span>`;
-                        item.allocations.forEach(alloc => {
-                            log.innerHTML += `<br>&nbsp;&nbsp;&nbsp;&nbsp;🔸 Протокол: ${alloc.protocol} — Сумма: <span style="color: #00d95f;">${alloc.amount}</span>`;
+                if (response.ok) {
+                    log.innerHTML += `<br><span style="color: #00d95f;">[${new Date().toLocaleTimeString()}] ✅ Проверено кошельков: ${result.data.total_wallets_scanned}</span>`;
+                    if (result.data.found_drops && result.data.found_drops.length > 0) {
+                        result.data.found_drops.forEach(drop => {
+                            log.innerHTML += `<br><span style="color: #00d95f;">&nbsp;&nbsp;💰 [Claimed] ${drop.wallet} — ${drop.protocol} (${drop.amount}) ✅</span>`;
                         });
-                    });
-
-                    addFarmExperience(150);
-
-                } else {
-                    log.innerHTML += `<br><span style="color: #ff3333;">⚠️ Ошибка: ${result.message || "Не удалось получить данные"}</span>`;
+                    } else {
+                        log.innerHTML += `<br><span style="color: #b19cd9;">&nbsp;&nbsp;ℹ️ Новых доступных дропов не найдено.</span>`;
+                    }
+                    log.scrollTop = log.scrollHeight;
+                    addFarmExperience(30);
                 }
-                log.scrollTop = log.scrollHeight;
-            } catch(e) {
-                log.innerHTML += `<br><span style="color: #ff3333;">[Critical] Ошибка связи с бэкендом сканера!</span>`;
-                log.scrollTop = log.scrollHeight;
-            }
+            } catch(e) {}
         }
 
         async function exportReportJSON() {
-            try {
-                const response = await fetch('/api/report');
-                const data = await response.json();
-                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data, null, 2));
-                const downloadAnchor = document.createElement('a');
-                downloadAnchor.setAttribute("href", dataStr);
-                downloadAnchor.setAttribute("download", "airdrop_x_backend_report.json");
-                document.body.appendChild(downloadAnchor);
-                downloadAnchor.click();
-                downloadAnchor.remove();
-            } catch(e) {
-                alert("Не удалось загрузить отчет с сервера.");
-            }
+            const response = await fetch('/api/report');
+            const data = await response.json();
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data, null, 2));
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.setAttribute("href", dataStr);
+            downloadAnchor.setAttribute("download", "report.json");
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            downloadAnchor.remove();
         }
 
-        function renderDashboard(activeTab) {
-            renderDashboardContent(activeTab);
-        }
+        function renderDashboard(activeTab) { renderDashboardContent(activeTab); }
 
         function renderDashboardContent(section) {
             currentSection = section;
             const t = translations[currentLang];
             const dashboardContent = document.getElementById('dashboard-content');
-            
-            const activeUser = localStorage.getItem('airdrop_username') || "User";
-            const firstLetter = activeUser.charAt(0).toUpperCase();
-
-            const savedXp = parseInt(localStorage.getItem('farmer_xp') || '1450');
-            const savedLevel = parseInt(localStorage.getItem('farmer_level') || '3');
-            const maxLevelXp = savedLevel * 666;
-            const xpPercent = Math.min(Math.round((savedXp / maxLevelXp) * 100), 100);
+            const activeUser = localStorage.getItem('airdrop_username') || "Robert";
+            const currentXp = localStorage.getItem('farmer_xp') || '1450';
+            const currentLevel = localStorage.getItem('farmer_level') || '3';
 
             let centerHtml = '';
 
             if (section === 'Looter') {
                 centerHtml = `
-                    <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 20px; width: 100%;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; gap: 10px;">
-                            <h3 style="margin: 0; font-size: 18px; color: #fff;">🚀 ${t.dashTitle}</h3>
-                            <span style="background: rgba(0,217,95,0.1); color: #00d95f; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: bold; flex-shrink: 0;">ONLINE</span>
-                        </div>
-                        <p style="color: #8892b0; font-size: 14px; line-height: 1.5; margin-bottom: 20px;">${t.dashDesc}</p>
-                        
-                        <div style="margin-bottom: 16px; padding: 12px; background: #060709; border: 1px solid #1c202d; border-radius: 10px; display: flex; gap: 14px; flex-wrap: wrap;">
-                            <label style="color: #8892b0; font-size: 12px; display: flex; align-items: center; gap: 6px; cursor: pointer;">
-                                <input type="checkbox" id="filter-tier1" checked style="accent-color: #ff6600; width: 15px; height: 15px;"> ${t.filterTier1}
-                            </label>
-                            <label style="color: #8892b0; font-size: 12px; display: flex; align-items: center; gap: 6px; cursor: pointer;">
-                                <input type="checkbox" id="filter-micro" checked style="accent-color: #ff6600; width: 15px; height: 15px;"> ${t.filterMicro}
-                            </label>
-                            <label style="color: #8892b0; font-size: 12px; display: flex; align-items: center; gap: 6px; cursor: pointer;">
-                                <input type="checkbox" id="filter-refunds" checked style="accent-color: #ff6600; width: 15px; height: 15px;"> ${t.filterRefunds}
-                            </label>
-                        </div>
-
+                    <div style="background-color: #100a1c; border: 1px solid rgba(157,78,221,0.3); border-radius: 20px; padding: 20px; width: 100%; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+                        <h3 style="margin: 0 0 16px 0; font-size: 18px; color: #fff;">🚀 ${t.dashTitle}</h3>
+                        <p style="color: #b19cd9; font-size: 14px; margin-bottom: 20px;">${t.dashDesc}</p>
                         <div style="display: flex; gap: 10px; flex-direction: column;">
-                            <button onclick="startScanningDrops()" style="background-color: #ff6600; color: #000; border: none; padding: 13px 20px; border-radius: 10px; font-weight: bold; font-size: 14px; cursor: pointer; width: 100%;">🔍 ${t.scanBtn}</button>
-                            <button onclick="claimFoundDrops()" style="background-color: #151821; color: #fff; border: 1px solid #222633; padding: 13px 20px; border-radius: 10px; font-weight: bold; font-size: 14px; cursor: pointer; width: 100%;">⚡ ${t.claimBtn}</button>
+                            <button type="button" onclick="startScanningDrops()" style="background: linear-gradient(135deg, #7b2cbf, #9d4edd); color: #fff; border: none; padding: 13px; border-radius: 16px; font-weight: bold; cursor: pointer; box-shadow: 0 0 15px rgba(157,78,221,0.4);">${t.scanBtn}</button>
                         </div>
-
-                        <div id="drop-logs" style="margin-top: 20px; background-color: #060709; border: 1px solid #14171f; padding: 16px; border-radius: 10px; font-family: monospace; font-size: 12px; color: #8892b0; max-height: 180px; overflow-y: auto;">
-                            ${t.logInit}
-                        </div>
+                        <div id="drop-logs" style="margin-top: 20px; background-color: #07050c; border: 1px solid rgba(157,78,221,0.2); padding: 16px; border-radius: 14px; font-family: monospace; font-size: 12px; color: #b19cd9; max-height: 180px; overflow-y: auto;">${t.logInit}</div>
                     </div>
                 `;
             } else if (section === 'Farming') {
                 centerHtml = `
-                    <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 20px; width: 100%;">
+                    <div style="background-color: #100a1c; border: 1px solid rgba(157,78,221,0.3); border-radius: 20px; padding: 20px; width: 100%; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
                         <h3 style="margin-top: 0; color: #fff; font-size: 18px;">${t.farmTitle}</h3>
-                        <p style="color: #8892b0; font-size: 13px;">${t.farmDesc}</p>
+                        <p style="color: #b19cd9; font-size: 13px;">${t.farmDesc}</p>
                         
                         <div style="display: grid; grid-template-columns: 1fr; gap: 14px; margin-top: 20px;">
                             <div class="input-group">
-                                <label style="color: #8892b0; font-size: 12px; display: block; margin-bottom: 6px;">${t.netSelectLabel}</label>
-                                <select class="auth-input" id="farmNetwork">
-                                    <option value="Base">Base L2 (Coinbase)</option>
-                                    <option value="Arbitrum">Arbitrum One</option>
-                                    <option value="ZkSync">ZkSync Era</option>
-                                    <option value="Scroll">Scroll Network</option>
-                                    <option value="Linea">Linea (Consensys)</option>
-                                    <option value="Blast">Blast L2 (Yield)</option>
-                                    <option value="Mantle">Mantle Network</option>
-                                    <option value="Berachain">Berachain (BArtio)</option>
-                                    <option value="Solana">Solana (SVM)</option>
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                                    <label style="color: #b19cd9; font-size: 12px;">${t.netSelectLabel}</label>
+                                    
+                                    <div class="tooltip-container">
+                                        <span id="live-gas-badge" style="color: #00d95f; font-size: 11px; font-weight: bold; background: #07050c; padding: 4px 10px; border-radius: 10px; border: 1px solid rgba(157,78,221,0.3);">⚡ Загрузка газа...</span>
+                                        <span class="tooltip-text"><b>Gwei</b> — это миллиардная доля ETH (1 Gwei = 0.000000001 ETH). В нем измеряется комиссия за транзакции в блокчейне. Софт автоматически подбирает безопасный Gwei для защиты от переплат.</span>
+                                    </div>
+                                </div>
+                                <select class="auth-input" id="farmNetwork" onchange="updateSelectedNetwork(this)">
+                                    <option value="Base" ${selectedNetwork === 'Base' ? 'selected' : ''}>Base L2 (Coinbase)</option>
+                                    <option value="Arbitrum" ${selectedNetwork === 'Arbitrum' ? 'selected' : ''}>Arbitrum One</option>
+                                    <option value="ZkSync" ${selectedNetwork === 'ZkSync' ? 'selected' : ''}>ZkSync Era</option>
+                                    <option value="Scroll" ${selectedNetwork === 'Scroll' ? 'selected' : ''}>Scroll Network</option>
+                                    <option value="Linea" ${selectedNetwork === 'Linea' ? 'selected' : ''}>Linea (Consensys)</option>
+                                    <option value="Blast" ${selectedNetwork === 'Blast' ? 'selected' : ''}>Blast L2 (Yield)</option>
+                                    <option value="Mantle" ${selectedNetwork === 'Mantle' ? 'selected' : ''}>Mantle Network</option>
+                                    <option value="Berachain" ${selectedNetwork === 'Berachain' ? 'selected' : ''}>Berachain (BArtio)</option>
+                                    <option value="Solana" ${selectedNetwork === 'Solana' ? 'selected' : ''}>Solana (SVM)</option>
                                 </select>
-                            </div>
-                            
-                            <div class="input-group">
-                                <label style="color: #8892b0; font-size: 12px; display: block; margin-bottom: 6px;">${t.delayLabel}</label>
-                                <input type="number" class="auth-input" value="15" id="farmDelay">
                             </div>
                         </div>
 
-                        <button onclick="startAutoFarming()" style="background-color: #ff6600; color: #000; border: none; padding: 13px 20px; border-radius: 10px; font-weight: bold; font-size: 14px; cursor: pointer; width: 100%; margin-top: 10px;">${t.startFarmBtn}</button>
+                        <button type="button" onclick="startAutoFarming()" style="background: linear-gradient(135deg, #7b2cbf, #9d4edd); color: #fff; border: none; padding: 13px; border-radius: 16px; font-weight: bold; cursor: pointer; width: 100%; margin-top: 10px; box-shadow: 0 0 15px rgba(157,78,221,0.4);">${t.startFarmBtn}</button>
 
-                        <div id="drop-logs" style="margin-top: 20px; background-color: #060709; border: 1px solid #14171f; padding: 14px; border-radius: 10px; font-family: monospace; font-size: 12px; color: #8892b0; max-height: 140px; overflow-y: auto;">
-                            [Farm Engine] Готов к запуску. Прокси изолированы.
+                        <div id="farm-console-logs" style="margin-top: 20px; background-color: #07050c; border: 1px solid rgba(157,78,221,0.2); padding: 14px; border-radius: 14px; font-family: monospace; font-size: 12px; color: #00d95f; max-height: 180px; overflow-y: auto;">
+                            [Farm Console] Ожидание запуска задачи... Anti-Sybil Shield активен.
                         </div>
                     </div>
                 `;
+                setTimeout(() => fetchLiveGasPrice(selectedNetwork), 100);
             } else if (section === 'Proxy') {
                 centerHtml = `
-                    <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 20px; width: 100%;">
+                    <div style="background-color: #100a1c; border: 1px solid rgba(157,78,221,0.3); border-radius: 20px; padding: 20px; width: 100%; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
                         <h3 style="margin-top: 0; color: #fff; font-size: 18px;">${t.proxyTitle}</h3>
-                        <p style="color: #8892b0; font-size: 13px;">${t.proxyDesc}</p>
-                        
-                        <button onclick="checkProxiesLive()" style="background-color: #ff6600; color: #000; border: none; padding: 12px 20px; border-radius: 10px; font-weight: bold; font-size: 14px; cursor: pointer; width: 100%; margin-top: 14px;">${t.checkProxyBtn}</button>
-
-                        <div id="proxy-logs" style="margin-top: 20px; background-color: #060709; border: 1px solid #14171f; padding: 14px; border-radius: 10px; font-family: monospace; font-size: 12px; color: #8892b0; min-height: 80px;">
-                            [Proxy Checker] Нажмите кнопку проверки для опроса прокси из базы...
-                        </div>
+                        <button type="button" onclick="checkProxiesLive()" style="background: linear-gradient(135deg, #7b2cbf, #9d4edd); color: #fff; border: none; padding: 12px; border-radius: 16px; font-weight: bold; cursor: pointer; width: 100%; margin-top: 14px; box-shadow: 0 0 15px rgba(157,78,221,0.4);">${t.checkProxyBtn}</button>
+                        <div id="proxy-logs" style="margin-top: 20px; background-color: #07050c; border: 1px solid rgba(157,78,221,0.2); padding: 14px; border-radius: 14px; font-family: monospace; font-size: 12px; color: #b19cd9;">Готово к проверке.</div>
                     </div>
                 `;
             } else if (section === 'Statistics') {
                 centerHtml = `
-                    <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 20px; width: 100%;">
+                    <div style="background-color: #100a1c; border: 1px solid rgba(157,78,221,0.3); border-radius: 20px; padding: 20px; width: 100%; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
                         <h3 style="margin-top: 0; color: #fff; font-size: 18px;">${t.statsTitle}</h3>
-                        <p style="color: #8892b0; font-size: 13px; margin-bottom: 20px;">${t.statsDesc}</p>
-                        
-                        <div style="display: grid; grid-template-columns: 1fr; gap: 12px; margin-bottom: 20px;">
-                            <div style="background: #060709; padding: 16px; border-radius: 12px; border: 1px solid #1c202d;">
-                                <div style="color: #8892b0; font-size: 12px;">Успешных клеймов</div>
-                                <div style="font-size: 22px; font-weight: bold; color: #ff6600; margin-top: 4px;">42</div>
-                            </div>
-                            <div style="background: #060709; padding: 16px; border-radius: 12px; border: 1px solid #1c202d;">
-                                <div style="color: #8892b0; font-size: 12px;">Сэкономлено на газе</div>
-                                <div style="font-size: 22px; font-weight: bold; color: #00d95f; margin-top: 4px;">~0.14 ETH</div>
-                            </div>
-                        </div>
-
-                        <button onclick="exportReportJSON()" style="background-color: #ff6600; color: #000; border: none; padding: 13px 20px; border-radius: 10px; font-weight: bold; font-size: 14px; cursor: pointer; width: 100%;">${t.exportBtn}</button>
+                        <button type="button" onclick="exportReportJSON()" style="background: linear-gradient(135deg, #7b2cbf, #9d4edd); color: #fff; border: none; padding: 13px; border-radius: 16px; font-weight: bold; cursor: pointer; width: 100%; margin-top: 14px; box-shadow: 0 0 15px rgba(157,78,221,0.4);">${t.exportBtn}</button>
                     </div>
                 `;
             } else if (section === 'Tasks') {
                 centerHtml = `
-                    <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 20px; width: 100%;">
+                    <div style="background-color: #100a1c; border: 1px solid rgba(157,78,221,0.3); border-radius: 20px; padding: 20px; width: 100%; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
                         <h3 style="margin-top: 0; color: #fff; font-size: 18px;">${t.tasksTitle}</h3>
-                        <p style="color: #8892b0; font-size: 13px;">${t.tasksDesc}</p>
-                        
-                        <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 16px;">
-                            <div style="background: #060709; padding: 14px; border-radius: 12px; border: 1px solid #1c202d;">
-                                <div style="display: flex; justify-content: space-between; font-size: 13px; font-weight: bold; margin-bottom: 6px;">
-                                    <span style="color: #ff6600;">#1 Ruby-Main (Base L2)</span>
-                                    <span style="color: #00d95f;">Выполнение 78%</span>
-                                </div>
-                                <div style="width: 100%; background: #14171f; height: 6px; border-radius: 3px; overflow: hidden;">
-                                    <div style="width: 78%; background: #ff6600; height: 100%;"></div>
-                                </div>
-                            </div>
-                        </div>
+                        <div style="background: #07050c; padding: 14px; border-radius: 14px; border: 1px solid rgba(157,78,221,0.2); margin-top: 10px; color: #b19cd9;">Активных очередей нет.</div>
                     </div>
                 `;
             } else if (section === 'Wallets') {
                 centerHtml = `
-                    <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 20px; width: 100%; margin-bottom: 20px;">
-                        <h3 style="margin-top: 0; color: #fff; font-size: 18px;">👥 Управление кошельками</h3>
-                        <p style="color: #8892b0; font-size: 13px;">Ваши сохраненные аккаунты и прокси для автоматизации.</p>
-                        <div id="walletsListContainer" style="margin-top: 15px; display: flex; flex-direction: column; gap: 10px;">
-                            <span style="color: #555c6d; font-size: 13px;">Загрузка кошельков...</span>
+                    <div style="background-color: #100a1c; border: 1px solid rgba(157,78,221,0.3); border-radius: 20px; padding: 20px; width: 100%; margin-bottom: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                            <h3 style="margin: 0; color: #fff; font-size: 18px;">👥 Управление кошельками</h3>
+                            <span style="font-size: 11px; color: #e0aaff; background: rgba(157,78,221,0.2); padding: 4px 10px; border-radius: 10px; border: 1px solid rgba(157,78,221,0.3);">Мульти-сетевой сканер</span>
                         </div>
+                        <div id="walletsListContainer" style="margin-top: 15px; display: flex; flex-direction: column; gap: 12px;">Загрузка кошельков...</div>
                     </div>
-
-                    <div class="wallet-manager-container" style="background: #141416; padding: 20px; border-radius: 12px; border: 1px solid #222; width: 100%;">
+                    <div style="background: #100a1c; padding: 20px; border-radius: 20px; border: 1px solid rgba(157,78,221,0.3); width: 100%; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
                         <h3 style="color: #fff; margin-top: 0; margin-bottom: 15px;">➕ Добавить новый кошелек</h3>
                         <div style="display: flex; flex-direction: column; gap: 10px;">
-                            <input type="text" id="newWalletAddress" placeholder="Название или адрес кошелька (например, Wallet #1)" autocomplete="off" style="padding: 10px; background: #0b0b0d; border: 1px solid #333; color: #fff; border-radius: 6px;">
-                            <input type="password" id="newWalletPk" placeholder="Приватный ключ (Private Key)" autocomplete="new-password" style="padding: 10px; background: #0b0b0d; border: 1px solid #333; color: #fff; border-radius: 6px;">
-                            <input type="text" id="newWalletProxy" placeholder="Прокси (http://ip:port или логин:пароль)" autocomplete="off" style="padding: 10px; background: #0b0b0d; border: 1px solid #333; color: #fff; border-radius: 6px;">
-                            <button onclick="addNewWalletToDB()" style="padding: 12px; background: #ff6600; color: #000; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;">Сохранить кошелек</button>
+                            <input type="text" id="newWalletAddress" placeholder="Название или адрес кошелька" class="auth-input" autocomplete="off" name="custom_wallet_address_field">
+                            <input type="password" id="newWalletPk" placeholder="Приватный ключ (Private Key)" class="auth-input" autocomplete="new-password" name="custom_private_key_field">
+                            <input type="text" id="newWalletProxy" placeholder="Прокси (ip:port:login:pass)" class="auth-input" autocomplete="off" name="custom_proxy_field">
+                            <button type="button" onclick="addNewWalletToDB()" class="btn-modal-primary" style="margin-top: 4px;">Сохранить кошелек</button>
                         </div>
-                        <div id="walletResponseMsg" style="margin-top: 10px; font-size: 14px;"></div>
+                        <div id="walletResponseMsg" style="margin-top: 10px;"></div>
                     </div>
                 `;
                 setTimeout(loadWalletsFromDB, 50);
             } else if (section === 'Billing') {
-                centerHtml = `
-                    <div id="billing-tab" style="background: #141416; padding: 25px; border-radius: 12px; border: 1px solid #222; width: 100%;">
-                        <h3 style="color: #fff; margin-top: 0; margin-bottom: 15px; display: flex; align-items: center; gap: 10px;">
-                            <span>💳</span> Биллинг и подписка
-                        </h3>
-                        <p style="color: #888; font-size: 14px; margin-bottom: 20px;">Управление активным тарифным планом и статусом аккаунта.</p>
-                        
-                        <div style="background: #0b0b0d; padding: 20px; border-radius: 8px; border: 1px solid #222; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
-                            <div>
-                                <div style="color: #fff; font-weight: bold; font-size: 16px;">Тариф: PRO FARMER ($160 / мес)</div>
-                                <div style="color: #00d95f; font-size: 13px; margin-top: 5px;">● Статус: Активен</div>
-                            </div>
-                            <button style="padding: 10px 20px; background: #ff6600; color: #000; border: none; border-radius: 6px; font-weight: bold; cursor: pointer;">Продлить тариф</button>
-                        </div>
-                    </div>
-                `;
+                centerHtml = `<div style="background: #100a1c; padding: 25px; border-radius: 20px; border: 1px solid rgba(157,78,221,0.3); width: 100%; box-shadow: 0 10px 30px rgba(0,0,0,0.5);"><h3 style="color: #fff; margin-top:0;">💳 Тариф PRO</h3></div>`;
             } else if (section === 'Settings') {
                 centerHtml = `
-                    <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 20px; width: 100%;">
-                        <h3 style="margin-top: 0; color: #fff; font-size: 18px;">⚙️ Системные настройки</h3>
-                        <p style="color: #8892b0; font-size: 13px; margin-bottom: 16px;">Глобальные параметры автоматизации и уведомлений.</p>
+                    <div style="background-color: #100a1c; border: 1px solid rgba(157,78,221,0.3); border-radius: 20px; padding: 20px; width: 100%; box-shadow: 0 10px 30px rgba(0,0,0,0.5); display: flex; flex-direction: column; gap: 16px;">
+                        <h3 style="margin: 0; color: #fff; font-size: 18px;">⚙️ Автоматический фоновый планировщик</h3>
+                        <p style="color: #b19cd9; font-size: 13px; margin: 0;">Настройте расписание («настроил и забыл»), чтобы софт сам запускал фарминг в фоновом режиме по вашим правилам.</p>
                         
-                        <div style="margin: 16px 0; background: #060709; padding: 16px; border-radius: 12px; border: 1px solid #1c202d;">
-                            <h4 style="margin: 0 0 6px 0; color: #fff; font-size: 14px;">${t.tgLinkTitle}</h4>
-                            <p style="color: #8892b0; font-size: 12px; margin-bottom: 12px;">${t.tgLinkDesc}</p>
-                            <button onclick="toggleTelegramBot()" style="background: ${telegramLinked ? '#151821' : '#ff6600'}; color: ${telegramLinked ? '#00d95f' : '#000'}; border: ${telegramLinked ? '1px solid #00d95f' : 'none'}; padding: 10px 16px; border-radius: 8px; font-weight: bold; font-size: 13px; cursor: pointer;">
-                                ${telegramLinked ? t.tgConnectedText : t.tgConnectBtn}
-                            </button>
+                        <div style="display: flex; justify-content: space-between; align-items: center; background: #07050c; padding: 14px; border-radius: 14px; border: 1px solid rgba(157,78,221,0.2);">
+                            <div>
+                                <div style="font-weight: bold; font-size: 14px; color: #fff;">⏰ Авто-фарминг по календарю</div>
+                                <div style="font-size: 11px; color: #b19cd9;">Включение и отключение фонового расписания</div>
+                            </div>
+                            <label style="position: relative; display: inline-block; width: 50px; height: 26px;">
+                                <input type="checkbox" id="autoFarmToggle" onchange="toggleCalendarBlock()" style="opacity: 0; width: 0; height: 0;">
+                                <span style="cursor: pointer; position: absolute; inset: 0; background-color: #1a102e; border: 1px solid rgba(157,78,221,0.4); transition: .4s; border-radius: 26px;"></span>
+                            </label>
                         </div>
 
-                        <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 16px;">
-                            <label style="display: flex; align-items: center; justify-content: space-between; background: #060709; padding: 14px; border-radius: 10px; border: 1px solid #1c202d; cursor: pointer; gap: 10px;">
-                                <span style="font-size: 13px; color: #fff;">Авто-ротация прокси при сбое RPC</span>
-                                <input type="checkbox" checked style="accent-color: #ff6600; width: 16px; height: 16px; flex-shrink: 0;">
-                            </label>
-                            <label style="display: flex; align-items: center; justify-content: space-between; background: #060709; padding: 14px; border-radius: 10px; border: 1px solid #1c202d; cursor: pointer; gap: 10px;">
-                                <span style="font-size: 13px; color: #fff;">Режим повышенной конфиденциальности (Stealth)</span>
-                                <input type="checkbox" checked style="accent-color: #ff6600; width: 16px; height: 16px; flex-shrink: 0;">
-                            </label>
+                        <div id="calendarDaysContainer" style="background: #07050c; padding: 14px; border-radius: 14px; border: 1px solid rgba(157,78,221,0.2); transition: 0.3s;">
+                            <div style="font-size: 12px; font-weight: bold; color: #e0aaff; margin-bottom: 6px;">📅 Календарь активных дней запуска (кликни для включения):</div>
+                            <div class="calendar-grid">
+                                <div class="calendar-day active" data-day="Mon" onclick="toggleCalendarDay(this)">Пн</div>
+                                <div class="calendar-day" data-day="Tue" onclick="toggleCalendarDay(this)">Вт</div>
+                                <div class="calendar-day active" data-day="Wed" onclick="toggleCalendarDay(this)">Ср</div>
+                                <div class="calendar-day" data-day="Thu" onclick="toggleCalendarDay(this)">Чт</div>
+                                <div class="calendar-day active" data-day="Fri" onclick="toggleCalendarDay(this)">Пт</div>
+                                <div class="calendar-day" data-day="Sat" onclick="toggleCalendarDay(this)">Сб</div>
+                                <div class="calendar-day" data-day="Sun" onclick="toggleCalendarDay(this)">Вс</div>
+                            </div>
+                        </div>
+
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                            <div class="input-group" style="margin: 0;">
+                                <div class="tooltip-container" style="display: block; margin-bottom: 4px;">
+                                    <label style="font-size: 11px; color: #b19cd9; cursor: help;">⏳ Рандомная задержка (ч) 🛈</label>
+                                    <span class="tooltip-text"><b>Случайная задержка времени:</b> Софт делает случайные паузы между запусками воркеров (в заданном диапазоне часов), чтобы антифрод-системы бирж и мостов не пометили ваши аккаунты как бот-ферму.</span>
+                                </div>
+                                <input type="number" id="randomDelayInput" class="auth-input" value="5" min="1" max="24">
+                            </div>
+                            <div class="input-group" style="margin: 0;">
+                                <div class="tooltip-container" style="display: block; margin-bottom: 4px;">
+                                    <label style="font-size: 11px; color: #b19cd9; cursor: help;">⚡ Лимит газа (Gwei) 🛈</label>
+                                    <span class="tooltip-text"><b>Ограничение по газу:</b> Максимальная цена в Gwei, которую софт готов заплатить за транзакцию. Если сеть перегружена и газ выше лимита, софт переждет скачок, экономя ваши деньги.</span>
+                                </div>
+                                <input type="number" id="gasLimitInput" class="auth-input" value="30">
+                            </div>
+                        </div>
+
+                        <button type="button" onclick="saveUserSettingsFromForm()" class="btn-modal-primary" style="padding: 12px;">💾 Сохранить конфигурацию</button>
+                        <div id="settingsSaveMsg" style="text-align: center; font-size: 12px;"></div>
+
+                        <div style="border-top: 1px solid rgba(157,78,221,0.2); padding-top: 14px; margin-top: 6px;">
+                            <button type="button" onclick="toggleTelegramBot()" style="background: ${telegramLinked ? '#18102e' : 'linear-gradient(135deg, #7b2cbf, #9d4edd)'}; color: ${telegramLinked ? '#00d95f' : '#fff'}; border: 1px solid rgba(157,78,221,0.4); padding: 12px; border-radius: 16px; font-weight: bold; width: 100%; cursor: pointer;">${telegramLinked ? t.tgConnectedText : t.tgConnectBtn}</button>
                         </div>
                     </div>
                 `;
+                setTimeout(loadUserSettingsIntoForm, 50);
             }
 
             dashboardContent.innerHTML = `
                 <div class="desktop-sidebar" style="width: 280px; display: flex; flex-direction: column; gap: 14px; flex-shrink: 0;">
-                    <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 16px; display: flex; flex-direction: column; gap: 12px;">
-                        <div style="display: flex; align-items: center; gap: 12px;">
-                            <div style="width: 40px; height: 40px; background: linear-gradient(135deg, #ff6600, #993d00); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 16px; color: #000; flex-shrink: 0;">${firstLetter}</div>
-                            <div style="overflow: hidden; flex: 1;">
-                                <div style="font-weight: 700; font-size: 14px; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${activeUser}</div>
-                                <div style="font-size: 11px; color: #ff6600; font-weight: 600;">🔥 Level ${savedLevel} • Pro Farmer</div>
-                            </div>
+                    <div style="background-color: #100a1c; border: 1px solid rgba(157,78,221,0.3); border-radius: 20px; padding: 16px; box-shadow: 0 5px 20px rgba(0,0,0,0.5); display: flex; flex-direction: column; gap: 10px;">
+                        <div>
+                            <div style="font-weight: 700; font-size: 15px; color: #fff;">${activeUser}</div>
+                            <div style="font-size: 11px; color: #c77dff; font-weight: 600; text-shadow: 0 0 10px rgba(199,125,255,0.4);">🔥 Pro Cyber Farmer</div>
                         </div>
-                        <div style="background: #14171f; border-radius: 8px; padding: 8px; border: 1px solid #1c202d;">
-                            <div style="display: flex; justify-content: space-between; font-size: 10px; color: #8892b0; margin-bottom: 4px;">
-                                <span>XP Progress</span>
-                                <span style="color: #00d95f; font-weight: bold;">${savedXp.toLocaleString()} / ${maxLevelXp.toLocaleString()} XP</span>
-                            </div>
-                            <div style="width: 100%; background: #060709; height: 6px; border-radius: 3px; overflow: hidden;">
-                                <div style="width: ${xpPercent}%; background: linear-gradient(90deg, #ff6600, #00d95f); height: 100%; border-radius: 3px; transition: width 0.4s ease;"></div>
-                            </div>
+                        <div style="border-top: 1px solid rgba(157,78,221,0.2); padding-top: 8px; display: flex; justify-content: space-between; align-items: center; font-size: 12px;">
+                            <span style="color: #b19cd9;">⚡ Уровень / XP:</span>
+                            <span style="color: #e0aaff; font-weight: bold;">Lvl ${currentLevel} (${currentXp} XP)</span>
+                        </div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px;">
+                            <span style="color: #b19cd9;">💰 Баланс сайта:</span>
+                            <span style="color: #00d95f; font-weight: bold;">$160.00 (PRO)</span>
                         </div>
                     </div>
-
-                    <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 16px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                            <div>
-                                <div style="font-size: 11px; color: #8892b0;">${t.balanceText}</div>
-                                <div style="font-size: 16px; font-weight: bold; color: #ff6600; margin-top: 2px;">$0.3538</div>
-                            </div>
-                            <button style="background: #00d95f; color: #000; border: none; width: 28px; height: 28px; border-radius: 50%; font-weight: bold; cursor: pointer;">+</button>
-                        </div>
-                        <button onclick="connectDashboardWallet()" style="width: 100%; background: #14171f; color: #00d95f; border: 1px solid #00d95f; padding: 8px; border-radius: 8px; font-weight: bold; font-size: 12px; cursor: pointer;">${t.walletConnectedText}</button>
-                    </div>
-
-                    <div style="background-color: #0c0e14; border: 1px solid #14171f; border-radius: 16px; padding: 10px; display: flex; flex-direction: column; gap: 4px;">
-                        <div class="sidebar-menu-item ${section === 'Looter' ? 'active' : ''}" data-section="Looter" onclick="switchMenu(this, 'Looter')">📦 ${t.looterMenu}</div>
-                        <div class="sidebar-menu-item ${section === 'Farming' ? 'active' : ''}" data-section="Farming" onclick="switchMenu(this, 'Farming')">🌾 ${t.farmTabBtn}</div>
-                        <div class="sidebar-menu-item ${section === 'Tasks' ? 'active' : ''}" data-section="Tasks" onclick="switchMenu(this, 'Tasks')">⚡ ${t.tasksTabBtn}</div>
-                        <div class="sidebar-menu-item ${section === 'Proxy' ? 'active' : ''}" data-section="Proxy" onclick="switchMenu(this, 'Proxy')">🌐 ${t.proxyMenu}</div>
-                        <div class="sidebar-menu-item ${section === 'Statistics' ? 'active' : ''}" data-section="Statistics" onclick="switchMenu(this, 'Statistics')">📊 ${t.statsMenu}</div>
-                        <div class="sidebar-menu-item ${section === 'Wallets' ? 'active' : ''}" data-section="Wallets" onclick="switchMenu(this, 'Wallets')">👥 ${t.walletsMenu} <span style="background: #ff6600; color: #000; font-size: 9px; padding: 2px 5px; border-radius: 4px; font-weight: bold; margin-left: 4px;">PRO</span></div>
-                        <div class="sidebar-menu-item ${section === 'Billing' ? 'active' : ''}" data-section="Billing" onclick="switchMenu(this, 'Billing')">💳 ${t.billingMenu}</div>
-                        <div class="sidebar-menu-item ${section === 'Settings' ? 'active' : ''}" data-section="Settings" onclick="switchMenu(this, 'Settings')">⚙️ ${t.settingsMenu}</div>
+                    <div style="background-color: #100a1c; border: 1px solid rgba(157,78,221,0.3); border-radius: 20px; padding: 10px; display: flex; flex-direction: column; gap: 4px; box-shadow: 0 5px 20px rgba(0,0,0,0.5);">
+                        <div class="sidebar-menu-item ${section === 'Looter' ? 'active' : ''}" onclick="switchMenu(this, 'Looter')">📦 ${t.looterMenu}</div>
+                        <div class="sidebar-menu-item ${section === 'Farming' ? 'active' : ''}" onclick="switchMenu(this, 'Farming')">🌾 ${t.farmTabBtn}</div>
+                        <div class="sidebar-menu-item ${section === 'Tasks' ? 'active' : ''}" onclick="switchMenu(this, 'Tasks')">⚡ ${t.tasksTabBtn}</div>
+                        <div class="sidebar-menu-item ${section === 'Proxy' ? 'active' : ''}" onclick="switchMenu(this, 'Proxy')">🌐 ${t.proxyMenu}</div>
+                        <div class="sidebar-menu-item ${section === 'Statistics' ? 'active' : ''}" onclick="switchMenu(this, 'Statistics')">📊 ${t.statsMenu}</div>
+                        <div class="sidebar-menu-item ${section === 'Wallets' ? 'active' : ''}" onclick="switchMenu(this, 'Wallets')">👥 ${t.walletsMenu}</div>
+                        <div class="sidebar-menu-item ${section === 'Billing' ? 'active' : ''}" onclick="switchMenu(this, 'Billing')">💳 ${t.billingMenu}</div>
+                        <div class="sidebar-menu-item ${section === 'Settings' ? 'active' : ''}" onclick="switchMenu(this, 'Settings')">⚙️ ${t.settingsMenu}</div>
                     </div>
                 </div>
-
-                <div style="flex: 1; display: flex; flex-direction: column; gap: 16px; min-width: 0;">
-                    ${centerHtml}
-                </div>
+                <div style="flex: 1; display: flex; flex-direction: column; gap: 16px; min-width: 0;">${centerHtml}</div>
             `;
-        }
-
-        async function connectDashboardWallet() {
-            if (window.ethereum) {
-                try {
-                    provider = new ethers.providers.Web3Provider(window.ethereum);
-                    await provider.send("wallet_requestPermissions", [{ eth_accounts: {} }]);
-                    signer = provider.getSigner();
-                    userAddress = await signer.getAddress();
-                    alert("Connected: " + userAddress);
-                } catch (error) {
-                    console.error(error);
-                }
-            } else {
-                alert("Web3 provider not found.");
-            }
-        }
-
-        async function claimFoundDrops() {
-            const log = document.getElementById('drop-logs');
-            if(!log) return;
-            log.innerHTML += `<br><span style="color: #ff6600;">[${new Date().toLocaleTimeString()}] ⚡ Запуск клейма с Anti-Sybil...</span>`;
-            log.scrollTop = log.scrollHeight;
-            
-            setTimeout(() => {
-                log.innerHTML += `<br><span style="color: #00d95f;">[${new Date().toLocaleTimeString()}] 🚀 Успешно! Токены распределены.</span>`;
-                log.scrollTop = log.scrollHeight;
-                addFarmExperience(300);
-            }, 3000);
-        }
-
-        function toggleFaq(element) {
-            element.classList.toggle('active');
-            const span = element.querySelector('.faq-question span:last-child');
-            span.innerText = element.classList.contains('active') ? '-' : '+';
         }
     </script>
 </body>

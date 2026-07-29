@@ -1,132 +1,151 @@
-import os
+import time
 import asyncio
 import random
 import logging
-import base64
-import json
-import datetime
-from cryptography.fernet import Fernet
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from web3 import Web3
 from eth_account import Account
-import aiohttp
-from aiohttp_socks import ProxyConnector
 
-from strategies import FarmingStrategies
-
-logging.basicConfig(level=logging.INFO, format='%(asctime)s | %(levelname)s | [%(name)s] %(message)s')
+logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)s | [%(name)s] %(message)s")
 logger = logging.getLogger("CoreEngine")
 
-class LocalVault:
-    def __init__(self, master_password: str):
-        salt = b'airdrop_x_secure_salt'
-        kdf = PBKDF2HMAC(
-            algorithm=hashes.SHA256(),
-            length=32,
-            salt=salt,
-            iterations=100000,
-        )
-        key = base64.urlsafe_b64encode(kdf.derive(master_password.encode()))
-        self.cipher = Fernet(key)
+class MultiRouteRpcRouter:
+    def __init__(self, network: str):
+        self.network = network
+        self.rpc_mapping = {
+            "Base": ["https://mainnet.base.org", "https://base.publicnode.com"],
+            "Arbitrum": ["https://arb1.arbitrum.io/rpc", "https://rpc.ankr.com/arbitrum"],
+            "ZkSync": ["https://mainnet.era.zksync.io", "https://zksync.drpc.org"],
+            "Scroll": ["https://rpc.scroll.io", "https://scroll-mainnet.public.blastapi.io"],
+            "Linea": ["https://rpc.linea.build", "https://linea.drpc.org"],
+            "Blast": ["https://rpc.blast.io", "https://blast.din.dev"],
+            "Mantle": ["https://rpc.mantle.xyz", "https://mantle-mainnet.public.blastapi.io"],
+            "Berachain": ["https://rpc.berachain.com", "https://berachain-rpc.publicnode.com"],
+            "Solana": ["https://api.mainnet-beta.solana.com", "https://solana-rpc.publicnode.com"]
+        }
+    
+    def get_rpc(self):
+        nodes = self.rpc_mapping.get(self.network, self.rpc_mapping["Base"])
+        return nodes[0]
 
-    def decrypt_data(self, encrypted_token: str) -> str:
-        try:
-            decrypted = self.cipher.decrypt(encrypted_token.encode())
-            return decrypted.decode()
-        except Exception:
-            return encrypted_token
-
-class RPCRouter:
-    def __init__(self, rpc_list: list):
-        self.rpc_list = rpc_list
-
-    def get_random_rpc(self) -> str:
-        return random.choice(self.rpc_list)
+def get_live_gas_price(network: str) -> str:
+    try:
+        router = MultiRouteRpcRouter(network)
+        w3 = Web3(Web3.HTTPProvider(router.get_rpc()))
+        if not w3.is_connected():
+            return "N/A"
+        gas_price_wei = w3.eth.gas_price
+        gas_gwei = w3.from_wei(gas_price_wei, 'gwei')
+        return f"{float(gas_gwei):.2f} Gwei"
+    except Exception:
+        return "N/A"
 
 class RealFarmWorker:
-    def __init__(self, wallet_id: int, decrypted_pk: str, proxy: str, rpc_router: RPCRouter):
+    def __init__(self, wallet_id: int, encrypted_pk: str, proxy: str, target_network: str = "Base"):
         self.wallet_id = wallet_id
-        self.pk = decrypted_pk
-        self.proxy = proxy
-        self.rpc_router = rpc_router
-
-    async def execute_real_transaction(self, target_network: str = "Base"):
-        logger.info(f"[Wallet #{self.wallet_id}] Залетаем в сеть {target_network} через прокси {self.proxy}...")
+        self.pk = encrypted_pk
         
-        rpc_url = self.rpc_router.get_random_rpc()
-        w3 = Web3(Web3.HTTPProvider(rpc_url))
+        clean_proxy = proxy.strip() if proxy else ""
+        if clean_proxy.startswith("[") and clean_proxy.endswith("]"):
+            clean_proxy = clean_proxy[1:-1].strip()
+            
+        self.proxy = clean_proxy
+        self.target_network = target_network
+        self.rpc_router = MultiRouteRpcRouter(self.target_network)
+
+    async def execute_real_transaction(self):
+        anti_sybil_delay = random.uniform(1.0, 7.0)
+        logger.info(f"[Wallet #{self.wallet_id}] Anti-Sybil Shield: ожидание {anti_sybil_delay:.2f} сек перед вылетом...")
+        await asyncio.sleep(anti_sybil_delay)
+
+        logger.info(f"[Wallet #{self.wallet_id}] Залетаем в сеть {self.target_network} через прокси [{self.proxy}]...")
+        
+        rpc_url = self.rpc_router.get_rpc()
+        proxies_dict = {"http": self.proxy, "https": self.proxy} if self.proxy else None
+        session = Web3.HTTPProvider(rpc_url, request_kwargs={"proxies": proxies_dict})
+        w3 = Web3(session)
         
         try:
             account = Account.from_key(self.pk)
             wallet_address = account.address
             
-            # Чекаем кэш на балансе
             balance_wei = w3.eth.get_balance(wallet_address)
             balance_eth = w3.from_wei(balance_wei, 'ether')
-            logger.info(f"[Wallet #{self.wallet_id}] На базе: {balance_eth} ETH")
+            logger.info(f"[Wallet #{self.wallet_id}] Баланс в сети {self.target_network}: {balance_eth} ETH")
             
             if balance_eth == 0:
-                logger.warning(f"[Wallet #{self.wallet_id}] ⚠️ По нулям, брат! Закинь копейку на газ, чтобы контракт отработал.")
-                return {"wallet_id": self.wallet_id, "status": "Failed", "reason": "Zero balance"}
+                err_msg = f"По нулям в сети {self.target_network}! Закинь копейку на газ."
+                logger.warning(f"[Wallet #{self.wallet_id}] ⚠️ {err_msg}")
+                return {"wallet_id": self.wallet_id, "status": "Failed", "reason": err_msg}
 
-            # --- РЕАЛЬНЫЙ СМАРТ-КОНТРАКТ ---
-            # Адрес контракта WETH9 в сети Base
-            weth_address = Web3.to_checksum_address("0x4200000000000000000000000000000000000006")
+            weth_addresses = {
+                "Base": "0x4200000000000000000000000000000000000006",
+                "Arbitrum": "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1",
+                "ZkSync": "0x5aea5775956fbc2d5ffbefcd1489bb0987fa490f"
+            }
             
-            # Минимальный ABI, чтобы дернуть функцию deposit()
+            weth_address = Web3.to_checksum_address(weth_addresses.get(self.target_network, weth_addresses["Base"]))
             weth_abi = '[{"constant":false,"inputs":[],"name":"deposit","outputs":[],"payable":true,"stateMutability":"payable","type":"function"}]'
             
-            # Поднимаем контракт на районе
             contract = w3.eth.contract(address=weth_address, abi=weth_abi)
-            
             nonce = w3.eth.get_transaction_count(wallet_address)
             
-            # Пакуем сущие копейки чисто для теста (0.00001 ETH)
-            amount_to_wrap = w3.to_wei(0.00001, 'ether') 
+            random_amount_factor = random.uniform(0.000008, 0.000015)
+            amount_to_wrap = w3.to_wei(random_amount_factor, 'ether') 
 
-            logger.info(f"[Wallet #{self.wallet_id}] Собираем транзу: пакуем ETH в WETH...")
+            logger.info(f"[Wallet #{self.wallet_id}] Билдим Anti-Sybil Swap / Wrap транзу (сумма: {random_amount_factor:.6f} ETH)...")
             
-            # Билдим транзакцию через ABI
+            latest_block = w3.eth.get_block('latest')
+            base_fee = latest_block.get('baseFeePerGas', w3.eth.gas_price)
+            max_priority_fee = w3.to_wei(random.uniform(1.2, 1.8), 'gwei')
+            max_fee = (base_fee * 2) + max_priority_fee
+
             tx = contract.functions.deposit().build_transaction({
                 'chainId': w3.eth.chain_id,
-                'gas': 150000,
-                'gasPrice': w3.eth.gas_price,
+                'gas': random.randint(145000, 160000),
+                'maxFeePerGas': max_fee,
+                'maxPriorityFeePerGas': max_priority_fee,
                 'nonce': nonce,
                 'value': amount_to_wrap
             })
 
-            # Подписываем своим приватником
             signed_txn = w3.eth.account.sign_transaction(tx, private_key=self.pk)
+            tx_hash = w3.eth.send_raw_transaction(signed_txn.raw_transaction)
+            logger.info(f"[Wallet #{self.wallet_id}] 🚀 Транза улетела в {self.target_network}! Хэш: {w3.to_hex(tx_hash)}")
             
-            tx_hash = w3.eth.send_raw_transaction(signed_txn.rawTransaction)
-            logger.info(f"[Wallet #{self.wallet_id}] 🚀 Транза улетела в сеть! Хэш: {w3.to_hex(tx_hash)}")
             receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
-            logger.info(f"[Wallet #{self.wallet_id}] ✅ Блок подтвержден! Газ сожжен по красоте.")
+            logger.info(f"[Wallet #{self.wallet_id}] ✅ Блок подтвержден в сети {self.target_network}! Объем набит успешно.")
             
-            logger.info(f"[Wallet #{self.wallet_id}] ✅ Транза собрана и подписана по красоте (Симуляция пройдена)!")
-            return {"wallet_id": self.wallet_id, "status": "Success", "tx_hash": "0x_ready_to_send"}
+            return {"wallet_id": self.wallet_id, "status": "Success", "tx_hash": w3.to_hex(tx_hash)}
 
         except Exception as e:
-            logger.error(f"[Wallet #{self.wallet_id}] ❌ Жесткая ошибка: {repr(e)}")
-            return {"wallet_id": self.wallet_id, "status": "Failed", "error": str(e)}
-async def run_real_farm(encrypted_wallets_data, rpc_list, master_pass):
-    vault = LocalVault(master_pass)
-    router = RPCRouter(rpc_list)
-    tasks = []
+            err_str = str(e)
+            if "insufficient funds" in err_str:
+                clean_err = "❌ Ошибка: Недостаточно средств на балансе для оплаты газа!"
+            else:
+                clean_err = f"❌ Ошибка блокчейна: {err_str}"
+            
+            logger.error(f"[Wallet #{self.wallet_id}] {clean_err}")
+            return {"wallet_id": self.wallet_id, "status": "Failed", "error": clean_err}
+
+async def run_real_farm(wallets_data, rpc_list, master_password: str, target_network: str = "Base"):
+    logger.info(f"🚀 Старт антифрод-ядра фермы (Swaps & Bridges). Сеть: {target_network}")
     
-    for data in encrypted_wallets_data:
-        try:
-            decrypted_pk = vault.decrypt_data(data['encrypted_pk'])
-            worker = RealFarmWorker(
-                wallet_id=data['id'],
-                decrypted_pk=decrypted_pk,
-                proxy=data['proxy'],
-                rpc_router=router
-            )
-            tasks.append(worker.execute_real_transaction())
-        except Exception as e:
-            logger.error(f"[Worker Error] ❌ Кошелек #{data['id']} не запущен: {repr(e)}")
+    shuffled_wallets = list(wallets_data)
+    random.shuffle(shuffled_wallets)
 
+    tasks = []
+    for w in shuffled_wallets:
+        worker = RealFarmWorker(
+            wallet_id=w["id"],
+            encrypted_pk=w["encrypted_pk"],
+            proxy=w["proxy"],
+            target_network=target_network
+        )
+        tasks.append(worker.execute_real_transaction())
+    
     results = await asyncio.gather(*tasks)
+    logger.info("🏁 Все воркеры завершили рандомизированную Anti-Sybil сессию.")
     return results
+
+if __name__ == "__main__":
+    print("Core Engine запущен в автономном режиме.")
