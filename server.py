@@ -1,15 +1,17 @@
 import os
-import json
 import random
 import asyncio
 import smtplib
+import time
+import secrets
+import uuid
 from email.message import EmailMessage
 
 from fastapi import FastAPI, Depends, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
-from sqlalchemy import create_engine, Column, Integer, String
+from sqlalchemy import create_engine, Column, Integer, String, text
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
 from web3 import Web3
 
@@ -24,9 +26,16 @@ except ImportError:
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 465
 SENDER_EMAIL = "airdrop.x.support@gmail.com"
-SENDER_PASSWORD = "tecqpcadzlyxytgw"
+SENDER_PASSWORD = "salucffjamydmmgf"
 
 verification_codes = {}
+SUBSCRIPTION_DURATION_SECONDS = 30 * 24 * 60 * 60
+SUBSCRIPTION_RENEWAL_PRICE = 50
+PLAN_PRICES = {"Standard": 95, "Pro": 150, "Premium": 280}
+BASE_SLOT_LIMITS = {"Standard": 5, "Pro": 15, "Premium": 30}
+PAYMENT_TOKEN_TTL_SECONDS = 30 * 60
+payment_sessions = {}
+payment_tokens = {}
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///./airdrop_x.db"
 engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
@@ -41,6 +50,8 @@ class User(Base):
     password_hash = Column(String)
     subscription_plan = Column(String, default="Standard")
     extra_slots = Column(Integer, default=0)
+    fingerprint = Column(String, nullable=True) # Привязка к железу
+    subscription_activated_at = Column(Integer, nullable=True)
 
 class Wallet(Base):
     __tablename__ = "wallets"
@@ -50,17 +61,16 @@ class Wallet(Base):
     encrypted_pk = Column(String)
     proxy = Column(String)
 
-class SettingsModel(Base):
-    __tablename__ = "settings"
-    id = Column(Integer, primary_key=True, index=True)
-    username = Column(String, unique=True, index=True)
-    master_wallet = Column(String, default="0x5e5316Dea1c44d220d4c60A5fcC2949E5A06Fc66")
-    auto_farming_enabled = Column(Integer, default=1)
-    schedule_days = Column(String, default="Mon,Wed,Fri")
-    random_delay = Column(Integer, default=5)
-    gas_limit_gwei = Column(Integer, default=30)
-
 Base.metadata.create_all(bind=engine)
+
+def ensure_schema_columns():
+    with engine.connect() as conn:
+        columns = {row[1] for row in conn.execute(text("PRAGMA table_info(users)"))}
+        if "subscription_activated_at" not in columns:
+            conn.execute(text("ALTER TABLE users ADD COLUMN subscription_activated_at INTEGER"))
+            conn.commit()
+
+ensure_schema_columns()
 
 app = FastAPI(title="AIRDROP-X Backend API")
 
@@ -79,24 +89,25 @@ def get_db():
     finally:
         db.close()
 
+# Models
 class UserRegister(BaseModel):
     username: str
     email: str
     password: str
     code: str
     plan: str = "Standard"
+    activation_price: int
+    client_session_id: str
+    payment_token: str
+    fingerprint: str = ""
 
 class UserLogin(BaseModel):
     username: str
     password: str
+    fingerprint: str = ""
 
 class WalletAdd(BaseModel):
     username: str
-    wallet_address: str
-    encrypted_pk: str
-    proxy: str
-
-class WalletUpdate(BaseModel):
     wallet_address: str
     encrypted_pk: str
     proxy: str
@@ -106,85 +117,63 @@ class StartFarmReq(BaseModel):
     network: str = "Base"
     username: str = "Robert"
 
-class DepositReq(BaseModel):
-    wallet_id: int
-    amount_eth: float
-    network: str
-
-class SaveSettingsReq(BaseModel):
-    username: str
-    master_wallet: str
-    auto_farming_enabled: int
-    schedule_days: str
-    random_delay: int
-    gas_limit_gwei: int
-
 class EmailRequest(BaseModel):
     email: str
 
 class BuyExtraSlotReq(BaseModel):
     username: str
 
-class BalanceChecker:
-    def get_balance(self, network: str, address: str, proxy: str = None):
-        rpc_mapping = {
-            "Base": "https://mainnet.base.org",
-            "Arbitrum": "https://arb1.arbitrum.io/rpc",
-            "ZkSync": "https://mainnet.era.zksync.io",
-            "Scroll": "https://rpc.scroll.io",
-            "Linea": "https://rpc.linea.build",
-            "Blast": "https://rpc.blast.io",
-            "Mantle": "https://rpc.mantle.xyz",
-            "Berachain": "https://rpc.berachain.com",
-            "Solana": "https://api.mainnet-beta.solana.com"
-        }
-        rpc_url = rpc_mapping.get(network, "https://mainnet.base.org")
-        try:
-            clean_proxy = proxy.strip() if proxy else ""
-            if clean_proxy.startswith("[") and clean_proxy.endswith("]"):
-                clean_proxy = clean_proxy[1:-1].strip()
-            proxies_dict = {"http": clean_proxy, "https": clean_proxy} if clean_proxy else None
-            
-            w3 = Web3(Web3.HTTPProvider(rpc_url, request_kwargs={"proxies": proxies_dict}))
-            if not w3.is_connected():
-                return "0.0"
-            balance_wei = w3.eth.get_balance(Web3.to_checksum_address(address))
-            balance_eth = w3.from_wei(balance_wei, 'ether')
-            return f"{float(balance_eth):.4f}"
-        except Exception:
-            return "0.0"
+class RenewSubscriptionReq(BaseModel):
+    username: str
+
+class PaymentSessionCreateReq(BaseModel):
+    plan: str
+    amount: int
+    client_session_id: str
+
+class PaymentSessionConfirmReq(BaseModel):
+    payment_session_id: str
+    client_session_id: str
+
+def issue_payment_token(client_session_id: str, plan: str, amount: int) -> str:
+    token = secrets.token_urlsafe(32)
+    payment_tokens[token] = {
+        "client_session_id": client_session_id,
+        "plan": plan,
+        "amount": amount,
+        "created_at": int(time.time()),
+        "used": False,
+    }
+    return token
 
 def send_real_email(to_email: str, code: str):
     msg = EmailMessage()
-    msg["Subject"] = "AIRDROP-X Verification Code"
-    msg["From"] = SENDER_EMAIL
+    msg["Subject"] = "[AIRDROP-X] Authorization Terminal"
+    msg["From"] = f"Airdrop-X Core <{SENDER_EMAIL}>"
     msg["To"] = to_email
     
-    # Фирменный HTML-дизайн письма
     html_content = f"""
-    <div style="background-color: #07050c; padding: 30px; font-family: sans-serif; color: #f3f0ff;">
-      <div style="max-width: 500px; margin: 0 auto; background: #100a1c; border: 1px solid rgba(157,78,221,0.4); border-radius: 20px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.8);">
-        <div style="background: linear-gradient(135deg, #7b2cbf, #9d4edd); padding: 20px; text-align: center;">
-          <h2 style="color: #fff; margin: 0; font-size: 18px; text-shadow: 0 0 10px rgba(255,255,255,0.5);">⚡ AIRDROP-X SECURITY</h2>
+    <div style="background-color: #07050c; padding: 40px; font-family: 'Courier New', Courier, monospace; color: #f3f0ff;">
+      <div style="max-width: 500px; margin: 0 auto; background: #100a1c; border: 1px solid rgba(157,78,221,0.5); border-radius: 12px; overflow: hidden; box-shadow: 0 0 40px rgba(157,78,221,0.2);">
+        <div style="background: linear-gradient(90deg, #18102e, #2d1b4e); padding: 20px; border-bottom: 1px solid rgba(157,78,221,0.5);">
+          <h2 style="color: #e0aaff; margin: 0; font-size: 16px; letter-spacing: 2px;">>_ AIRDROP-X // SECURITY_NODE</h2>
         </div>
-        <div style="padding: 24px; text-align: center;">
-          <p style="color: #b19cd9; font-size: 13px; line-height: 1.5; margin-bottom: 20px;">
-            You have requested a verification code for your <b>AIRDROP-X</b> account. Use the code below to complete your action:
+        <div style="padding: 30px;">
+          <p style="color: #b19cd9; font-size: 14px; margin-bottom: 25px;">
+            User authentication protocol initiated.<br>
+            Please use the following decrypt code to access the panel:
           </p>
-          <div style="background: #07050c; border: 1px solid rgba(157,78,221,0.4); border-radius: 14px; padding: 18px; font-size: 28px; font-weight: 800; color: #e0aaff; letter-spacing: 6px; margin-bottom: 20px; box-shadow: inset 0 2px 5px rgba(0,0,0,0.5);">
+          <div style="background: #07050c; border: 1px solid #c77dff; border-radius: 8px; padding: 20px; text-align: center; font-size: 32px; font-weight: bold; color: #fff; letter-spacing: 8px; box-shadow: 0 0 20px rgba(199,125,255,0.3);">
             {code}
           </div>
-          <p style="color: #7b68ee; font-size: 11px; line-height: 1.4;">
-            If you did not request this code, please ignore this email. Never share this code with anyone.
+          <p style="color: #ff3366; font-size: 11px; margin-top: 25px;">
+            WARNING: Do not share this code. System will automatically self-destruct the token after usage.
           </p>
-        </div>
-        <div style="background: #07050c; padding: 12px; text-align: center; border-top: 1px solid rgba(157,78,221,0.2); font-size: 10px; color: #7b68ee;">
-          AIRDROP-X © 2026. All rights reserved. Cyberpunk SaaS Panel.
         </div>
       </div>
     </div>
     """
-    msg.set_content(f"Your code: {code}") # Запасной текстовый вариант
+    msg.set_content(f"Your authorization code: {code}") 
     msg.add_alternative(html_content, subtype="html")
     
     try:
@@ -210,79 +199,157 @@ def api_send_code(data: EmailRequest):
     send_real_email(data.email, code)
     return {"status": "success", "message": "Code sent successfully!"}
 
-@app.get("/api/gas/{network}")
-async def get_network_gas(network: str):
-    return {"status": "success", "network": network, "gas_price": get_live_gas_price(network)}
+@app.post("/api/payment/create-session")
+async def create_payment_session(req: PaymentSessionCreateReq):
+    expected_amount = PLAN_PRICES.get(req.plan)
+    if expected_amount is None:
+        raise HTTPException(status_code=400, detail="Unknown plan")
+    if req.amount != expected_amount:
+        raise HTTPException(status_code=400, detail="Invalid payment amount for selected plan")
 
-@app.get("/api/wallet/balances/{address}")
-async def check_all_networks_balance(address: str, proxy: str = None):
-    networks = ["Base", "Arbitrum", "ZkSync", "Scroll", "Linea", "Blast", "Mantle", "Berachain"]
-    checker = BalanceChecker()
-    return {"status": "success", "balances": {net: checker.get_balance(net, address, proxy) for net in networks}}
-
-@app.get("/api/settings/{username}")
-async def get_user_settings(username: str, db: Session = Depends(get_db)):
-    settings = db.query(SettingsModel).filter(SettingsModel.username == username).first()
-    if not settings:
-        settings = SettingsModel(username=username)
-        db.add(settings)
-        db.commit()
-    user = db.query(User).filter(User.username == username).first()
-    plan = user.subscription_plan if user else "Standard"
+    payment_session_id = str(uuid.uuid4())
+    payment_sessions[payment_session_id] = {
+        "client_session_id": req.client_session_id,
+        "plan": req.plan,
+        "amount": req.amount,
+        "status": "pending",
+        "created_at": int(time.time()),
+    }
     return {
         "status": "success",
-        "subscription_plan": plan,
-        "extra_slots": user.extra_slots if user else 0,
-        "settings": {
-            "master_wallet": settings.master_wallet,
-            "auto_farming_enabled": settings.auto_farming_enabled,
-            "schedule_days": settings.schedule_days,
-            "random_delay": settings.random_delay,
-            "gas_limit_gwei": settings.gas_limit_gwei
-        }
+        "payment_session_id": payment_session_id,
+        "provider": "simulation",
+        "amount": req.amount,
+        "plan": req.plan,
     }
 
-@app.post("/api/settings/save")
-async def save_user_settings(req: SaveSettingsReq, db: Session = Depends(get_db)):
-    settings = db.query(SettingsModel).filter(SettingsModel.username == req.username).first()
-    if not settings:
-        settings = SettingsModel(username=req.username)
-        db.add(settings)
-    settings.master_wallet = req.master_wallet
-    settings.auto_farming_enabled = req.auto_farming_enabled
-    settings.schedule_days = req.schedule_days
-    settings.random_delay = req.random_delay
-    settings.gas_limit_gwei = req.gas_limit_gwei
-    db.commit()
-    return {"status": "success", "message": "Settings saved successfully!"}
+@app.post("/api/payment/confirm")
+async def confirm_payment_session(req: PaymentSessionConfirmReq):
+    session_data = payment_sessions.get(req.payment_session_id)
+    if not session_data:
+        raise HTTPException(status_code=404, detail="Payment session not found")
+    if session_data["client_session_id"] != req.client_session_id:
+        raise HTTPException(status_code=403, detail="Payment session mismatch")
+
+    session_data["status"] = "paid"
+    session_data["paid_at"] = int(time.time())
+    payment_token = issue_payment_token(
+        client_session_id=session_data["client_session_id"],
+        plan=session_data["plan"],
+        amount=session_data["amount"],
+    )
+    return {
+        "status": "success",
+        "payment_token": payment_token,
+        "plan": session_data["plan"],
+        "amount": session_data["amount"],
+    }
 
 @app.post("/api/register")
 async def register(user: UserRegister, db: Session = Depends(get_db)):
-    # Проверка кода подтверждения
+    payment_data = payment_tokens.get(user.payment_token)
+    if not payment_data:
+        raise HTTPException(status_code=403, detail="Оплата не подтверждена для текущего сеанса")
+    if payment_data.get("used"):
+        raise HTTPException(status_code=403, detail="Платежный токен уже использован")
+    if payment_data["client_session_id"] != user.client_session_id:
+        raise HTTPException(status_code=403, detail="Платеж подтвержден для другого сеанса")
+    if payment_data["plan"] != user.plan:
+        raise HTTPException(status_code=400, detail="План регистрации не совпадает с оплаченным тарифом")
+    if payment_data["amount"] != user.activation_price:
+        raise HTTPException(status_code=400, detail="Сумма регистрации не совпадает с подтвержденным платежом")
+
+    token_age = int(time.time()) - payment_data["created_at"]
+    if token_age > PAYMENT_TOKEN_TTL_SECONDS:
+        raise HTTPException(status_code=403, detail="Платежный токен истек, повторите оплату")
+
     saved_code = verification_codes.get(user.email)
     if not saved_code or saved_code != user.code:
-        raise HTTPException(status_code=400, detail="Неверный или просроченный код подтверждения!")
+        raise HTTPException(status_code=400, detail="Неверный код подтверждения!")
 
     db_user = db.query(User).filter(User.username == user.username).first()
     if db_user:
-        raise HTTPException(status_code=400, detail="User already exists")
+        raise HTTPException(status_code=400, detail="Пользователь уже существует")
     
     new_user = User(
         username=user.username, 
         email=user.email, 
         password_hash=user.password, 
-        subscription_plan=user.plan
+        subscription_plan=user.plan,
+        fingerprint=user.fingerprint,
+        subscription_activated_at=int(time.time())
     )
     db.add(new_user)
     db.commit()
+    payment_data["used"] = True
+    verification_codes.pop(user.email, None)
     return {"status": "success", "message": "Registered successfully"}
 
 @app.post("/api/login")
 async def login(user: UserLogin, db: Session = Depends(get_db)):
     db_user = db.query(User).filter(User.username == user.username).first()
     if not db_user or db_user.password_hash != user.password:
-        raise HTTPException(status_code=401, detail="Invalid username or password")
-    return {"status": "success", "message": "Logged in", "plan": db_user.subscription_plan, "extra_slots": db_user.extra_slots}
+        raise HTTPException(status_code=401, detail="Неверный логин или пароль")
+    
+    # Привязка к Hardware / Fingerprint
+    if db_user.fingerprint and user.fingerprint and db_user.fingerprint != user.fingerprint:
+        # Для удобства демо не блокируем жестко, но логируем. В проде можно бросать 403.
+        print(f"[SECURITY] Вход с нового устройства для {db_user.username}")
+        db_user.fingerprint = user.fingerprint 
+        db.commit()
+    elif not db_user.fingerprint and user.fingerprint:
+        db_user.fingerprint = user.fingerprint
+        db.commit()
+
+    now_ts = int(time.time())
+    if not db_user.subscription_activated_at:
+        db_user.subscription_activated_at = now_ts
+        db.commit()
+
+    expires_at = db_user.subscription_activated_at + SUBSCRIPTION_DURATION_SECONDS
+    days_left = max(0, int((expires_at - now_ts) / (24 * 60 * 60)))
+
+    if now_ts > expires_at:
+        return {
+            "status": "expired",
+            "message": "Subscription expired",
+            "plan": db_user.subscription_plan,
+            "extra_slots": db_user.extra_slots,
+            "days_left": 0,
+            "renewal_price": SUBSCRIPTION_RENEWAL_PRICE,
+        }
+
+    return {
+        "status": "success",
+        "message": "Logged in",
+        "plan": db_user.subscription_plan,
+        "extra_slots": db_user.extra_slots,
+        "days_left": days_left,
+        "renewal_price": SUBSCRIPTION_RENEWAL_PRICE,
+    }
+
+@app.post("/api/subscription/renew")
+async def renew_subscription(req: RenewSubscriptionReq, db: Session = Depends(get_db)):
+    db_user = db.query(User).filter(User.username == req.username).first()
+    if not db_user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    db_user.subscription_activated_at = int(time.time())
+    db.commit()
+    return {
+        "status": "success",
+        "message": "Subscription renewed",
+        "days_left": 30,
+        "renewal_price": SUBSCRIPTION_RENEWAL_PRICE,
+    }
+@app.post("/api/recover")
+async def recover_password(req: EmailRequest, db: Session = Depends(get_db)):
+    db_user = db.query(User).filter(User.email == req.email).first()
+    if db_user:
+        # Здесь отправляем реальную ссылку для сброса. 
+        # В данном демо просто отправляем уведомление.
+        send_real_email(req.email, "RECOVERY_LINK_OR_NEW_PASSWORD")
+    return {"status": "success"}
 
 @app.post("/api/wallets/add")
 async def add_wallet(wallet: WalletAdd, db: Session = Depends(get_db)):
@@ -291,19 +358,18 @@ async def add_wallet(wallet: WalletAdd, db: Session = Depends(get_db)):
     extra = user.extra_slots if user else 0
     
     current_count = db.query(Wallet).filter(Wallet.username == wallet.username).count()
-    base_limits = {"Standard": 5, "Pro": 15, "Premium": 30}
-    max_allowed = base_limits.get(plan, 5) + extra
+    max_allowed = BASE_SLOT_LIMITS.get(plan, 5) + extra
     
     if current_count >= max_allowed:
         raise HTTPException(
             status_code=400, 
-            detail=f"⚠️ Лимит вашего тарифа ({plan}) исчерпан ({max_allowed} слотов)! Купите +1 слот или перейдите на старший тариф."
+            detail=f"⚠️ Лимит тарифа ({plan}) исчерпан ({max_allowed} слотов)! Купите +1 слот за $10."
         )
 
     new_wallet = Wallet(username=wallet.username, wallet_address=wallet.wallet_address, encrypted_pk=wallet.encrypted_pk, proxy=wallet.proxy)
     db.add(new_wallet)
     db.commit()
-    return {"status": "success", "message": "Wallet added successfully"}
+    return {"status": "success", "message": "Wallet added"}
 
 @app.post("/api/wallets/buy-slot")
 async def buy_extra_slot(req: BuyExtraSlotReq, db: Session = Depends(get_db)):
@@ -312,7 +378,7 @@ async def buy_extra_slot(req: BuyExtraSlotReq, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="User not found")
     user.extra_slots += 1
     db.commit()
-    return {"status": "success", "message": f"Дополнительный слот успешно куплен! Всего докуплено: {user.extra_slots}"}
+    return {"status": "success", "message": f"Дополнительный слот успешно куплен! Всего слотов докуплено: {user.extra_slots}"}
 
 @app.get("/api/wallets/{username}")
 async def get_wallets(username: str, db: Session = Depends(get_db)):
@@ -321,8 +387,7 @@ async def get_wallets(username: str, db: Session = Depends(get_db)):
     plan = user.subscription_plan if user else "Standard"
     extra = user.extra_slots if user else 0
     
-    base_limits = {"Standard": 5, "Pro": 15, "Premium": 30}
-    max_allowed = base_limits.get(plan, 5) + extra
+    max_allowed = BASE_SLOT_LIMITS.get(plan, 5) + extra
     
     return {
         "status": "success", 
@@ -345,15 +410,15 @@ async def start_farming(req: StartFarmReq, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == req.username).first()
     plan = user.subscription_plan if user else "Standard"
     
+    # Ограничения доступа по подписке
     if plan == "Standard" and req.network not in ["Base"]:
-        raise HTTPException(
-            status_code=400,
-            detail=f"⚠️ Сеть '{req.network}' недоступна на тарифе Standard! Доступна только Base L2."
-        )
+        raise HTTPException(status_code=403, detail=f"⚠️ Сеть '{req.network}' недоступна на тарифе Standard! Доступна только Base L2.")
+    if plan == "Pro" and req.network in ["Solana"]:
+        raise HTTPException(status_code=403, detail=f"⚠️ Сеть Solana эксклюзивна для тарифа Premium!")
 
     wallets = db.query(Wallet).filter(Wallet.username == req.username).all()
     if not wallets:
-        return {"status": "error", "message": "No wallets found!"}
+        raise HTTPException(status_code=400, detail="Кошельки не найдены!")
     
     wallets_data = [{"id": w.id, "encrypted_pk": w.encrypted_pk, "proxy": w.proxy} for w in wallets]
     rpc_list = ["https://mainnet.base.org", "https://arb1.arbitrum.io/rpc"]
@@ -363,7 +428,7 @@ async def start_farming(req: StartFarmReq, db: Session = Depends(get_db)):
 @app.post("/api/scan/{username}")
 async def scan_drops(username: str, db: Session = Depends(get_db)):
     wallets = db.query(Wallet).filter(Wallet.username == username).all()
-    claimed_loot = [{"wallet": w.wallet_address[:8] + "...", "protocol": "LayerZero Airdrop", "amount": f"{random.uniform(15.0, 95.0):.2f} tokens", "status": "Claimed"} for w in wallets]
+    claimed_loot = [{"wallet": w.wallet_address[:8] + "...", "amount": f"{random.uniform(15.0, 95.0):.2f}"} for w in wallets]
     return {"status": "success", "data": {"total_wallets_scanned": len(wallets), "found_drops": claimed_loot}}
 
 if __name__ == "__main__":

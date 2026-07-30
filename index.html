@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
@@ -174,6 +174,22 @@
             box-shadow: 0 0 12px rgba(157,78,221,0.5);
         }
 
+        .toggle-switch { position: relative; display: inline-flex; align-items: center; cursor: pointer; }
+        .toggle-switch input { opacity: 0; width: 0; height: 0; }
+        .toggle-slider {
+            position: relative; width: 44px; height: 24px; background: #07050c;
+            border: 1px solid rgba(157,78,221,0.4); border-radius: 24px; transition: 0.2s; flex-shrink: 0;
+        }
+        .toggle-slider::before {
+            content: ''; position: absolute; width: 18px; height: 18px; left: 2px; top: 2px;
+            background: #b19cd9; border-radius: 50%; transition: 0.2s;
+        }
+        .toggle-switch input:checked + .toggle-slider {
+            background: linear-gradient(135deg, #7b2cbf, #9d4edd); box-shadow: 0 0 12px rgba(157,78,221,0.5);
+        }
+        .toggle-switch input:checked + .toggle-slider::before { transform: translateX(20px); background: #fff; }
+        .toggle-switch input:disabled + .toggle-slider { opacity: 0.4; cursor: not-allowed; }
+
         .tooltip-container { position: relative; display: inline-flex; align-items: center; cursor: help; }
         .tooltip-text {
             visibility: hidden; width: 240px; background-color: #120c22; color: #fff;
@@ -249,7 +265,7 @@
                 <span onclick="closePricingModal()" style="cursor: pointer; color: #b19cd9; font-size: 20px;">✕</span>
             </div>
             <div class="modal-desc" id="p-desc-modal" style="text-align: center; margin-bottom: 24px;">
-                Мощный инструмент автоматизации. Выберите подходящий срок доступа к закрытому ПО.
+                Закрытый доступ: оплата активации за первый месяц, далее ежемесячное продление.
             </div>
 
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px;">
@@ -257,9 +273,9 @@
                 <!-- Стандарт (1 месяц) -->
                 <div style="background: #07050c; border: 1px solid rgba(157,78,221,0.3); border-radius: 18px; padding: 22px; display: flex; flex-direction: column; justify-content: space-between;">
                     <div>
-                        <div id="p-std-top" style="font-size: 14px; font-weight: bold; color: #b19cd9; margin-bottom: 6px;">ТЕСТОВЫЙ ПЕРИОД</div>
+                        <div id="p-std-top" style="font-size: 14px; font-weight: bold; color: #b19cd9; margin-bottom: 6px;">ВХОД + ПОДПИСКА</div>
                         <div id="p-std-name" style="font-size: 22px; font-weight: 800; color: #fff; margin-bottom: 4px;">Стандарт</div>
-                        <div style="font-size: 26px; font-weight: 800; color: #e0aaff; margin-bottom: 16px;">$35 <span id="p-std-per" style="font-size: 13px; color: #b19cd9; font-weight: normal;">/ 1 месяц</span></div>
+                        <div style="font-size: 26px; font-weight: 800; color: #e0aaff; margin-bottom: 16px;">$95 <span id="p-std-per" style="font-size: 13px; color: #b19cd9; font-weight: normal;">/ 1-й месяц, далее $30/мес</span></div>
                         
                         <div style="border-top: 1px solid rgba(157,78,221,0.2); padding-top: 14px; display: flex; flex-direction: column; gap: 10px; font-size: 13px; color: #b19cd9;">
                             <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-std-f1">Лимит: до 5 кошельков (воркеров)</span></div>
@@ -267,33 +283,33 @@
                             <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-std-f3">Базовый Claim Looter и Anti-Sybil</span></div>
                         </div>
                     </div>
-                    <button type="button" id="p-std-btn" onclick="selectPlanAndRegister('Standard', 35)" class="btn-dark-lg" style="margin-top: 20px; width: 100%; padding: 12px; font-size: 13px;">Выбрать Стандарт</button>
+                    <button type="button" id="p-std-btn" onclick="selectPlanAndRegister('Standard', 95)" class="btn-dark-lg" style="margin-top: 20px; width: 100%; padding: 12px; font-size: 13px;">Активировать за $95</button>
                 </div>
 
                 <!-- PRO (3 месяца) -->
                 <div style="background: linear-gradient(135deg, #120c22, #18102e); border: 2px solid #c77dff; border-radius: 18px; padding: 22px; display: flex; flex-direction: column; justify-content: space-between; position: relative; box-shadow: 0 0 30px rgba(157,78,221,0.3);">
                     <div id="p-pro-badge" style="position: absolute; top: -12px; right: 20px; background: linear-gradient(135deg, #7b2cbf, #9d4edd); color: #fff; font-size: 10px; font-weight: bold; padding: 4px 10px; border-radius: 10px; text-transform: uppercase;">Рекомендуемый</div>
                     <div>
-                        <div id="p-pro-top" style="font-size: 14px; font-weight: bold; color: #c77dff; margin-bottom: 6px;">КВАРТАЛЬНЫЙ ДОСТУП</div>
+                        <div id="p-pro-top" style="font-size: 14px; font-weight: bold; color: #c77dff; margin-bottom: 6px;">ВХОД + ПОДПИСКА</div>
                         <div id="p-pro-name" style="font-size: 22px; font-weight: 800; color: #fff; margin-bottom: 4px;">PRO Фермер</div>
-                        <div style="font-size: 26px; font-weight: 800; color: #e0aaff; margin-bottom: 16px;">$90 <span id="p-pro-per" style="font-size: 13px; color: #b19cd9; font-weight: normal;">/ 3 месяца ($30/мес)</span></div>
+                        <div style="font-size: 26px; font-weight: 800; color: #e0aaff; margin-bottom: 16px;">$150 <span id="p-pro-per" style="font-size: 13px; color: #b19cd9; font-weight: normal;">/ 1-й месяц, далее $50/мес</span></div>
                         
                         <div style="border-top: 1px solid rgba(157,78,221,0.2); padding-top: 14px; display: flex; flex-direction: column; gap: 10px; font-size: 13px; color: #b19cd9;">
                             <div style="display: flex; align-items: flex-start; gap: 8px; color: #fff;"><span>✓</span> <span id="p-pro-f1"><b>Лимит до 15 кошельков</b> (воркеров)</span></div>
-                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-pro-f2">Все сети (Arbitrum, ZkSync, Scroll, Solana...)</span></div>
+                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-pro-f2">Все сети кроме Solana (Arbitrum, ZkSync, Scroll...)</span></div>
                             <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-pro-f3">Автоматический фоновый планировщик</span></div>
                             <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-pro-f4">Приоритетная поддержка 24/7</span></div>
                         </div>
                     </div>
-                    <button type="button" id="p-pro-btn" onclick="selectPlanAndRegister('Pro', 90)" class="btn-purple-lg" style="margin-top: 20px; width: 100%; padding: 12px; font-size: 13px;">Получить PRO доступ</button>
+                    <button type="button" id="p-pro-btn" onclick="selectPlanAndRegister('Pro', 150)" class="btn-purple-lg" style="margin-top: 20px; width: 100%; padding: 12px; font-size: 13px;">Активировать за $150</button>
                 </div>
 
                 <!-- Premium (9 месяцев) -->
                 <div style="background: #07050c; border: 1px solid rgba(157,78,221,0.3); border-radius: 18px; padding: 22px; display: flex; flex-direction: column; justify-content: space-between;">
                     <div>
-                        <div id="p-prem-top" style="font-size: 14px; font-weight: bold; color: #00d95f; margin-bottom: 6px;">СЕЗОННЫЙ ПАКЕТ</div>
+                        <div id="p-prem-top" style="font-size: 14px; font-weight: bold; color: #00d95f; margin-bottom: 6px;">ВХОД + ПОДПИСКА</div>
                         <div id="p-prem-name" style="font-size: 22px; font-weight: 800; color: #fff; margin-bottom: 4px;">Premium VIP</div>
-                        <div style="font-size: 26px; font-weight: 800; color: #e0aaff; margin-bottom: 16px;">$220 <span id="p-prem-per" style="font-size: 13px; color: #b19cd9; font-weight: normal;">/ 9 месяцев ($24/мес)</span></div>
+                        <div style="font-size: 26px; font-weight: 800; color: #e0aaff; margin-bottom: 16px;">$280 <span id="p-prem-per" style="font-size: 13px; color: #b19cd9; font-weight: normal;">/ 1-й месяц, далее $90/мес</span></div>
                         
                         <div style="border-top: 1px solid rgba(157,78,221,0.2); padding-top: 14px; display: flex; flex-direction: column; gap: 10px; font-size: 13px; color: #b19cd9;">
                             <div style="display: flex; align-items: flex-start; gap: 8px; color: #00d95f;"><span>✓</span> <span id="p-prem-f1"><b>Лимит до 30 слотов</b> кошельков</span></div>
@@ -302,7 +318,7 @@
                             <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-prem-f4">Личный менеджер и ранний доступ</span></div>
                         </div>
                     </div>
-                    <button type="button" id="p-prem-btn" onclick="selectPlanAndRegister('Premium', 220)" class="btn-dark-lg" style="margin-top: 20px; width: 100%; padding: 12px; font-size: 13px;">Выбрать Premium</button>
+                    <button type="button" id="p-prem-btn" onclick="selectPlanAndRegister('Premium', 280)" class="btn-dark-lg" style="margin-top: 20px; width: 100%; padding: 12px; font-size: 13px;">Активировать за $280</button>
                 </div>
 
             </div>
@@ -315,7 +331,7 @@
     </div>
 
     <!-- Модалка кошелька -->
-    <div class="modal-overlay" id="walletActionModal">
+    <div class="modal-overlay" id="walletActionModal" onclick="handleWalletOverlayClick(event)">
         <div class="auth-modal" style="max-width: 440px;">
             <div class="modal-logo">
                 <span id="walletModalTitle">⚙️ Меню кошелька</span>
@@ -429,7 +445,7 @@
             <div class="showcase-card">
                 <div class="showcase-content">
                     <h3 id="sc2-t">👥 2. Лимиты и добавление кошельков</h3>
-                    <p id="sc2-d1"><b>Удобство и защита тарифов:</b> Тариф Standard позволяет запустить до 5 кошельков (для теста), в то время как PRO открывает до 30 слотов, а Premium снимает любые ограничения.</p>
+                    <p id="sc2-d1"><b>Удобство и защита тарифов:</b> Тариф Standard позволяет запустить до 5 кошельков (для теста), PRO открывает до 15 слотов, а Premium расширяет лимит до 30 кошельков.</p>
                     <p id="sc2-d2">Импортируйте ключи и прокси в один клик, управляя всей фермой из единой панели.</p>
                 </div>
                 <div class="media-placeholder">
@@ -470,7 +486,7 @@
             </div>
             <div class="faq-item" onclick="toggleFaq(this)">
                 <div class="faq-question"><span id="q2">В чем разница между Standard и PRO?</span> <span>+</span></div>
-                <div class="faq-answer" id="a2">Standard ограничен 5 кошельками и сетью Base. PRO дает до 30 кошельков, доступ ко всем сетям (Arbitrum, ZkSync, Solana) и фоновый планировщик.</div>
+                <div class="faq-answer" id="a2">Standard ограничен 5 кошельками и сетью Base. PRO дает до 15 кошельков, доступ к сетям Arbitrum и ZkSync, а также фоновый планировщик. Premium открывает 30 кошельков и эксклюзивный доступ к Solana.</div>
             </div>
             <div class="faq-item" onclick="toggleFaq(this)">
                 <div class="faq-question"><span id="q3">Нужно ли настраивать прокси для каждого кошелька?</span> <span>+</span></div>
@@ -521,6 +537,37 @@
         let selectedNetwork = 'Base';
         let activeSelectedWalletId = null;
         let userPlan = 'Standard';
+        let deviceFingerprint = generateDeviceFingerprint();
+        let subscriptionStatus = 'active';
+        let subscriptionDaysLeft = 30;
+        let renewalPrice = 50;
+        let pendingLoginCredentials = null;
+
+        function generateDeviceFingerprint() {
+            try {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                ctx.textBaseline = 'top';
+                ctx.font = '14px Arial';
+                ctx.fillText('AIRDROP-X-fp-' + navigator.userAgent, 2, 2);
+                const canvasData = canvas.toDataURL();
+                const raw = [
+                    canvasData,
+                    navigator.userAgent,
+                    navigator.language,
+                    screen.width + 'x' + screen.height,
+                    Intl.DateTimeFormat().resolvedOptions().timeZone
+                ].join('###');
+                let hash = 0;
+                for (let i = 0; i < raw.length; i++) {
+                    hash = ((hash << 5) - hash) + raw.charCodeAt(i);
+                    hash |= 0;
+                }
+                return 'fp_' + Math.abs(hash).toString(16);
+            } catch (e) {
+                return 'fp_unknown';
+            }
+        }
 
         const translations = {
             ru: {
@@ -557,7 +604,9 @@
                 
                 tasksTitle: "⚡ Очередь активных задач (Live Queue)",
                 tasksDesc: "Мониторинг запущенных скриптов накрутки объемов и клейма по кошелькам.",
-                
+                schedulerToggleLabel: "Включить фоновый планировщик",
+                schedulerLockedText: "🔒 Доступно только на тарифах PRO и Premium",
+
                 tgConnectBtn: "Привязать Telegram Bot",
                 tgConnectedText: "Telegram успешно привязан (@RubyFarmer_bot) ✅"
             },
@@ -595,7 +644,9 @@
                 
                 tasksTitle: "⚡ Live Task Queue",
                 tasksDesc: "Monitoring running volume generation scripts and claims across wallets.",
-                
+                schedulerToggleLabel: "Enable background scheduler",
+                schedulerLockedText: "🔒 Available only on PRO and Premium plans",
+
                 tgConnectBtn: "Link Telegram Bot",
                 tgConnectedText: "Telegram successfully linked (@RubyFarmer_bot) ✅"
             },
@@ -633,7 +684,9 @@
                 
                 tasksTitle: "⚡ 实时任务队列",
                 tasksDesc: "监控各钱包正在运行的刷量脚本和领取状态。",
-                
+                schedulerToggleLabel: "启用后台计划任务",
+                schedulerLockedText: "🔒 仅限 PRO 和 Premium 套餐使用",
+
                 tgConnectBtn: "绑定 Telegram 机器人",
                 tgConnectedText: "Telegram 绑定成功 (@RubyFarmer_bot) ✅"
             }
@@ -706,9 +759,26 @@
         function selectPlanAndRegister(planName, price) {
             closePricingModal();
             userPlan = planName;
+            const activationPrice = Number(price);
             localStorage.setItem('selected_plan', planName);
-            localStorage.setItem('selected_price', price);
+            localStorage.setItem('selected_price', String(activationPrice));
             openModal('register');
+        }
+
+        function closeAuthModal() {
+            document.getElementById('authModal').classList.remove('show');
+        }
+
+        function handleOverlayClick(event) {
+            if (event.target.id === 'authModal') closeAuthModal();
+        }
+
+        function closeWalletActionModal() {
+            document.getElementById('walletActionModal').classList.remove('show');
+        }
+
+        function handleWalletOverlayClick(event) {
+            if (event.target.id === 'walletActionModal') closeWalletActionModal();
         }
 
         function openModal(type) {
@@ -718,31 +788,47 @@
 
             if (type === 'login') {
                 container.innerHTML = `
-                    <div class="modal-logo"><span>⚡ Войти</span></div>
+                    <div class="modal-logo">
+                        <span>⚡ Войти</span>
+                        <span onclick="closeAuthModal()" style="cursor: pointer; color: #b19cd9; font-size: 20px;">✕</span>
+                    </div>
                     <div class="modal-desc">Новичок? <span style="color:#c77dff; cursor:pointer; text-decoration:underline;" onclick="openModal('register')">Создать аккаунт</span></div>
+                    <div class="modal-desc">Забыли пароль? <span style="color:#c77dff; cursor:pointer; text-decoration:underline;" onclick="openModal('recovery')">Восстановить доступ</span></div>
                     <div class="input-group">
                         <label style="font-size: 11px; color: #b19cd9; display: block; margin-bottom: 4px;">Эл. почта</label>
                         <input type="email" class="auth-input" placeholder="Email" id="loginEmail">
                     </div>
                     <div class="input-group">
                         <label style="font-size: 11px; color: #b19cd9; display: block; margin-bottom: 4px;">Пароль</label>
-                        <input type="password" class="auth-input" placeholder="Пароль" id="loginPass">
+                        <div class="password-wrapper">
+                            <input type="password" class="auth-input" placeholder="Пароль" id="loginPass">
+                            <span class="password-toggle-icon" onclick="togglePasswordVisibility('loginPass', this)">👁️</span>
+                        </div>
                     </div>
                     <button type="button" class="btn-modal-primary" onclick="validateLogin()">Войти</button>
                     <div id="loginErrorContainer"></div>
                 `;
             } else if (type === 'register') {
                 const chosenPlan = localStorage.getItem('selected_plan') || 'Standard';
-                const chosenPrice = localStorage.getItem('selected_price') || '35';
+                const fallbackPlanPrice = { Standard: '95', Pro: '150', Premium: '280' };
+                const chosenPrice = localStorage.getItem('selected_price') || fallbackPlanPrice[chosenPlan] || '95';
+                const planDisplayNames = { Standard: 'Standard', Pro: 'PRO Фермер', Premium: 'Premium VIP' };
+                const planLabel = planDisplayNames[chosenPlan] || chosenPlan;
                 container.innerHTML = `
-                    <div class="modal-logo"><span>⚡ Тариф: ${chosenPlan} ($${chosenPrice})</span></div>
+                    <div class="modal-logo">
+                        <span>⚡ Регистрация: ${planLabel} ($${chosenPrice})</span>
+                        <span onclick="closeAuthModal()" style="cursor: pointer; color: #b19cd9; font-size: 20px;">✕</span>
+                    </div>
                     <div class="input-group">
                         <label style="font-size: 11px; color: #b19cd9; display: block; margin-bottom: 4px;">Эл. почта</label>
                         <input type="email" class="auth-input" placeholder="Email" id="regEmail">
                     </div>
                     <div class="input-group">
                         <label style="font-size: 11px; color: #b19cd9; display: block; margin-bottom: 4px;">Пароль</label>
-                        <input type="password" class="auth-input" placeholder="Пароль" id="regPass">
+                        <div class="password-wrapper">
+                            <input type="password" class="auth-input" placeholder="Пароль" id="regPass">
+                            <span class="password-toggle-icon" onclick="togglePasswordVisibility('regPass', this)">👁️</span>
+                        </div>
                     </div>
                     <div class="input-group">
                         <label style="font-size: 11px; color: #b19cd9; display: block; margin-bottom: 4px;">Код подтверждения</label>
@@ -753,6 +839,31 @@
                     </div>
                     <button type="button" class="btn-modal-primary" onclick="validateRegister()" style="margin-top: 8px;">Зарегистрироваться</button>
                     <div id="errorContainer"></div>
+                `;
+            } else if (type === 'recovery') {
+                container.innerHTML = `
+                    <div class="modal-logo">
+                        <span>🔑 Восстановление доступа</span>
+                        <span onclick="closeAuthModal()" style="cursor: pointer; color: #b19cd9; font-size: 20px;">✕</span>
+                    </div>
+                    <div class="modal-desc">Введите email, привязанный к аккаунту. Мы вышлем инструкции по восстановлению доступа.</div>
+                    <div class="input-group">
+                        <label style="font-size: 11px; color: #b19cd9; display: block; margin-bottom: 4px;">Эл. почта</label>
+                        <input type="email" class="auth-input" placeholder="Email" id="recoveryEmail">
+                    </div>
+                    <button type="button" class="btn-modal-primary" onclick="submitRecovery()">Отправить инструкции</button>
+                    <div id="recoveryMsgContainer"></div>
+                    <div class="modal-desc" style="margin-top:14px; text-align:center;">Вспомнили пароль? <span style="color:#c77dff; cursor:pointer; text-decoration:underline;" onclick="openModal('login')">Войти</span></div>
+                `;
+            } else if (type === 'expired') {
+                container.innerHTML = `
+                    <div class="modal-logo">
+                        <span>⛔ Подписка истекла</span>
+                        <span onclick="closeAuthModal()" style="cursor: pointer; color: #b19cd9; font-size: 20px;">✕</span>
+                    </div>
+                    <div class="modal-desc">Срок подписки закончился. Продлите доступ для входа в панель.</div>
+                    <button type="button" class="btn-modal-primary" onclick="renewSubscriptionFromExpiredModal()">Продлить подписку ($50)</button>
+                    <div id="expiredMsgContainer"></div>
                 `;
             }
         }
@@ -765,18 +876,28 @@
             err.innerHTML = `<div class="error-toast" style="background:#122218; border-color:#00d95f; color:#88ffaa;"><span>✅</span><span>Код отправлен на почту!</span></div>`;
         }
 
+        function togglePasswordVisibility(inputId, iconElement) {
+            const input = document.getElementById(inputId);
+            if (!input) return;
+            const isHidden = input.type === 'password';
+            input.type = isHidden ? 'text' : 'password';
+            iconElement.textContent = isHidden ? '🙈' : '👁️';
+        }
+
         async function validateRegister() {
             const email = document.getElementById('regEmail').value.trim();
             const pass = document.getElementById('regPass').value.trim();
             const code = document.getElementById('regCode').value.trim();
             const chosenPlan = localStorage.getItem('selected_plan') || 'Standard';
+            const fallbackPlanPrice = { Standard: '95', Pro: '150', Premium: '280' };
+            const chosenPrice = Number(localStorage.getItem('selected_price') || fallbackPlanPrice[chosenPlan] || '95');
             const err = document.getElementById('errorContainer');
 
             if(!email || !pass || !code) { err.innerHTML = `<div class="error-toast"><span>⚠️</span><span>Заполните все поля!</span></div>`; return; }
             const res = await fetch('/api/register', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: email.split('@')[0], email, password: pass, plan: chosenPlan })
+                body: JSON.stringify({ username: email.split('@')[0], email, password: pass, code, plan: chosenPlan, activation_price: chosenPrice, fingerprint: deviceFingerprint })
             });
             if(res.ok) {
                 err.innerHTML = `<div class="error-toast" style="background:#122218; border-color:#00d95f; color:#88ffaa;"><span>✅</span><span>Успешно! Вход...</span></div>`;
@@ -791,19 +912,100 @@
             const email = document.getElementById('loginEmail').value.trim();
             const pass = document.getElementById('loginPass').value.trim();
             const err = document.getElementById('loginErrorContainer');
+            const username = email.split('@')[0];
+            pendingLoginCredentials = { username, password: pass, fingerprint: deviceFingerprint };
             const res = await fetch('/api/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: email.split('@')[0], password: pass })
+                body: JSON.stringify(pendingLoginCredentials)
             });
             const data = await res.json();
             if(res.ok) {
-                localStorage.setItem('airdrop_username', email.split('@')[0]);
+                localStorage.setItem('airdrop_username', username);
                 userPlan = data.plan || 'Standard';
+                renewalPrice = data.renewal_price || 50;
+                if (data.status === 'expired') {
+                    subscriptionStatus = 'expired';
+                    subscriptionDaysLeft = 0;
+                    openModal('expired');
+                    return;
+                }
+                subscriptionStatus = 'active';
+                subscriptionDaysLeft = data.days_left ?? 30;
                 handleLoginSuccess();
             } else {
                 err.innerHTML = `<div class="error-toast"><span>⚠️</span><span>${data.detail}</span></div>`;
             }
+        }
+
+        async function renewSubscriptionFromExpiredModal() {
+            const msg = document.getElementById('expiredMsgContainer');
+            const username = pendingLoginCredentials?.username || localStorage.getItem('airdrop_username') || 'Robert';
+            const res = await fetch('/api/subscription/renew', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username })
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                msg.innerHTML = `<div class="error-toast"><span>⚠️</span><span>${data.detail || 'Ошибка продления подписки'}</span></div>`;
+                return;
+            }
+
+            msg.innerHTML = `<div class="error-toast" style="background:#122218; border-color:#00d95f; color:#88ffaa;"><span>✅</span><span>Подписка продлена. Выполняем вход...</span></div>`;
+            subscriptionStatus = 'active';
+            subscriptionDaysLeft = data.days_left ?? 30;
+
+            if (!pendingLoginCredentials) {
+                setTimeout(() => openModal('login'), 900);
+                return;
+            }
+
+            const loginRes = await fetch('/api/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(pendingLoginCredentials)
+            });
+            const loginData = await loginRes.json();
+            if (loginRes.ok && loginData.status === 'success') {
+                localStorage.setItem('airdrop_username', pendingLoginCredentials.username);
+                userPlan = loginData.plan || 'Standard';
+                renewalPrice = loginData.renewal_price || 50;
+                subscriptionStatus = 'active';
+                subscriptionDaysLeft = loginData.days_left ?? 30;
+                handleLoginSuccess();
+            } else {
+                msg.innerHTML = `<div class="error-toast"><span>⚠️</span><span>Подписка продлена, но вход нужно повторить вручную.</span></div>`;
+                setTimeout(() => openModal('login'), 1200);
+            }
+        }
+
+        async function renewSubscriptionFromPanel() {
+            const username = localStorage.getItem('airdrop_username') || 'Robert';
+            const res = await fetch('/api/subscription/renew', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                renewalPrice = data.renewal_price || 50;
+                subscriptionStatus = 'active';
+                subscriptionDaysLeft = data.days_left ?? 30;
+                renderDashboardContent(currentSection);
+            }
+        }
+
+        async function submitRecovery() {
+            const email = document.getElementById('recoveryEmail').value.trim();
+            const msg = document.getElementById('recoveryMsgContainer');
+            if (!email) { msg.innerHTML = `<div class="error-toast"><span>⚠️</span><span>Введите email!</span></div>`; return; }
+            await fetch('/api/recover', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email })
+            });
+            msg.innerHTML = `<div class="error-toast" style="background:#122218; border-color:#00d95f; color:#88ffaa;"><span>✅</span><span>Если аккаунт найден, инструкции отправлены на почту.</span></div>`;
         }
 
         function handleLoginSuccess() {
@@ -875,6 +1077,23 @@
             loadWalletsFromDB();
         }
 
+        async function buyExtraSlot() {
+            const username = localStorage.getItem('airdrop_username') || "Robert";
+            const msg = document.getElementById('buySlotMsg');
+            const res = await fetch('/api/wallets/buy-slot', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                msg.innerHTML = `<span style="color: #00d95f;">✅ Слот куплен!</span>`;
+                loadWalletsFromDB();
+            } else {
+                msg.innerHTML = `<span style="color: #ff3366;">${data.detail}</span>`;
+            }
+        }
+
         async function startAutoFarming() {
             const net = document.getElementById('farmNetwork').value;
             const username = localStorage.getItem('airdrop_username') || "Robert";
@@ -895,6 +1114,8 @@
         }
 
         function renderDashboard(tab) { renderDashboardContent(tab); }
+
+        const netLocks = { Standard: { Arbitrum: true, ZkSync: true, Solana: true }, Pro: { Solana: true }, Premium: {} };
 
         function renderDashboardContent(section) {
             currentSection = section;
@@ -919,10 +1140,10 @@
                         <p style="color: #b19cd9; font-size: 13px;">${t.farmDesc} (Ваш тариф: <b>${userPlan}</b>)</p>
                         <label style="color: #b19cd9; font-size: 12px; display: block; margin-bottom: 6px;">${t.netSelectLabel}</label>
                         <select class="auth-input" id="farmNetwork" style="margin-bottom: 14px;">
-                            <option value="Base">Base L2 (Доступно на Standard и PRO)</option>
-                            <option value="Arbitrum">Arbitrum One (Эксклюзив PRO / Premium)</option>
-                            <option value="ZkSync">ZkSync Era (Эксклюзив PRO / Premium)</option>
-                            <option value="Solana">Solana (Эксклюзив Premium)</option>
+                            <option value="Base">Base L2 (Доступно на всех тарифах)</option>
+                            <option value="Arbitrum" ${netLocks[userPlan]?.Arbitrum ? 'disabled' : ''}>${netLocks[userPlan]?.Arbitrum ? '🔒 ' : ''}Arbitrum One (Эксклюзив PRO / Premium)</option>
+                            <option value="ZkSync" ${netLocks[userPlan]?.ZkSync ? 'disabled' : ''}>${netLocks[userPlan]?.ZkSync ? '🔒 ' : ''}ZkSync Era (Эксклюзив PRO / Premium)</option>
+                            <option value="Solana" ${netLocks[userPlan]?.Solana ? 'disabled' : ''}>${netLocks[userPlan]?.Solana ? '🔒 ' : ''}Solana (Эксклюзив Premium)</option>
                         </select>
                         <button type="button" onclick="startAutoFarming()" class="btn-purple-lg" style="width: auto; padding: 12px 20px; font-size: 13px;">${t.startFarmBtn}</button>
                         <div id="farm-console-logs" style="margin-top: 15px; background: #07050c; padding: 14px; border-radius: 14px; font-family: monospace; font-size: 12px; color: #00d95f; max-height: 160px; overflow-y: auto;">Ожидание...</div>
@@ -936,6 +1157,8 @@
                             <span id="slot-info-badge" style="font-size: 12px; background: rgba(157,78,221,0.2); color: #c77dff; padding: 4px 10px; border-radius: 10px;">Загрузка слотов...</span>
                         </div>
                         <div id="walletsListContainer" style="display: flex; flex-direction: column; gap: 10px;">Загрузка...</div>
+                        <button type="button" onclick="buyExtraSlot()" class="btn-dark-lg" style="margin-top: 12px; width: auto; padding: 10px 16px; font-size: 13px;">➕ Купить +1 слот ($10)</button>
+                        <div id="buySlotMsg" style="margin-top: 8px;"></div>
                     </div>
                     <div style="background: #100a1c; border: 1px solid rgba(157,78,221,0.3); border-radius: 20px; padding: 20px;">
                         <h3 style="color: #fff; margin-top: 0;">➕ Добавить воркера</h3>
@@ -949,6 +1172,25 @@
                     </div>
                 `;
                 setTimeout(loadWalletsFromDB, 50);
+            } else if (section === 'Tasks') {
+                const schedulerLocked = userPlan === 'Standard';
+                const days = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
+                const calendarHtml = days.map((d, i) => `<div class="calendar-day ${i < 3 ? 'active' : ''}">${d}</div>`).join('');
+                centerHtml = `
+                    <div style="background: #100a1c; border: 1px solid rgba(157,78,221,0.3); border-radius: 20px; padding: 20px; margin-bottom: 16px;">
+                        <h3 style="color: #fff; margin-top: 0;">${t.tasksTitle}</h3>
+                        <p style="color: #b19cd9; font-size: 13px;">${t.tasksDesc}</p>
+                        <div class="calendar-grid">${calendarHtml}</div>
+                    </div>
+                    <div style="background: #100a1c; border: 1px solid rgba(157,78,221,0.3); border-radius: 20px; padding: 20px; display: flex; flex-direction: column; gap: 10px;">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="schedulerToggle" ${schedulerLocked ? 'disabled' : ''}>
+                            <span class="toggle-slider"></span>
+                            <span style="margin-left: 10px; color: #fff; font-size: 13px;">${t.schedulerToggleLabel}</span>
+                        </label>
+                        ${schedulerLocked ? `<div style="color: #ff88aa; font-size: 12px;">${t.schedulerLockedText}</div>` : ''}
+                    </div>
+                `;
             } else {
                 centerHtml = `<div style="background: #100a1c; border: 1px solid rgba(157,78,221,0.3); border-radius: 20px; padding: 20px;"><h3 style="color:#fff; margin-top:0;">Раздел в разработке</h3></div>`;
             }
@@ -958,11 +1200,14 @@
                     <div style="background: #100a1c; border: 1px solid rgba(157,78,221,0.3); border-radius: 20px; padding: 16px;">
                         <div style="font-weight: bold; color: #fff;">${username}</div>
                         <div style="font-size: 11px; color: #c77dff;">Тариф: ${userPlan}</div>
+                        <div style="font-size: 11px; color: ${subscriptionStatus === 'expired' ? '#ff88aa' : '#00d95f'}; margin-top: 6px;">Подписка: ${subscriptionStatus === 'expired' ? 'Истекла' : `Активна (${subscriptionDaysLeft} дн.)`}</div>
+                        <button type="button" onclick="renewSubscriptionFromPanel()" class="btn-dark-lg" style="margin-top: 10px; width: 100%; padding: 8px 10px; font-size: 12px;">Продлить подписку ($50)</button>
                     </div>
                     <div style="background: #100a1c; border: 1px solid rgba(157,78,221,0.3); border-radius: 16px; padding: 10px; display: flex; flex-direction: column; gap: 4px;">
                         <div class="sidebar-menu-item ${section === 'Looter' ? 'active' : ''}" onclick="switchMenu(this, 'Looter')">📦 Looter</div>
                         <div class="sidebar-menu-item ${section === 'Farming' ? 'active' : ''}" onclick="switchMenu(this, 'Farming')">🌾 Фарминг</div>
                         <div class="sidebar-menu-item ${section === 'Wallets' ? 'active' : ''}" onclick="switchMenu(this, 'Wallets')">👥 Кошельки</div>
+                        <div class="sidebar-menu-item ${section === 'Tasks' ? 'active' : ''}" onclick="switchMenu(this, 'Tasks')">⚡ ${t.tasksMenu}</div>
                     </div>
                 </div>
                 <div style="flex: 1; display: flex; flex-direction: column; gap: 16px; min-width: 0;">${centerHtml}</div>
