@@ -1,11 +1,14 @@
 ﻿<!DOCTYPE html>
 <html lang="ru">
+<!DOCTYPE html>
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title id="page-title">AIRDROP-X — Cyberpunk SaaS Panel</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
     <style>
         * { box-sizing: border-box; scroll-behavior: smooth; user-select: none; -webkit-tap-highlight-color: transparent; }
         body {
@@ -81,11 +84,6 @@
         
         .btn-modal-primary { width: 100%; background: linear-gradient(135deg, #7b2cbf, #9d4edd); color: #fff; border: none; padding: 13px; font-size: 14px; font-weight: bold; border-radius: 14px; margin-top: 4px; cursor: pointer; box-shadow: 0 0 15px rgba(157, 78, 221, 0.5); transition: 0.2s; }
         .btn-modal-primary:hover { box-shadow: 0 0 25px rgba(199, 125, 255, 0.8); }
-        
-        .divider-container { display: flex; align-items: center; text-align: center; color: #7b68ee; font-size: 12px; margin: 16px 0; }
-        .divider-container::before, .divider-container::after { content: ''; flex: 1; border-bottom: 1px solid rgba(157, 78, 221, 0.25); }
-        .divider-container::before { margin-right: 10px; }
-        .divider-container::after { margin-left: 10px; }
 
         .error-toast {
             position: absolute; bottom: -55px; left: 0; right: 0; background-color: #1a0826;
@@ -146,19 +144,7 @@
 
         .footer { border-top: 1px solid rgba(157, 78, 221, 0.2); padding: 24px 16px; display: flex; flex-direction: column; gap: 12px; align-items: center; text-align: center; color: #7b68ee; font-size: 13px; margin-top: auto; background: #07050c; }
 
-        .mobile-nav-bar { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: rgba(12, 8, 22, 0.95); backdrop-filter: blur(10px); border-top: 1px solid rgba(157, 78, 221, 0.3); padding: 10px 16px; z-index: 1500; justify-content: space-around; align-items: center; box-shadow: 0 -10px 30px rgba(0,0,0,0.8); }
-        .mobile-nav-item { display: flex; flex-direction: column; align-items: center; gap: 4px; color: #b19cd9; font-size: 11px; cursor: pointer; background: transparent; border: none; padding: 6px; flex: 1; border-radius: 12px; }
-        .mobile-nav-item.active { color: #e0aaff; font-weight: bold; text-shadow: 0 0 10px rgba(224, 170, 255, 0.6); }
-        .mobile-nav-item span.icon { font-size: 18px; }
-
-        .bottom-sheet-overlay { display: none; position: fixed; inset: 0; background: rgba(4, 2, 8, 0.85); z-index: 2500; backdrop-filter: blur(6px); align-items: flex-end; }
-        .bottom-sheet-overlay.show { display: flex; }
-        .bottom-sheet { background: #120c22; border-top: 1px solid rgba(157, 78, 221, 0.4); border-radius: 24px 24px 0 0; width: 100%; padding: 24px 20px 36px 20px; max-height: 80vh; overflow-y: auto; box-shadow: 0 -20px 50px rgba(110, 44, 180, 0.4); }
-        .sheet-handle { width: 40px; height: 4px; background: rgba(157, 78, 221, 0.4); border-radius: 2px; margin: 0 auto 20px auto; }
-        .sheet-menu-item { padding: 14px 16px; color: #fff; border-radius: 16px; font-weight: 500; font-size: 15px; cursor: pointer; display: flex; align-items: center; gap: 14px; margin-bottom: 8px; background: #18102e; border: 1px solid rgba(157, 78, 221, 0.25); }
-        .sheet-menu-item.active { background: linear-gradient(135deg, #7b2cbf, #9d4edd); color: #fff; font-weight: bold; border-color: #c77dff; }
-
-        .sidebar-menu-item { padding: 12px 16px; color: #b19cd9; border-radius: 14px; font-weight: 500; font-size: 14px; cursor: pointer; display: flex; align-items: center; transition: 0.2s; }
+        .sidebar-menu-item { padding: 12px 16px; color: #b19cd9; border-radius: 14px; font-weight: 500; font-size: 14px; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: 0.2s; }
         .sidebar-menu-item:hover { background: rgba(157, 78, 221, 0.15); color: #fff; }
         .sidebar-menu-item.active { background: linear-gradient(135deg, rgba(123, 44, 191, 0.4), rgba(157, 78, 221, 0.4)); color: #fff; font-weight: 600; border-left: 3px solid #c77dff; }
 
@@ -190,14 +176,14 @@
         .toggle-switch input:checked + .toggle-slider::before { transform: translateX(20px); background: #fff; }
         .toggle-switch input:disabled + .toggle-slider { opacity: 0.4; cursor: not-allowed; }
 
-        .tooltip-container { position: relative; display: inline-flex; align-items: center; cursor: help; }
+        .tooltip-container { position: relative; display: inline-flex; align-items: center; cursor: help; width: 100%; }
         .tooltip-text {
             visibility: hidden; width: 240px; background-color: #120c22; color: #fff;
             text-align: left; border-radius: 12px; padding: 10px 12px; font-size: 11px;
             border: 1px solid rgba(157, 78, 221, 0.4); position: absolute; z-index: 100;
             bottom: 125%; left: 50%; transform: translateX(-50%);
             opacity: 0; transition: opacity 0.2s; box-shadow: 0 10px 25px rgba(0,0,0,0.9);
-            line-height: 1.4; font-weight: normal;
+            line-height: 1.4; font-weight: normal; pointer-events: none;
         }
         .tooltip-container:hover .tooltip-text { visibility: visible; opacity: 1; }
 
@@ -211,13 +197,7 @@
             .showcase-content, .media-placeholder { flex: 1; }
             .media-placeholder { height: 260px; }
             .footer { flex-direction: row; justify-content: space-between; padding: 30px 40px; }
-            .mobile-nav-bar { display: none !important; }
             .dashboard-wrapper { flex-direction: row; padding: 0 20px; gap: 24px; }
-        }
-        @media(max-width: 767px) {
-            .desktop-sidebar { display: none !important; }
-            .mobile-nav-bar { display: flex; }
-            body { padding-bottom: 70px; }
         }
     </style>
 </head>
@@ -542,6 +522,27 @@
         let subscriptionDaysLeft = 30;
         let renewalPrice = 50;
         let pendingLoginCredentials = null;
+        const PLAN_PRICES = { Standard: 95, Pro: 150, Premium: 280 };
+        const PLAN_LABELS = { Standard: 'Standard', Pro: 'PRO Фермер', Premium: 'Premium VIP' };
+        const clientSessionId = getOrCreateClientSessionId();
+        let paymentAccessToken = sessionStorage.getItem('ax_payment_token') || '';
+        let paymentUnlocked = sessionStorage.getItem('ax_paid_session_id') === clientSessionId && !!paymentAccessToken;
+
+        function getOrCreateClientSessionId() {
+            let existing = sessionStorage.getItem('ax_client_session_id');
+            if (existing) return existing;
+            existing = `sess_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+            sessionStorage.setItem('ax_client_session_id', existing);
+            return existing;
+        }
+
+        function clearPaymentAccess() {
+            paymentUnlocked = false;
+            paymentAccessToken = '';
+            sessionStorage.removeItem('ax_payment_token');
+            sessionStorage.removeItem('ax_paid_session_id');
+            sessionStorage.removeItem('ax_paid_plan');
+        }
 
         function generateDeviceFingerprint() {
             try {
@@ -762,7 +763,8 @@
             const activationPrice = Number(price);
             localStorage.setItem('selected_plan', planName);
             localStorage.setItem('selected_price', String(activationPrice));
-            openModal('register');
+            clearPaymentAccess();
+            openModal('payment');
         }
 
         function closeAuthModal() {
@@ -784,6 +786,11 @@
         function openModal(type) {
             const modal = document.getElementById('authModal');
             const container = document.getElementById('modalContainer');
+
+            if (type === 'register' && (!paymentUnlocked || !paymentAccessToken)) {
+                type = 'payment';
+            }
+
             modal.classList.add('show');
 
             if (type === 'login') {
@@ -807,6 +814,28 @@
                     </div>
                     <button type="button" class="btn-modal-primary" onclick="validateLogin()">Войти</button>
                     <div id="loginErrorContainer"></div>
+                `;
+            } else if (type === 'payment') {
+                const chosenPlan = localStorage.getItem('selected_plan') || 'Standard';
+                const chosenPrice = Number(localStorage.getItem('selected_price') || PLAN_PRICES[chosenPlan] || 95);
+                const planLabel = PLAN_LABELS[chosenPlan] || chosenPlan;
+                const alreadyPaid = paymentUnlocked && paymentAccessToken && sessionStorage.getItem('ax_paid_plan') === chosenPlan;
+
+                container.innerHTML = `
+                    <div class="modal-logo">
+                        <span>💳 Оплата доступа: ${planLabel}</span>
+                        <span onclick="closeAuthModal()" style="cursor: pointer; color: #b19cd9; font-size: 20px;">✕</span>
+                    </div>
+                    <div class="modal-desc">Шаг 1 из 2: подтвердите оплату тарифа, после чего откроется регистрация по Email.</div>
+                    <div style="background:#07050c; border:1px solid rgba(157,78,221,0.35); border-radius:14px; padding:14px; margin-bottom:14px;">
+                        <div style="font-size:12px; color:#b19cd9; margin-bottom:6px;">Выбранный план</div>
+                        <div style="font-size:18px; color:#fff; font-weight:700; margin-bottom:4px;">${planLabel}</div>
+                        <div style="font-size:20px; color:#e0aaff; font-weight:800;">$${chosenPrice}</div>
+                    </div>
+                    ${alreadyPaid ? `<div class="error-toast" style="position: static; margin-bottom: 12px; background:#122218; border-color:#00d95f; color:#88ffaa;"><span>✅</span><span>Оплата уже подтверждена для этого сеанса.</span></div>` : ''}
+                    <button type="button" id="paymentActionBtn" class="btn-modal-primary" onclick="startPlanPayment()">${alreadyPaid ? 'Продолжить регистрацию' : 'Оплатить $' + chosenPrice}</button>
+                    <div id="paymentStatusContainer"></div>
+                    <div class="modal-desc" style="margin-top:12px; text-align:center;">Нужно выбрать другой тариф? <span style="color:#c77dff; cursor:pointer; text-decoration:underline;" onclick="closeAuthModal(); openPricingModal();">Открыть планы</span></div>
                 `;
             } else if (type === 'register') {
                 const chosenPlan = localStorage.getItem('selected_plan') || 'Standard';
@@ -893,18 +922,101 @@
             const chosenPrice = Number(localStorage.getItem('selected_price') || fallbackPlanPrice[chosenPlan] || '95');
             const err = document.getElementById('errorContainer');
 
+            if (!paymentUnlocked || !paymentAccessToken) {
+                err.innerHTML = `<div class="error-toast"><span>⚠️</span><span>Сначала завершите оплату тарифа.</span></div>`;
+                return;
+            }
             if(!email || !pass || !code) { err.innerHTML = `<div class="error-toast"><span>⚠️</span><span>Заполните все поля!</span></div>`; return; }
             const res = await fetch('/api/register', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: email.split('@')[0], email, password: pass, code, plan: chosenPlan, activation_price: chosenPrice, fingerprint: deviceFingerprint })
+                body: JSON.stringify({
+                    username: email.split('@')[0],
+                    email,
+                    password: pass,
+                    code,
+                    plan: chosenPlan,
+                    activation_price: chosenPrice,
+                    client_session_id: clientSessionId,
+                    payment_token: paymentAccessToken,
+                    fingerprint: deviceFingerprint
+                })
             });
             if(res.ok) {
+                clearPaymentAccess();
                 err.innerHTML = `<div class="error-toast" style="background:#122218; border-color:#00d95f; color:#88ffaa;"><span>✅</span><span>Успешно! Вход...</span></div>`;
                 setTimeout(() => openModal('login'), 1200);
             } else {
                 const r = await res.json();
                 err.innerHTML = `<div class="error-toast"><span>⚠️</span><span>${r.detail}</span></div>`;
+            }
+        }
+
+        async function startPlanPayment() {
+            const chosenPlan = localStorage.getItem('selected_plan') || 'Standard';
+            const chosenPrice = Number(localStorage.getItem('selected_price') || PLAN_PRICES[chosenPlan] || 95);
+            const status = document.getElementById('paymentStatusContainer');
+            const button = document.getElementById('paymentActionBtn');
+            if (!status || !button) return;
+
+            if (paymentUnlocked && paymentAccessToken && sessionStorage.getItem('ax_paid_plan') === chosenPlan) {
+                openModal('register');
+                return;
+            }
+
+            button.disabled = true;
+            button.style.opacity = '0.7';
+            status.innerHTML = `<div class="error-toast" style="position: static; margin-top: 10px; background:#101827; border-color:#4f46e5; color:#c7d2fe;"><span>⏳</span><span>Создаем платежную сессию...</span></div>`;
+
+            try {
+                const createRes = await fetch('/api/payment/create-session', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        plan: chosenPlan,
+                        amount: chosenPrice,
+                        client_session_id: clientSessionId
+                    })
+                });
+                const createData = await createRes.json();
+                if (!createRes.ok) {
+                    status.innerHTML = `<div class="error-toast" style="position: static; margin-top: 10px;"><span>⚠️</span><span>${createData.detail || 'Не удалось создать платежную сессию'}</span></div>`;
+                    button.disabled = false;
+                    button.style.opacity = '1';
+                    return;
+                }
+
+                status.innerHTML = `<div class="error-toast" style="position: static; margin-top: 10px; background:#101827; border-color:#4f46e5; color:#c7d2fe;"><span>⏳</span><span>Подтверждаем оплату...</span></div>`;
+
+                const confirmRes = await fetch('/api/payment/confirm', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        payment_session_id: createData.payment_session_id,
+                        client_session_id: clientSessionId
+                    })
+                });
+                const confirmData = await confirmRes.json();
+
+                if (!confirmRes.ok) {
+                    status.innerHTML = `<div class="error-toast" style="position: static; margin-top: 10px;"><span>⚠️</span><span>${confirmData.detail || 'Оплата не подтверждена'}</span></div>`;
+                    button.disabled = false;
+                    button.style.opacity = '1';
+                    return;
+                }
+
+                paymentUnlocked = true;
+                paymentAccessToken = confirmData.payment_token;
+                sessionStorage.setItem('ax_payment_token', paymentAccessToken);
+                sessionStorage.setItem('ax_paid_session_id', clientSessionId);
+                sessionStorage.setItem('ax_paid_plan', chosenPlan);
+
+                status.innerHTML = `<div class="error-toast" style="position: static; margin-top: 10px; background:#122218; border-color:#00d95f; color:#88ffaa;"><span>✅</span><span>Оплата подтверждена. Переходим к регистрации...</span></div>`;
+                setTimeout(() => openModal('register'), 500);
+            } catch (e) {
+                status.innerHTML = `<div class="error-toast" style="position: static; margin-top: 10px;"><span>⚠️</span><span>Сетевая ошибка при оплате. Повторите попытку.</span></div>`;
+                button.disabled = false;
+                button.style.opacity = '1';
             }
         }
 

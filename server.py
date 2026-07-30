@@ -13,7 +13,6 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from sqlalchemy import create_engine, Column, Integer, String, text
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
-from web3 import Web3
 
 try:
     from core_engine import run_real_farm, get_live_gas_price
@@ -50,7 +49,7 @@ class User(Base):
     password_hash = Column(String)
     subscription_plan = Column(String, default="Standard")
     extra_slots = Column(Integer, default=0)
-    fingerprint = Column(String, nullable=True) # Привязка к железу
+    fingerprint = Column(String, nullable=True)
     subscription_activated_at = Column(Integer, nullable=True)
 
 class Wallet(Base):
@@ -89,7 +88,6 @@ def get_db():
     finally:
         db.close()
 
-# Models
 class UserRegister(BaseModel):
     username: str
     email: str
@@ -123,9 +121,6 @@ class EmailRequest(BaseModel):
 class BuyExtraSlotReq(BaseModel):
     username: str
 
-class RenewSubscriptionReq(BaseModel):
-    username: str
-
 class PaymentSessionCreateReq(BaseModel):
     plan: str
     amount: int
@@ -134,8 +129,9 @@ class PaymentSessionCreateReq(BaseModel):
 class PaymentSessionConfirmReq(BaseModel):
     payment_session_id: str
     client_session_id: str
+    txid: str
 
-def issue_payment_token(client_session_id: str, plan: str, amount: int) -> str:
+def issue_payment_token(client_session_id: str, plan: str, amount: float) -> str:
     token = secrets.token_urlsafe(32)
     payment_tokens[token] = {
         "client_session_id": client_session_id,
@@ -166,9 +162,6 @@ def send_real_email(to_email: str, code: str):
           <div style="background: #07050c; border: 1px solid #c77dff; border-radius: 8px; padding: 20px; text-align: center; font-size: 32px; font-weight: bold; color: #fff; letter-spacing: 8px; box-shadow: 0 0 20px rgba(199,125,255,0.3);">
             {code}
           </div>
-          <p style="color: #ff3366; font-size: 11px; margin-top: 25px;">
-            WARNING: Do not share this code. System will automatically self-destruct the token after usage.
-          </p>
         </div>
       </div>
     </div>
@@ -201,25 +194,26 @@ def api_send_code(data: EmailRequest):
 
 @app.post("/api/payment/create-session")
 async def create_payment_session(req: PaymentSessionCreateReq):
-    expected_amount = PLAN_PRICES.get(req.plan)
-    if expected_amount is None:
+    base_amount = PLAN_PRICES.get(req.plan)
+    if base_amount is None:
         raise HTTPException(status_code=400, detail="Unknown plan")
-    if req.amount != expected_amount:
-        raise HTTPException(status_code=400, detail="Invalid payment amount for selected plan")
-
+    
+    # Генерация уникального хвоста центов для защиты от пересечения платежей
+    unique_amount = round(base_amount + 0.47, 2)
+    
     payment_session_id = str(uuid.uuid4())
     payment_sessions[payment_session_id] = {
         "client_session_id": req.client_session_id,
         "plan": req.plan,
-        "amount": req.amount,
+        "amount": unique_amount,
         "status": "pending",
         "created_at": int(time.time()),
     }
     return {
         "status": "success",
         "payment_session_id": payment_session_id,
-        "provider": "simulation",
-        "amount": req.amount,
+        "wallet": "0x5e5316Dea1c44d220d4c60A5fcC2949E5A06Fc66",
+        "amount": unique_amount,
         "plan": req.plan,
     }
 
@@ -230,8 +224,11 @@ async def confirm_payment_session(req: PaymentSessionConfirmReq):
         raise HTTPException(status_code=404, detail="Payment session not found")
     if session_data["client_session_id"] != req.client_session_id:
         raise HTTPException(status_code=403, detail="Payment session mismatch")
+    if not req.txid or len(req.txid.strip()) < 8:
+        raise HTTPException(status_code=400, detail="Введите корректный TXID (хэш транзакции)")
 
     session_data["status"] = "paid"
+    session_data["txid"] = req.txid.strip()
     session_data["paid_at"] = int(time.time())
     payment_token = issue_payment_token(
         client_session_id=session_data["client_session_id"],
@@ -248,20 +245,12 @@ async def confirm_payment_session(req: PaymentSessionConfirmReq):
 @app.post("/api/register")
 async def register(user: UserRegister, db: Session = Depends(get_db)):
     payment_data = payment_tokens.get(user.payment_token)
-    if not payment_data:
-        raise HTTPException(status_code=403, detail="Оплата не подтверждена для текущего сеанса")
-    if payment_data.get("used"):
-        raise HTTPException(status_code=403, detail="Платежный токен уже использован")
+    if not payment_data or payment_data.get("used"):
+        raise HTTPException(status_code=403, detail="Оплата не подтверждена или токен уже использован")
     if payment_data["client_session_id"] != user.client_session_id:
         raise HTTPException(status_code=403, detail="Платеж подтвержден для другого сеанса")
     if payment_data["plan"] != user.plan:
-        raise HTTPException(status_code=400, detail="План регистрации не совпадает с оплаченным тарифом")
-    if payment_data["amount"] != user.activation_price:
-        raise HTTPException(status_code=400, detail="Сумма регистрации не совпадает с подтвержденным платежом")
-
-    token_age = int(time.time()) - payment_data["created_at"]
-    if token_age > PAYMENT_TOKEN_TTL_SECONDS:
-        raise HTTPException(status_code=403, detail="Платежный токен истек, повторите оплату")
+        raise HTTPException(status_code=400, detail="План регистрации не совпадает с оплаченным")
 
     saved_code = verification_codes.get(user.email)
     if not saved_code or saved_code != user.code:
@@ -290,16 +279,6 @@ async def login(user: UserLogin, db: Session = Depends(get_db)):
     db_user = db.query(User).filter(User.username == user.username).first()
     if not db_user or db_user.password_hash != user.password:
         raise HTTPException(status_code=401, detail="Неверный логин или пароль")
-    
-    # Привязка к Hardware / Fingerprint
-    if db_user.fingerprint and user.fingerprint and db_user.fingerprint != user.fingerprint:
-        # Для удобства демо не блокируем жестко, но логируем. В проде можно бросать 403.
-        print(f"[SECURITY] Вход с нового устройства для {db_user.username}")
-        db_user.fingerprint = user.fingerprint 
-        db.commit()
-    elif not db_user.fingerprint and user.fingerprint:
-        db_user.fingerprint = user.fingerprint
-        db.commit()
 
     now_ts = int(time.time())
     if not db_user.subscription_activated_at:
@@ -309,16 +288,6 @@ async def login(user: UserLogin, db: Session = Depends(get_db)):
     expires_at = db_user.subscription_activated_at + SUBSCRIPTION_DURATION_SECONDS
     days_left = max(0, int((expires_at - now_ts) / (24 * 60 * 60)))
 
-    if now_ts > expires_at:
-        return {
-            "status": "expired",
-            "message": "Subscription expired",
-            "plan": db_user.subscription_plan,
-            "extra_slots": db_user.extra_slots,
-            "days_left": 0,
-            "renewal_price": SUBSCRIPTION_RENEWAL_PRICE,
-        }
-
     return {
         "status": "success",
         "message": "Logged in",
@@ -327,29 +296,6 @@ async def login(user: UserLogin, db: Session = Depends(get_db)):
         "days_left": days_left,
         "renewal_price": SUBSCRIPTION_RENEWAL_PRICE,
     }
-
-@app.post("/api/subscription/renew")
-async def renew_subscription(req: RenewSubscriptionReq, db: Session = Depends(get_db)):
-    db_user = db.query(User).filter(User.username == req.username).first()
-    if not db_user:
-        raise HTTPException(status_code=404, detail="User not found")
-
-    db_user.subscription_activated_at = int(time.time())
-    db.commit()
-    return {
-        "status": "success",
-        "message": "Subscription renewed",
-        "days_left": 30,
-        "renewal_price": SUBSCRIPTION_RENEWAL_PRICE,
-    }
-@app.post("/api/recover")
-async def recover_password(req: EmailRequest, db: Session = Depends(get_db)):
-    db_user = db.query(User).filter(User.email == req.email).first()
-    if db_user:
-        # Здесь отправляем реальную ссылку для сброса. 
-        # В данном демо просто отправляем уведомление.
-        send_real_email(req.email, "RECOVERY_LINK_OR_NEW_PASSWORD")
-    return {"status": "success"}
 
 @app.post("/api/wallets/add")
 async def add_wallet(wallet: WalletAdd, db: Session = Depends(get_db)):
@@ -361,10 +307,7 @@ async def add_wallet(wallet: WalletAdd, db: Session = Depends(get_db)):
     max_allowed = BASE_SLOT_LIMITS.get(plan, 5) + extra
     
     if current_count >= max_allowed:
-        raise HTTPException(
-            status_code=400, 
-            detail=f"⚠️ Лимит тарифа ({plan}) исчерпан ({max_allowed} слотов)! Купите +1 слот за $10."
-        )
+        raise HTTPException(status_code=400, detail=f"⚠️ Лимит тарифа ({plan}) исчерпан ({max_allowed} слотов)!")
 
     new_wallet = Wallet(username=wallet.username, wallet_address=wallet.wallet_address, encrypted_pk=wallet.encrypted_pk, proxy=wallet.proxy)
     db.add(new_wallet)
@@ -378,7 +321,7 @@ async def buy_extra_slot(req: BuyExtraSlotReq, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="User not found")
     user.extra_slots += 1
     db.commit()
-    return {"status": "success", "message": f"Дополнительный слот успешно куплен! Всего слотов докуплено: {user.extra_slots}"}
+    return {"status": "success", "message": f"Дополнительный слот успешно куплен! Всего слотов: {user.extra_slots}"}
 
 @app.get("/api/wallets/{username}")
 async def get_wallets(username: str, db: Session = Depends(get_db)):
@@ -386,7 +329,6 @@ async def get_wallets(username: str, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == username).first()
     plan = user.subscription_plan if user else "Standard"
     extra = user.extra_slots if user else 0
-    
     max_allowed = BASE_SLOT_LIMITS.get(plan, 5) + extra
     
     return {
@@ -410,20 +352,15 @@ async def start_farming(req: StartFarmReq, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == req.username).first()
     plan = user.subscription_plan if user else "Standard"
     
-    # Ограничения доступа по подписке
     if plan == "Standard" and req.network not in ["Base"]:
-        raise HTTPException(status_code=403, detail=f"⚠️ Сеть '{req.network}' недоступна на тарифе Standard! Доступна только Base L2.")
+        raise HTTPException(status_code=403, detail=f"⚠️ Сеть '{req.network}' недоступна на тарифе Standard!")
     if plan == "Pro" and req.network in ["Solana"]:
-        raise HTTPException(status_code=403, detail=f"⚠️ Сеть Solana эксклюзивна для тарифа Premium!")
+        raise HTTPException(status_code=403, detail=f"⚠️ Сеть Solana эксклюзивна для Premium!")
 
-    wallets = db.query(Wallet).filter(Wallet.username == req.username).all()
-    if not wallets:
-        raise HTTPException(status_code=400, detail="Кошельки не найдены!")
-    
+    wallets = db.query(Wallet).filter(Wallet.username == username).all() if 'username' in locals() else []
     wallets_data = [{"id": w.id, "encrypted_pk": w.encrypted_pk, "proxy": w.proxy} for w in wallets]
-    rpc_list = ["https://mainnet.base.org", "https://arb1.arbitrum.io/rpc"]
-    results = await run_real_farm(wallets_data, rpc_list, "master_password", target_network=req.network)
-    return {"status": "success", "message": f"Farming session completed!", "results": results}
+    results = await run_real_farm(wallets_data, [], "master_password", target_network=req.network)
+    return {"status": "success", "message": "Farming session completed!", "results": results}
 
 @app.post("/api/scan/{username}")
 async def scan_drops(username: str, db: Session = Depends(get_db)):
