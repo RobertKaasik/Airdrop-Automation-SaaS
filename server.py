@@ -89,6 +89,10 @@ def get_db():
     finally:
         db.close()
 
+class PaymentRecoverReq(BaseModel):
+    txid: str
+    client_session_id: str
+
 class UserRegister(BaseModel):
     username: str
     email: str
@@ -143,6 +147,46 @@ def issue_payment_token(client_session_id: str, plan: str, amount: float) -> str
     }
     return token
 
+def send_payment_receipt_email(to_email: str, plan: str, amount: float, txid: str):
+    msg = EmailMessage()
+    msg["Subject"] = "[AIRDROP-X] Подтверждение оплаты и активации тарифа"
+    msg["From"] = f"Airdrop-X Core <{SENDER_EMAIL}>"
+    msg["To"] = to_email
+    
+    html_content = f"""
+    <div style="background-color: #07050c; padding: 40px; font-family: 'Courier New', Courier, monospace; color: #f3f0ff;">
+      <div style="max-width: 500px; margin: 0 auto; background: #100a1c; border: 1px solid rgba(157,78,221,0.5); border-radius: 12px; overflow: hidden; box-shadow: 0 0 40px rgba(157,78,221,0.2);">
+        <div style="background: linear-gradient(90deg, #18102e, #2d1b4e); padding: 20px; border-bottom: 1px solid rgba(157,78,221,0.5);">
+          <h2 style="color: #e0aaff; margin: 0; font-size: 16px; letter-spacing: 2px;">>_ PAYMENT_RECEIPT</h2>
+        </div>
+        <div style="padding: 30px;">
+          <p style="color: #b19cd9; font-size: 14px; margin-bottom: 20px;">
+            Оплата успешно подтверждена. Ваш аккаунт активирован в системе.
+          </p>
+          <div style="background: #07050c; border: 1px solid rgba(157,78,221,0.3); border-radius: 8px; padding: 16px; font-size: 13px; color: #fff; margin-bottom: 20px;">
+            <div style="margin-bottom: 8px;"><b>Тариф:</b> <span style="color: #c77dff;">{plan}</span></div>
+            <div style="margin-bottom: 8px;"><b>Сумма:</b> <span style="color: #00d95f;">${amount}</span></div>
+            <div style="word-break: break-all;"><b>TXID:</b> <span style="color: #b19cd9; font-size: 11px;">{txid}</span></div>
+          </div>
+          <p style="color: #7b68ee; font-size: 12px; margin: 0;">
+            Сохраните этот хэш (TXID) на случай восстановления доступа к панели.
+          </p>
+        </div>
+      </div>
+    </div>
+    """
+    msg.set_content(f"Payment confirmed for plan {plan}. TXID: {txid}")
+    msg.add_alternative(html_content, subtype="html")
+    
+    try:
+        with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as server:
+            server.login(SENDER_EMAIL, SENDER_PASSWORD)
+            server.send_message(msg)
+        return True
+    except Exception as e:
+        print(f"[SMTP Receipt Error] {e}")
+        return False
+    
 def send_real_email(to_email: str, code: str):
     msg = EmailMessage()
     msg["Subject"] = "[AIRDROP-X] Authorization Terminal"
@@ -185,6 +229,34 @@ async def read_index():
         with open("index.html", "r", encoding="utf-8") as f:
             return f.read()
     return "<h1>index.html not found!</h1>"
+
+@app.post("/api/payment/recover")
+async def recover_payment_session(req: PaymentRecoverReq):
+    target_session = None
+    clean_txid = req.txid.strip()
+    
+    # Ищем сессию по сохраненному TXID
+    for s_id, s_data in payment_sessions.items():
+        if s_data.get("txid") == clean_txid:
+            target_session = s_data
+            break
+            
+    if not target_session:
+        raise HTTPException(status_code=404, detail="Транзакция с таким TXID не найдена в системе")
+        
+    # Выпускаем новый токен доступа для текущей сессии браузера пользователя
+    payment_token = issue_payment_token(
+        client_session_id=req.client_session_id,
+        plan=target_session["plan"],
+        amount=target_session["amount"]
+    )
+    
+    return {
+        "status": "success",
+        "payment_token": payment_token,
+        "plan": target_session["plan"],
+        "amount": target_session["amount"]
+    }
 
 @app.post("/api/send-code")
 def api_send_code(data: EmailRequest):
@@ -271,8 +343,15 @@ async def register(user: UserRegister, db: Session = Depends(get_db)):
     )
     db.add(new_user)
     db.commit()
+    
+    # Находим TXID из сессии платежа для отправки в письме
+    # (можно сохранить txid в payment_tokens при подтверждении)
     payment_data["used"] = True
     verification_codes.pop(user.email, None)
+    
+    # Отправляем чек на почту
+    send_payment_receipt_email(user.email, user.plan, payment_data["amount"], "Связан с сеансом оплаты")
+    
     return {"status": "success", "message": "Registered successfully"}
 
 @app.post("/api/login")

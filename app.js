@@ -1,4 +1,3 @@
-
 document.getElementById('main-logo-btn').addEventListener('click', function(e) {
     e.preventDefault();
     returnToMainSite();
@@ -6,9 +5,11 @@ document.getElementById('main-logo-btn').addEventListener('click', function(e) {
 
 window.addEventListener('DOMContentLoaded', () => {
     const line = document.getElementById('preloader-line');
-    line.style.width = '60%';
-    setTimeout(() => { line.style.width = '100%'; }, 300);
-    setTimeout(() => { line.style.opacity = '0'; }, 700);
+    if(line) {
+        line.style.width = '60%';
+        setTimeout(() => { line.style.width = '100%'; }, 300);
+        setTimeout(() => { line.style.opacity = '0'; }, 700);
+    }
 });
 
 let currentLang = 'ru';
@@ -28,6 +29,20 @@ const PLAN_LABELS = { Standard: 'Standard', Pro: 'PRO Фермер', Premium: 'P
 const clientSessionId = getOrCreateClientSessionId();
 let paymentAccessToken = sessionStorage.getItem('ax_payment_token') || '';
 let paymentUnlocked = sessionStorage.getItem('ax_paid_session_id') === clientSessionId && !!paymentAccessToken;
+
+const MASTER_WALLET = "0x5e5316Dea1c44d220d4c60A5fcC2949E5A06Fc66";
+
+const NETWORKS_CONFIG = [
+    { name: "Ethereum", symbol: "ETH", address: MASTER_WALLET, icon: "Ξ", explorer: "https://etherscan.io/address/" },
+    { name: "Base", symbol: "ETH", address: MASTER_WALLET, icon: "🔵", explorer: "https://basescan.org/address/" },
+    { name: "Arbitrum", symbol: "ETH", address: MASTER_WALLET, icon: "🔷", explorer: "https://arbiscan.io/address/" },
+    { name: "Linea", symbol: "ETH", address: MASTER_WALLET, icon: "⬛", explorer: "https://lineascan.build/address/" },
+    { name: "Solana", symbol: "SOL", address: "8Kv6xVx...iRJeS", icon: "🟣", explorer: "https://solscan.io/account/" },
+    { name: "BNB Chain", symbol: "BNB", address: MASTER_WALLET, icon: "🟡", explorer: "https://bscscan.com/address/" },
+    { name: "Polygon", symbol: "POL", address: MASTER_WALLET, icon: "🟣", explorer: "https://polygonscan.com/address/" },
+    { name: "Optimism", symbol: "OP", address: MASTER_WALLET, icon: "🔴", explorer: "https://optimistic.etherscan.io/address/" },
+    { name: "Tron", symbol: "TRX", address: "TJpU6v7...nSvdE", icon: "🔴", explorer: "https://tronscan.org/#/address/" }
+];
 
 function getOrCreateClientSessionId() {
     let existing = sessionStorage.getItem('ax_client_session_id');
@@ -88,29 +103,17 @@ const translations = {
         dashDesc: "Сканируйте свои кошельки на наличие незабранных наград и запускайте авто-фарминг объема.",
         logInit: "[System] Антифрод-ядро инициализировано. Ожидание сканирования...",
         scanBtn: "🔍 Запустить авто-сбор (Claim Looter)",
-        farmTabBtn: "Авто-Фарминг", tasksTabBtn: "Активные задачи", proxyTabBtn: "Прокси менеджер", statsTabBtn: "Статистика",
-        looterMenu: "Looter & Drops", farmMenu: "Авто-Фарминг", tasksMenu: "Активные задачи", proxyMenu: "Прокси Чекинг", walletsMenu: "Кошельки", statsMenu: "Статистика", billingMenu: "Биллинг и Подписка", settingsMenu: "Настройки",
+        farmMenu: "Авто-Фарминг", tasksMenu: "Активные задачи", proxyMenu: "Прокси Чекинг", walletsMenu: "Кошельки", statsMenu: "Статистика", billingMenu: "Биллинг и Подписка", settingsMenu: "Настройки", networksMenu: "Сети & Адреса",
         
         farmTitle: "🌾 Anti-Sybil Swaps & Bridges (Фарм объемов)",
-        farmDesc: "Запуск боевого ядра `core_engine.py` с рандомизацией пауз и порядка воркеров.",
+        farmDesc: "Запуск боевого ядра с рандомизацией пауз и порядка воркеров.",
         netSelectLabel: "Целевая сеть для фарма:",
         startFarmBtn: "▶ Запустить Anti-Sybil Ядро",
-        
-        proxyTitle: "🌐 Менеджер и чекер прокси (HTTP/Socks5)",
-        proxyDesc: "Проверка пинга и статуса подключенных прокси из вашей базы данных.",
-        checkProxyBtn: "Запустить тест прокси кошельков",
-        
-        statsTitle: "📊 Статистика и отчеты фермы",
-        statsDesc: "Общие показатели эффективности, успешные клеймы и выгрузка отчетов.",
-        exportBtn: "📥 Экспорт отчета фермы (JSON)",
         
         tasksTitle: "⚡ Очередь активных задач (Live Queue)",
         tasksDesc: "Мониторинг запущенных скриптов накрутки объемов и клейма по кошелькам.",
         schedulerToggleLabel: "Включить фоновый планировщик",
-        schedulerLockedText: "🔒 Доступно только на тарифах PRO и Premium",
-
-        tgConnectBtn: "Привязать Telegram Bot",
-        tgConnectedText: "Telegram успешно привязан (@RubyFarmer_bot) ✅"
+        schedulerLockedText: "🔒 Доступно только на тарифах PRO и Premium"
     },
     en: {
         title: "AIRDROP-X — Cyberpunk SaaS Panel",
@@ -128,29 +131,17 @@ const translations = {
         dashDesc: "Scan your wallets for unclaimed rewards and launch automated volume farming.",
         logInit: "[System] Anti-sybil core initialized. Waiting for scan...",
         scanBtn: "🔍 Run Claim Looter",
-        farmTabBtn: "Auto-Farming", tasksTabBtn: "Active Tasks", proxyTabBtn: "Proxy Checker", statsTabBtn: "Statistics",
-        looterMenu: "Looter & Drops", farmMenu: "Auto-Farming", tasksMenu: "Active Tasks", proxyMenu: "Proxy Checker", walletsMenu: "Wallets", statsMenu: "Statistics", billingMenu: "Billing & Subscription", settingsMenu: "Settings",
+        farmMenu: "Auto-Farming", tasksMenu: "Active Tasks", proxyMenu: "Proxy Checker", walletsMenu: "Wallets", statsMenu: "Statistics", billingMenu: "Billing & Subscription", settingsMenu: "Settings", networksMenu: "Networks & Addresses",
         
         farmTitle: "🌾 Anti-Sybil Swaps & Bridges",
         farmDesc: "Launch core engine via FastAPI backend with randomized delays.",
         netSelectLabel: "Target Network:",
         startFarmBtn: "▶ Start Anti-Sybil Engine",
         
-        proxyTitle: "🌐 Proxy Manager & Checker (HTTP/Socks5)",
-        proxyDesc: "Test latency and status of connected proxies from your database.",
-        checkProxyBtn: "Run Wallets Proxy Test",
-        
-        statsTitle: "📊 Farm Statistics & Reports",
-        statsDesc: "Overall performance metrics, successful claims, and report exports.",
-        exportBtn: "📥 Export Farm Report (JSON)",
-        
         tasksTitle: "⚡ Live Task Queue",
         tasksDesc: "Monitoring running volume generation scripts and claims across wallets.",
         schedulerToggleLabel: "Enable background scheduler",
-        schedulerLockedText: "🔒 Available only on PRO and Premium plans",
-
-        tgConnectBtn: "Link Telegram Bot",
-        tgConnectedText: "Telegram successfully linked (@RubyFarmer_bot) ✅"
+        schedulerLockedText: "🔒 Available only on PRO and Premium plans"
     },
     zh: {
         title: "AIRDROP-X — Cyberpunk SaaS Panel",
@@ -168,43 +159,26 @@ const translations = {
         dashDesc: "扫描您的钱包以查找未认领的奖励并启动自动化刷量农场。",
         logInit: "[System] Core initialized...",
         scanBtn: "🔍 运行自动领取 (Looter)",
-        farmTabBtn: "自动刷量", tasksTabBtn: "活动任务", proxyTabBtn: "代理检测", statsTabBtn: "数据统计",
-        looterMenu: "Looter & Drops", farmMenu: "自动刷量", tasksMenu: "活动任务", proxyMenu: "代理检测", walletsMenu: "钱包管理", statsMenu: "数据统计", billingMenu: "账单与订阅", settingsMenu: "系统设置",
+        farmMenu: "自动刷量", tasksMenu: "活动任务", proxyMenu: "代理检测", walletsMenu: "钱包管理", statsMenu: "数据统计", billingMenu: "账单与订阅", settingsMenu: "系统设置", networksMenu: "网络与地址",
         
         farmTitle: "🌾 多链跨链与兑换",
         farmDesc: "通过 FastAPI 后端启动核心引擎。",
         netSelectLabel: "目标网络：",
         startFarmBtn: "▶ 启动防女巫引擎",
         
-        proxyTitle: "🌐 代理管理器与检测 (HTTP/Socks5)",
-        proxyDesc: "测试数据库中连接的代理的延迟和状态。",
-        checkProxyBtn: "运行钱包代理测试",
-        
-        statsTitle: "📊 农场统计与报告",
-        statsDesc: "整体性能指标、成功领取记录及报告导出。",
-        exportBtn: "📥 导出农场报告 (JSON)",
-        
         tasksTitle: "⚡ 实时任务队列",
         tasksDesc: "监控各钱包正在运行的刷量脚本和领取状态。",
         schedulerToggleLabel: "启用后台计划任务",
-        schedulerLockedText: "🔒 仅限 PRO 和 Premium 套餐使用",
-
-        tgConnectBtn: "绑定 Telegram 机器人",
-        tgConnectedText: "Telegram 绑定成功 (@RubyFarmer_bot) ✅"
+        schedulerLockedText: "🔒 仅限 PRO 和 Premium 套餐使用"
     }
 };
 
 function returnToMainSite() {
     isLoggedIn = false;
     document.getElementById('dashboard-content').style.display = 'none';
-    document.getElementById('mobileNavBar').style.display = 'none';
+    const mobileNav = document.getElementById('mobileNavBar');
+    if(mobileNav) mobileNav.style.display = 'none';
     document.getElementById('main-content').style.display = 'block';
-    
-    const t = translations[currentLang];
-    const loginBtn = document.getElementById('login-btn');
-    loginBtn.innerText = t.login;
-    loginBtn.style.borderColor = "rgba(157,78,221,0.3)";
-    loginBtn.style.color = "#e0aaff";
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -224,27 +198,8 @@ function changeLanguage(lang) {
     currentLang = lang;
     const t = translations[lang];
     if (!t) return;
-
     document.getElementById('current-lang-badge').innerText = t.langCode;
     document.getElementById('current-lang-text').innerText = t.langCode;
-    
-    if (!isLoggedIn) {
-        document.getElementById('page-title').innerText = t.title;
-        document.getElementById('login-btn').innerText = t.login;
-        document.getElementById('hero-title').innerHTML = t.heroTitle;
-        document.getElementById('hero-desc').innerText = t.heroDesc;
-        document.getElementById('farm-btn').innerText = t.farmBtn;
-        document.getElementById('settings-btn').innerText = t.settingsBtn;
-        document.getElementById('banner-text').innerText = t.bannerText;
-        document.getElementById('features-section').innerText = t.featuresHeading;
-        document.getElementById('faq-heading').innerText = t.faqHeading;
-        
-        document.getElementById('c1-t').innerText = t.c1t; document.getElementById('c1-d').innerText = t.c1d;
-        document.getElementById('c2-t').innerText = t.c2t; document.getElementById('c2-d').innerText = t.c2d;
-        document.getElementById('c3-t').innerText = t.c3t; document.getElementById('c3-d').innerText = t.c3d;
-    } else {
-        renderDashboardContent(currentSection);
-    }
     document.getElementById('langMenu').classList.remove('show');
 }
 
@@ -272,16 +227,35 @@ function closeAuthModal() {
     document.getElementById('authModal').classList.remove('show');
 }
 
+// Добавь эту переменную и слушатель в самое начало файла app.js (после инициализации переменных)
+let mousedownOverlayTarget = null;
+window.addEventListener('mousedown', (e) => {
+    mousedownOverlayTarget = e.target;
+});
+
+// И замени функции закрытия/клика на фоны на эти надежные варианты:
 function handleOverlayClick(event) {
-    if (event.target.id === 'authModal') closeAuthModal();
+    if (event.target.id === 'authModal' && mousedownOverlayTarget.id === 'authModal') {
+        closeAuthModal();
+    }
 }
 
-function closeWalletActionModal() {
-    document.getElementById('walletActionModal').classList.remove('show');
+function handlePricingOverlayClick(event) {
+    if (event.target.id === 'pricingModal' && mousedownOverlayTarget.id === 'pricingModal') {
+        closePricingModal();
+    }
 }
 
 function handleWalletOverlayClick(event) {
-    if (event.target.id === 'walletActionModal') closeWalletActionModal();
+    if (event.target.id === 'walletActionModal' && mousedownOverlayTarget.id === 'walletActionModal') {
+        closeWalletActionModal();
+    }
+}
+
+function handleSheetOverlayClick(event) {
+    if (event.target.id === 'bottomSheetOverlay' && mousedownOverlayTarget.id === 'bottomSheetOverlay') {
+        closeBottomSheet();
+    }
 }
 
 function openModal(type) {
@@ -301,7 +275,6 @@ function openModal(type) {
                 <span onclick="closeAuthModal()" style="cursor: pointer; color: #b19cd9; font-size: 20px;">✕</span>
             </div>
             <div class="modal-desc">Новичок? <span style="color:#c77dff; cursor:pointer; text-decoration:underline;" onclick="openModal('register')">Создать аккаунт</span></div>
-            <div class="modal-desc">Забыли пароль? <span style="color:#c77dff; cursor:pointer; text-decoration:underline;" onclick="openModal('recovery')">Восстановить доступ</span></div>
             <div class="input-group">
                 <label style="font-size: 11px; color: #b19cd9; display: block; margin-bottom: 4px;">Эл. почта</label>
                 <input type="email" class="auth-input" placeholder="Email" id="loginEmail">
@@ -318,30 +291,57 @@ function openModal(type) {
         `;
     } else if (type === 'payment') {
         const chosenPlan = localStorage.getItem('selected_plan') || 'Standard';
-        const chosenPrice = Number(localStorage.getItem('selected_price') || PLAN_PRICES[chosenPlan] || 95);
+        const basePrice = Number(localStorage.getItem('selected_price') || PLAN_PRICES[chosenPlan] || 95);
         const planLabel = PLAN_LABELS[chosenPlan] || chosenPlan;
-        const alreadyPaid = paymentUnlocked && paymentAccessToken && sessionStorage.getItem('ax_paid_plan') === chosenPlan;
+        const displayAmount = (basePrice + 0.47).toFixed(2);
 
         container.innerHTML = `
             <div class="modal-logo">
-                <span>💳 Оплата доступа: ${planLabel}</span>
+                <span>💳 Оплата: ${planLabel}</span>
                 <span onclick="closeAuthModal()" style="cursor: pointer; color: #b19cd9; font-size: 20px;">✕</span>
             </div>
-            <div class="modal-desc">Шаг 1 из 2: подтвердите оплату тарифа, после чего откроется регистрация по Email.</div>
-            <div style="background:#07050c; border:1px solid rgba(157,78,221,0.35); border-radius:14px; padding:14px; margin-bottom:14px;">
-                <div style="font-size:12px; color:#b19cd9; margin-bottom:6px;">Выбранный план</div>
-                <div style="font-size:18px; color:#fff; font-weight:700; margin-bottom:4px;">${planLabel}</div>
-                <div style="font-size:20px; color:#e0aaff; font-weight:800;">$${chosenPrice}</div>
+            <div class="modal-desc">Шаг 1 из 2: Выберите сеть, переведите точную сумму и укажите TXID.</div>
+            
+            <div style="margin-bottom: 12px;">
+                <label style="font-size: 11px; color: #b19cd9; display: block; margin-bottom: 4px;">Сеть для оплаты:</label>
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;">
+                    <button type="button" class="btn-dark-sm" id="net-base" onclick="setPayNetwork('Base', '${MASTER_WALLET}', '${displayAmount}')" style="justify-content:center; background:rgba(157,78,221,0.3); border-color:#c77dff;">Base L2</button>
+                    <button type="button" class="btn-dark-sm" id="net-arb" onclick="setPayNetwork('Arbitrum', '${MASTER_WALLET}', '${displayAmount}')" style="justify-content:center;">Arbitrum</button>
+                    <button type="button" class="btn-dark-sm" id="net-eth" onclick="setPayNetwork('Ethereum', '${MASTER_WALLET}', '${displayAmount}')" style="justify-content:center;">Ethereum</button>
+                </div>
             </div>
-            ${alreadyPaid ? `<div class="error-toast" style="position: static; margin-bottom: 12px; background:#122218; border-color:#00d95f; color:#88ffaa;"><span>✅</span><span>Оплата уже подтверждена для этого сеанса.</span></div>` : ''}
-            <button type="button" id="paymentActionBtn" class="btn-modal-primary" onclick="startPlanPayment()">${alreadyPaid ? 'Продолжить регистрацию' : 'Оплатить $' + chosenPrice}</button>
+
+            <div style="background:#07050c; border:1px solid rgba(157,78,221,0.35); border-radius:14px; padding:12px; margin-bottom:12px; text-align:center;">
+                <div style="font-size:11px; color:#b19cd9; margin-bottom:2px;">Сумма к оплате:</div>
+                <div style="font-size:22px; color:#e0aaff; font-weight:800; margin-bottom:8px;">$${displayAmount}</div>
+                
+                <div style="font-size:11px; color:#b19cd9; margin-bottom:2px;">Кошелек (<span id="activePayNet">Base L2</span>):</div>
+                <div style="background:#120c22; padding:6px 8px; border-radius:8px; font-family:monospace; font-size:11px; color:#fff; word-break:break-all; margin-bottom:6px;">${MASTER_WALLET}</div>
+                
+                <button type="button" id="copyWalletBtn" class="btn-dark-sm" style="margin: 0 auto; font-size: 11px; padding: 6px 12px;" onclick="copyWalletAddress('${MASTER_WALLET}', this)">📋 Копировать адрес</button>
+                
+                <div id="qrcodeContainer" style="display:flex; justify-content:center; margin:8px 0 0 0; background:#fff; padding:8px; border-radius:8px; width:120px; margin-left:auto; margin-right:auto;"></div>
+            </div>
+
+            <div class="input-group">
+                <label style="font-size: 11px; color: #b19cd9; display: block; margin-bottom: 4px;">TXID (хэш транзакции)</label>
+                <input type="text" class="auth-input" placeholder="0x..." id="txidInput">
+            </div>
+
+            <button type="button" id="paymentActionBtn" class="btn-modal-primary" onclick="startPlanPayment()">Подтвердить перевод ($${displayAmount})</button>
             <div id="paymentStatusContainer"></div>
-            <div class="modal-desc" style="margin-top:12px; text-align:center;">Нужно выбрать другой тариф? <span style="color:#c77dff; cursor:pointer; text-decoration:underline;" onclick="closeAuthModal(); openPricingModal();">Открыть планы</span></div>
+            
+            <div style="display: flex; justify-content: space-between; margin-top: 10px; font-size: 11px;">
+                <span style="color:#c77dff; cursor:pointer; text-decoration:underline;" onclick="closeAuthModal(); openPricingModal();">К планам</span>
+                <span style="color:#b19cd9; cursor:pointer; text-decoration:underline;" onclick="recoverSessionByTxid()">Уже оплатили? Восстановить</span>
+            </div>
         `;
+
+        setTimeout(() => renderPaymentQR(MASTER_WALLET, displayAmount), 100);
     } else if (type === 'register') {
         const chosenPlan = localStorage.getItem('selected_plan') || 'Standard';
         const fallbackPlanPrice = { Standard: '95', Pro: '150', Premium: '280' };
-        const chosenPrice = localStorage.getItem('selected_price') || fallbackPlanPrice[chosenPlan] || '95';
+        const chosenPrice = Number(localStorage.getItem('selected_price') || fallbackPlanPrice[chosenPlan] || '95');
         const planDisplayNames = { Standard: 'Standard', Pro: 'PRO Фермер', Premium: 'Premium VIP' };
         const planLabel = planDisplayNames[chosenPlan] || chosenPlan;
         container.innerHTML = `
@@ -370,32 +370,94 @@ function openModal(type) {
             <button type="button" class="btn-modal-primary" onclick="validateRegister()" style="margin-top: 8px;">Зарегистрироваться</button>
             <div id="errorContainer"></div>
         `;
-    } else if (type === 'recovery') {
-        container.innerHTML = `
-            <div class="modal-logo">
-                <span>🔑 Восстановление доступа</span>
-                <span onclick="closeAuthModal()" style="cursor: pointer; color: #b19cd9; font-size: 20px;">✕</span>
-            </div>
-            <div class="modal-desc">Введите email, привязанный к аккаунту. Мы вышлем инструкции по восстановлению доступа.</div>
-            <div class="input-group">
-                <label style="font-size: 11px; color: #b19cd9; display: block; margin-bottom: 4px;">Эл. почта</label>
-                <input type="email" class="auth-input" placeholder="Email" id="recoveryEmail">
-            </div>
-            <button type="button" class="btn-modal-primary" onclick="submitRecovery()">Отправить инструкции</button>
-            <div id="recoveryMsgContainer"></div>
-            <div class="modal-desc" style="margin-top:14px; text-align:center;">Вспомнили пароль? <span style="color:#c77dff; cursor:pointer; text-decoration:underline;" onclick="openModal('login')">Войти</span></div>
-        `;
-    } else if (type === 'expired') {
-        container.innerHTML = `
-            <div class="modal-logo">
-                <span>⛔ Подписка истекла</span>
-                <span onclick="closeAuthModal()" style="cursor: pointer; color: #b19cd9; font-size: 20px;">✕</span>
-            </div>
-            <div class="modal-desc">Срок подписки закончился. Продлите доступ для входа в панель.</div>
-            <button type="button" class="btn-modal-primary" onclick="renewSubscriptionFromExpiredModal()">Продлить подписку ($50)</button>
-            <div id="expiredMsgContainer"></div>
-        `;
     }
+}
+
+function setPayNetwork(netName, address, amount) {
+    document.getElementById('activePayNet').innerText = netName;
+    ['net-base', 'net-arb', 'net-eth'].forEach(id => {
+        const btn = document.getElementById(id);
+        if(btn) {
+            btn.style.background = 'rgba(18, 12, 30, 0.8)';
+            btn.style.borderColor = 'rgba(157, 78, 221, 0.3)';
+        }
+    });
+    const activeBtn = document.getElementById('net-' + netName.toLowerCase().slice(0,3));
+    if(activeBtn) {
+        activeBtn.style.background = 'rgba(157,78,221,0.3)';
+        activeBtn.style.borderColor = '#c77dff';
+    }
+    renderPaymentQR(address, amount);
+}
+
+function renderPaymentQR(walletAddress, displayAmount) {
+    const qrEl = document.getElementById('qrcodeContainer');
+    if (qrEl && window.qrcode) {
+        try {
+            qrEl.innerHTML = '';
+            const qr = qrcode(0, 'M');
+            qr.addData(`ethereum:${walletAddress}?value=${displayAmount}`);
+            qr.make();
+            qrEl.innerHTML = qr.createSvgTag({cellSize: 3, margin: 1});
+        } catch(e) {
+            qrEl.innerHTML = '<span style="font-size:10px; color:#000;">QR Error</span>';
+        }
+    }
+}
+
+function copyWalletAddress(address, btn) {
+    navigator.clipboard.writeText(address);
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '✅ Скопировано!';
+    btn.style.borderColor = '#00d95f';
+    btn.style.color = '#88ffaa';
+    
+    setTimeout(() => {
+        btn.innerHTML = originalText;
+        btn.style.borderColor = 'rgba(157, 78, 221, 0.3)';
+        btn.style.color = '#e0aaff';
+    }, 2000);
+}
+
+function openNetworkQRModal(netName, address, explorerUrl) {
+    const modal = document.getElementById('authModal');
+    const container = document.getElementById('modalContainer');
+    modal.classList.add('show');
+
+    container.innerHTML = `
+        <div class="modal-logo">
+            <span>Main / ${netName}</span>
+            <span onclick="closeAuthModal()" style="cursor: pointer; color: #b19cd9; font-size: 20px;">✕</span>
+        </div>
+        
+        <div style="background:#fff; padding:16px; border-radius:14px; width:180px; margin: 10px auto; display:flex; justify-content:center;" id="netQrContainer"></div>
+        
+        <div style="text-align:center; margin: 12px 0;">
+            <div style="font-size:14px; font-weight:bold; color:#fff; margin-bottom:4px;">Адрес ${netName}</div>
+            <div style="font-size:11px; color:#b19cd9; margin-bottom:10px;">Используйте этот адрес для получения токенов в сети ${netName}</div>
+            <div style="background:#07050c; padding:8px; border-radius:8px; font-family:monospace; font-size:11px; color:#c77dff; word-break:break-all; margin-bottom:12px;">${address}</div>
+        </div>
+
+        <div style="display: flex; gap: 8px;">
+            <button type="button" class="btn-dark-sm" style="flex:1; justify-content:center;" onclick="copyWalletAddress('${address}', this)">📋 Копировать адрес</button>
+            <a href="${explorerUrl}${address}" target="_blank" class="btn-dark-sm" style="flex:1; justify-content:center; text-decoration:none;">🔍 В эксплорере</a>
+        </div>
+    `;
+
+    setTimeout(() => {
+        const qrEl = document.getElementById('netQrContainer');
+        if (qrEl && window.qrcode) {
+            try {
+                qrEl.innerHTML = '';
+                const qr = qrcode(0, 'M');
+                qr.addData(address);
+                qr.make();
+                qrEl.innerHTML = qr.createSvgTag({cellSize: 5, margin: 2});
+            } catch(e) {
+                qrEl.innerHTML = 'QR Error';
+            }
+        }
+    }, 100);
 }
 
 async function sendVerificationEmailCode() {
@@ -414,104 +476,6 @@ function togglePasswordVisibility(inputId, iconElement) {
     iconElement.textContent = isHidden ? '🙈' : '👁️';
 }
 
-async function validateRegister() {
-    const email = document.getElementById('regEmail').value.trim();
-    const pass = document.getElementById('regPass').value.trim();
-    const code = document.getElementById('regCode').value.trim();
-    const chosenPlan = localStorage.getItem('selected_plan') || 'Standard';
-    const fallbackPlanPrice = { Standard: '95', Pro: '150', Premium: '280' };
-    const chosenPrice = Number(localStorage.getItem('selected_price') || fallbackPlanPrice[chosenPlan] || '95');
-    const err = document.getElementById('errorContainer');
-
-    if (!paymentUnlocked || !paymentAccessToken) {
-        err.innerHTML = `<div class="error-toast"><span>⚠️</span><span>Сначала завершите оплату тарифа.</span></div>`;
-        return;
-    }
-    if(!email || !pass || !code) { err.innerHTML = `<div class="error-toast"><span>⚠️</span><span>Заполните все поля!</span></div>`; return; }
-    const res = await fetch('/api/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            username: email.split('@')[0],
-            email,
-            password: pass,
-            code,
-            plan: chosenPlan,
-            activation_price: chosenPrice,
-            client_session_id: clientSessionId,
-            payment_token: paymentAccessToken,
-            fingerprint: deviceFingerprint
-        })
-    });
-    if(res.ok) {
-        clearPaymentAccess();
-        err.innerHTML = `<div class="error-toast" style="background:#122218; border-color:#00d95f; color:#88ffaa;"><span>✅</span><span>Успешно! Вход...</span></div>`;
-        setTimeout(() => openModal('login'), 1200);
-    } else {
-        const r = await res.json();
-        err.innerHTML = `<div class="error-toast"><span>⚠️</span><span>${r.detail}</span></div>`;
-    }
-}
-
-// Генерация модального окна оплаты с QR-кодом и уникальной суммой
-function openPaymentModal(chosenPlan, basePrice) {
-    const modal = document.getElementById('authModal');
-    const container = document.getElementById('modalContainer');
-    modal.classList.add('show');
-
-    const planLabel = PLAN_LABELS[chosenPlan] || chosenPlan;
-    const walletAddress = "0x5e5316Dea1c44d220d4c60A5fcC2949E5A06Fc66";
-    // Уникальный хвост копеек для защиты от пересечения платежей
-    const displayAmount = (basePrice + 0.47).toFixed(2);
-
-    container.innerHTML = `
-        <div class="modal-logo">
-            <span>💳 Оплата: ${planLabel}</span>
-            <span onclick="closeAuthModal()" style="cursor: pointer; color: #b19cd9; font-size: 20px;">✕</span>
-        </div>
-        <div class="modal-desc">Переведите точную сумму в USDT / ETH на публичный кошелек:</div>
-        
-        <div style="background:#07050c; border:1px solid rgba(157,78,221,0.35); border-radius:14px; padding:14px; margin-bottom:12px; text-align:center;">
-            <div style="font-size:12px; color:#b19cd9; margin-bottom:4px;">Сумма к оплате (с уникальным хвостом):</div>
-            <div style="font-size:24px; color:#e0aaff; font-weight:800; margin-bottom:10px;">$${displayAmount}</div>
-            
-            <div style="font-size:11px; color:#b19cd9; margin-bottom:4px;">Адрес кошелька:</div>
-            <div style="background:#120c22; padding:8px 10px; border-radius:8px; font-family:monospace; font-size:12px; color:#fff; word-break:break-all; margin-bottom:8px;">${walletAddress}</div>
-            
-            <div style="display:flex; gap:8px; justify-content:center; margin-bottom:12px;">
-                <button type="button" class="btn-dark-sm" onclick="navigator.clipboard.writeText('${walletAddress}'); alert('Кошелек скопирован!');">📋 Копировать адрес</button>
-            </div>
-            
-            <div id="qrcodeContainer" style="display:flex; justify-content:center; margin:10px 0; background:#fff; padding:10px; border-radius:8px; width:140px; margin-left:auto; margin-right:auto;"></div>
-        </div>
-
-        <div class="input-group">
-            <label style="font-size: 11px; color: #b19cd9; display: block; margin-bottom: 4px;">TXID (хэш транзакции после перевода)</label>
-            <input type="text" class="auth-input" placeholder="0x..." id="txidInput">
-        </div>
-
-        <button type="button" id="paymentActionBtn" class="btn-modal-primary" onclick="startPlanPayment()">Подтвердить перевод ($${displayAmount})</button>
-        <div id="paymentStatusContainer"></div>
-    `;
-
-    // Генерация динамического QR-кода
-    setTimeout(() => {
-        const qrEl = document.getElementById('qrcodeContainer');
-        if (qrEl && window.qrcode) {
-            try {
-                qrEl.innerHTML = '';
-                const qr = qrcode(0, 'M');
-                qr.addData(`ethereum:${walletAddress}?value=${displayAmount}`);
-                qr.make();
-                qrEl.innerHTML = qr.createSvgTag({cellSize: 4, margin: 2});
-            } catch(e) {
-                qrEl.innerHTML = '<span style="font-size:10px; color:#000;">QR Error</span>';
-            }
-        }
-    }, 100);
-}
-
-// Отправка и проверка платежа по TXID на бэкенд
 async function startPlanPayment() {
     const chosenPlan = localStorage.getItem('selected_plan') || 'Standard';
     const basePrice = PLAN_PRICES[chosenPlan] || 95;
@@ -566,28 +530,59 @@ async function startPlanPayment() {
     }
 }
 
+async function validateRegister() {
+    const email = document.getElementById('regEmail').value.trim();
+    const pass = document.getElementById('regPass').value.trim();
+    const code = document.getElementById('regCode').value.trim();
+    const chosenPlan = localStorage.getItem('selected_plan') || 'Standard';
+    const fallbackPlanPrice = { Standard: '95', Pro: '150', Premium: '280' };
+    const chosenPrice = Number(localStorage.getItem('selected_price') || fallbackPlanPrice[chosenPlan] || '95');
+    const err = document.getElementById('errorContainer');
+
+    if (!paymentUnlocked || !paymentAccessToken) {
+        err.innerHTML = `<div class="error-toast"><span>⚠️</span><span>Сначала завершите оплату тарифа.</span></div>`;
+        return;
+    }
+    if(!email || !pass || !code) { err.innerHTML = `<div class="error-toast"><span>⚠️</span><span>Заполните все поля!</span></div>`; return; }
+    const res = await fetch('/api/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            username: email.split('@')[0],
+            email,
+            password: pass,
+            code,
+            plan: chosenPlan,
+            activation_price: chosenPrice,
+            client_session_id: clientSessionId,
+            payment_token: paymentAccessToken,
+            fingerprint: deviceFingerprint
+        })
+    });
+    if(res.ok) {
+        clearPaymentAccess();
+        err.innerHTML = `<div class="error-toast" style="background:#122218; border-color:#00d95f; color:#88ffaa;"><span>✅</span><span>Успешно! Вход...</span></div>`;
+        setTimeout(() => openModal('login'), 1200);
+    } else {
+        const r = await res.json();
+        err.innerHTML = `<div class="error-toast"><span>⚠️</span><span>${r.detail}</span></div>`;
+    }
+}
+
 async function validateLogin() {
     const email = document.getElementById('loginEmail').value.trim();
     const pass = document.getElementById('loginPass').value.trim();
     const err = document.getElementById('loginErrorContainer');
     const username = email.split('@')[0];
-    pendingLoginCredentials = { username, password: pass, fingerprint: deviceFingerprint };
     const res = await fetch('/api/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(pendingLoginCredentials)
+        body: JSON.stringify({ username, password: pass, fingerprint: deviceFingerprint })
     });
     const data = await res.json();
     if(res.ok) {
         localStorage.setItem('airdrop_username', username);
         userPlan = data.plan || 'Standard';
-        renewalPrice = data.renewal_price || 50;
-        if (data.status === 'expired') {
-            subscriptionStatus = 'expired';
-            subscriptionDaysLeft = 0;
-            openModal('expired');
-            return;
-        }
         subscriptionStatus = 'active';
         subscriptionDaysLeft = data.days_left ?? 30;
         handleLoginSuccess();
@@ -596,82 +591,13 @@ async function validateLogin() {
     }
 }
 
-async function renewSubscriptionFromExpiredModal() {
-    const msg = document.getElementById('expiredMsgContainer');
-    const username = pendingLoginCredentials?.username || localStorage.getItem('airdrop_username') || 'Robert';
-    const res = await fetch('/api/subscription/renew', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username })
-    });
-    const data = await res.json();
-    if (!res.ok) {
-        msg.innerHTML = `<div class="error-toast"><span>⚠️</span><span>${data.detail || 'Ошибка продления подписки'}</span></div>`;
-        return;
-    }
-
-    msg.innerHTML = `<div class="error-toast" style="background:#122218; border-color:#00d95f; color:#88ffaa;"><span>✅</span><span>Подписка продлена. Выполняем вход...</span></div>`;
-    subscriptionStatus = 'active';
-    subscriptionDaysLeft = data.days_left ?? 30;
-
-    if (!pendingLoginCredentials) {
-        setTimeout(() => openModal('login'), 900);
-        return;
-    }
-
-    const loginRes = await fetch('/api/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(pendingLoginCredentials)
-    });
-    const loginData = await loginRes.json();
-    if (loginRes.ok && loginData.status === 'success') {
-        localStorage.setItem('airdrop_username', pendingLoginCredentials.username);
-        userPlan = loginData.plan || 'Standard';
-        renewalPrice = loginData.renewal_price || 50;
-        subscriptionStatus = 'active';
-        subscriptionDaysLeft = loginData.days_left ?? 30;
-        handleLoginSuccess();
-    } else {
-        msg.innerHTML = `<div class="error-toast"><span>⚠️</span><span>Подписка продлена, но вход нужно повторить вручную.</span></div>`;
-        setTimeout(() => openModal('login'), 1200);
-    }
-}
-
-async function renewSubscriptionFromPanel() {
-    const username = localStorage.getItem('airdrop_username') || 'Robert';
-    const res = await fetch('/api/subscription/renew', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username })
-    });
-    const data = await res.json();
-    if (res.ok) {
-        renewalPrice = data.renewal_price || 50;
-        subscriptionStatus = 'active';
-        subscriptionDaysLeft = data.days_left ?? 30;
-        renderDashboardContent(currentSection);
-    }
-}
-
-async function submitRecovery() {
-    const email = document.getElementById('recoveryEmail').value.trim();
-    const msg = document.getElementById('recoveryMsgContainer');
-    if (!email) { msg.innerHTML = `<div class="error-toast"><span>⚠️</span><span>Введите email!</span></div>`; return; }
-    await fetch('/api/recover', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email })
-    });
-    msg.innerHTML = `<div class="error-toast" style="background:#122218; border-color:#00d95f; color:#88ffaa;"><span>✅</span><span>Если аккаунт найден, инструкции отправлены на почту.</span></div>`;
-}
-
 function handleLoginSuccess() {
     isLoggedIn = true;
     document.getElementById('authModal').classList.remove('show');
     document.getElementById('main-content').style.display = 'none';
     document.getElementById('dashboard-content').style.display = 'flex';
-    document.getElementById('mobileNavBar').style.display = 'flex';
+    const mobileNav = document.getElementById('mobileNavBar');
+    if(mobileNav) mobileNav.style.display = 'flex';
     renderDashboard('Looter');
 }
 
@@ -807,6 +733,30 @@ function renderDashboardContent(section) {
                 <div id="farm-console-logs" style="margin-top: 15px; background: #07050c; padding: 14px; border-radius: 14px; font-family: monospace; font-size: 12px; color: #00d95f; max-height: 160px; overflow-y: auto;">Ожидание...</div>
             </div>
         `;
+    } else if (section === 'Networks') {
+        const networksHtml = NETWORKS_CONFIG.map(net => `
+            <div class="network-row">
+                <div class="network-info">
+                    <div class="network-icon">${net.icon}</div>
+                    <div class="network-details">
+                        <div>${net.name} <span style="font-size: 11px; color: #c77dff;">(${net.symbol})</span></div>
+                        <div>${net.address}</div>
+                    </div>
+                </div>
+                <div class="network-actions">
+                    <button class="net-action-btn" title="Копировать адрес" onclick="copyWalletAddress('${net.address}', this)">📋</button>
+                    <button class="net-action-btn" title="Показать QR-код" onclick="openNetworkQRModal('${net.name}', '${net.address}', '${net.explorer}')">🔲</button>
+                </div>
+            </div>
+        `).join('');
+
+        centerHtml = `
+            <div style="background: #100a1c; border: 1px solid rgba(157,78,221,0.3); border-radius: 20px; padding: 20px;">
+                <h3 style="color: #fff; margin-top: 0; margin-bottom: 6px;">🌐 Сети & Адреса мастер-кошелька</h3>
+                <p style="color: #b19cd9; font-size: 13px; margin-bottom: 20px;">Ваши публичные адреса во всех поддерживаемых блокчейнах.</p>
+                <div>${networksHtml}</div>
+            </div>
+        `;
     } else if (section === 'Wallets') {
         centerHtml = `
             <div style="background: #100a1c; border: 1px solid rgba(157,78,221,0.3); border-radius: 20px; padding: 20px; margin-bottom: 16px;">
@@ -849,6 +799,24 @@ function renderDashboardContent(section) {
                 ${schedulerLocked ? `<div style="color: #ff88aa; font-size: 12px;">${t.schedulerLockedText}</div>` : ''}
             </div>
         `;
+    } else if (section === 'Billing') {
+        centerHtml = `
+            <div style="background: #100a1c; border: 1px solid rgba(157,78,221,0.3); border-radius: 20px; padding: 20px;">
+                <h3 style="color: #fff; margin-top: 0;">💳 Управление подпиской и тарифами</h3>
+                <p style="color: #b19cd9; font-size: 13px;">Ваш текущий тариф: <b>${userPlan}</b></p>
+                <p style="color: #b19cd9; font-size: 13px;">Статус: <span style="color: #00d95f;">Активна (${subscriptionDaysLeft} дн. осталось)</span></p>
+                <div style="display: flex; gap: 10px; margin-top: 15px;">
+                    <button type="button" onclick="openPricingModal()" class="btn-purple-lg" style="width: auto; padding: 10px 18px; font-size: 13px;">Сменить / Улучшить тариф</button>
+                </div>
+            </div>
+        `;
+    } else if (section === 'Settings') {
+        centerHtml = `
+            <div style="background: #100a1c; border: 1px solid rgba(157,78,221,0.3); border-radius: 20px; padding: 20px;">
+                <h3 style="color: #fff; margin-top: 0;">🔒 Настройки профиля</h3>
+                <p style="color: #b19cd9; font-size: 13px;">Расширенные параметры безопасности и привязка аккаунтов.</p>
+            </div>
+        `;
     } else {
         centerHtml = `<div style="background: #100a1c; border: 1px solid rgba(157,78,221,0.3); border-radius: 20px; padding: 20px;"><h3 style="color:#fff; margin-top:0;">Раздел в разработке</h3></div>`;
     }
@@ -859,13 +827,29 @@ function renderDashboardContent(section) {
                 <div style="font-weight: bold; color: #fff;">${username}</div>
                 <div style="font-size: 11px; color: #c77dff;">Тариф: ${userPlan}</div>
                 <div style="font-size: 11px; color: ${subscriptionStatus === 'expired' ? '#ff88aa' : '#00d95f'}; margin-top: 6px;">Подписка: ${subscriptionStatus === 'expired' ? 'Истекла' : `Активна (${subscriptionDaysLeft} дн.)`}</div>
-                <button type="button" onclick="renewSubscriptionFromPanel()" class="btn-dark-lg" style="margin-top: 10px; width: 100%; padding: 8px 10px; font-size: 12px;">Продлить подписку ($50)</button>
             </div>
+
             <div style="background: #100a1c; border: 1px solid rgba(157,78,221,0.3); border-radius: 16px; padding: 10px; display: flex; flex-direction: column; gap: 4px;">
                 <div class="sidebar-menu-item ${section === 'Looter' ? 'active' : ''}" onclick="switchMenu(this, 'Looter')">📦 Looter</div>
                 <div class="sidebar-menu-item ${section === 'Farming' ? 'active' : ''}" onclick="switchMenu(this, 'Farming')">🌾 Фарминг</div>
                 <div class="sidebar-menu-item ${section === 'Wallets' ? 'active' : ''}" onclick="switchMenu(this, 'Wallets')">👥 Кошельки</div>
-                <div class="sidebar-menu-item ${section === 'Tasks' ? 'active' : ''}" onclick="switchMenu(this, 'Tasks')">⚡ ${t.tasksMenu}</div>
+                <div class="sidebar-menu-item ${section === 'Networks' ? 'active' : ''}" onclick="switchMenu(this, 'Networks')">🌐 Сети & Адреса</div>
+                <div class="sidebar-menu-item ${section === 'Tasks' ? 'active' : ''}" onclick="switchMenu(this, 'Tasks')">⚡ Активные задачи</div>
+            </div>
+
+            <div style="background: #100a1c; border: 1px solid rgba(157,78,221,0.3); border-radius: 16px; padding: 10px; display: flex; flex-direction: column; gap: 4px; margin-top: auto;">
+                <div style="font-size: 10px; color: #7b68ee; text-transform: uppercase; padding: 4px 8px; font-weight: bold;">Премиум & Настройки</div>
+                
+                <div class="tooltip-container">
+                    <div class="sidebar-menu-item" style="opacity: ${userPlan === 'Standard' ? '0.5' : '1'}; width: 100%; cursor: ${userPlan === 'Standard' ? 'not-allowed' : 'pointer'};" ${userPlan === 'Standard' ? '' : `onclick="switchMenu(this, 'Settings')"`}>
+                        🔒 Настройки профиля
+                    </div>
+                    <span class="tooltip-text">Функция доступна на PRO Фермер / Premium VIP. Приобретите апгрейд.</span>
+                </div>
+
+                <div class="sidebar-menu-item ${section === 'Billing' ? 'active' : ''}" onclick="switchMenu(this, 'Billing')">
+                    💳 Биллинг и Тарифы
+                </div>
             </div>
         </div>
         <div style="flex: 1; display: flex; flex-direction: column; gap: 16px; min-width: 0;">${centerHtml}</div>
@@ -878,4 +862,74 @@ async function startScanningDrops() {
     const res = await fetch(`/api/scan/${username}`, { method: 'POST' });
     const data = await res.json();
     log.innerHTML += `<br><span style="color: #00d95f;">✅ Просканировано кошельков: ${data.data.total_wallets_scanned}. Найдено дропов: ${data.data.found_drops.length}</span>`;
+}
+
+function switchMobileNav(sectionName, btnElement) {
+    document.querySelectorAll('.mobile-nav-item').forEach(btn => btn.classList.remove('active'));
+    if(btnElement) btnElement.classList.add('active');
+    renderDashboardContent(sectionName);
+}
+
+function openBottomSheetMenu() {
+    const overlay = document.getElementById('bottomSheetOverlay');
+    const container = document.getElementById('sheetMenuItemsContainer');
+    if(!overlay || !container) return;
+
+    container.innerHTML = `
+        <div class="sidebar-menu-item" onclick="closeBottomSheet(); switchMenu(null, 'Networks')">🌐 Сети & Адреса</div>
+        <div class="sidebar-menu-item" onclick="closeBottomSheet(); switchMenu(null, 'Billing')">💳 Биллинг и Тарифы</div>
+        <div class="sidebar-menu-item" onclick="closeBottomSheet(); switchMenu(null, 'Settings')">🔒 Настройки профиля</div>
+        <div class="sidebar-menu-item" style="color:#ff88aa;" onclick="closeBottomSheet(); returnToMainSite()">🚪 Выйти из аккаунта</div>
+    `;
+    overlay.classList.add('show');
+}
+
+function closeBottomSheet() {
+    const overlay = document.getElementById('bottomSheetOverlay');
+    if(overlay) overlay.classList.remove('show');
+}
+
+function handleSheetOverlayClick(event) {
+    if(event.target.id === 'bottomSheetOverlay') closeBottomSheet();
+}
+
+function toggleFaq(item) {
+    item.classList.toggle('active');
+}
+async function recoverSessionByTxid() {
+    const txidInput = document.getElementById('txidInput');
+    const status = document.getElementById('paymentStatusContainer');
+    const txid = txidInput ? txidInput.value.trim() : '';
+
+    if (!txid) {
+        status.innerHTML = `<div class="error-toast" style="position: static; margin-top: 10px;"><span>⚠️</span><span>Введите ваш старый TXID для восстановления!</span></div>`;
+        return;
+    }
+
+    status.innerHTML = `<div class="error-toast" style="position: static; margin-top: 10px; background:#101827; border-color:#4f46e5; color:#c7d2fe;"><span>⏳</span><span>Проверка транзакции в сети...</span></div>`;
+
+    try {
+        const res = await fetch('/api/payment/recover', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ txid, client_session_id: clientSessionId })
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+            status.innerHTML = `<div class="error-toast" style="position: static; margin-top: 10px;"><span>⚠️</span><span>${data.detail || 'Транзакция не найдена'}</span></div>`;
+            return;
+        }
+
+        paymentUnlocked = true;
+        paymentAccessToken = data.payment_token;
+        sessionStorage.setItem('ax_payment_token', paymentAccessToken);
+        sessionStorage.setItem('ax_paid_session_id', clientSessionId);
+        sessionStorage.setItem('ax_paid_plan', data.plan || 'Standard');
+
+        status.innerHTML = `<div class="error-toast" style="position: static; margin-top: 10px; background:#122218; border-color:#00d95f; color:#88ffaa;"><span>✅</span><span>Доступ восстановлен! Переход к регистрации...</span></div>`;
+        setTimeout(() => openModal('register'), 1000);
+    } catch (e) {
+        status.innerHTML = `<div class="error-toast" style="position: static; margin-top: 10px;"><span>⚠️</span><span>Ошибка связи с сервером.</span></div>`;
+    }
 }
