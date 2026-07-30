@@ -7,6 +7,7 @@ import secrets
 import uuid
 from email.message import EmailMessage
 
+from fastapi.staticfiles import StaticFiles
 from fastapi import FastAPI, Depends, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
@@ -72,7 +73,7 @@ def ensure_schema_columns():
 ensure_schema_columns()
 
 app = FastAPI(title="AIRDROP-X Backend API")
-
+app.mount("/static", StaticFiles(directory="."), name="static")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
