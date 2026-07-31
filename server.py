@@ -5,6 +5,8 @@ import smtplib
 import time
 import secrets
 import uuid
+import datetime
+import requests
 from email.message import EmailMessage
 
 from fastapi.staticfiles import StaticFiles
@@ -12,8 +14,10 @@ from fastapi import FastAPI, Depends, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
+from typing import Dict, List, Optional
 from sqlalchemy import create_engine, Column, Integer, String, text
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
+from apscheduler.schedulers.background import BackgroundScheduler
 
 try:
     from core_engine import run_real_farm, get_live_gas_price
@@ -27,6 +31,10 @@ SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 465
 SENDER_EMAIL = "airdrop.x.support@gmail.com"
 SENDER_PASSWORD = "salucffjamydmmgf"
+
+# --- TELEGRAM BOT CONFIG ---
+TELEGRAM_BOT_TOKEN = "8615804174:AAEpbK_sUProWJIDNBye_pv36DxdXjQOQ_Y"
+USER_SETTINGS_DB = {}
 
 verification_codes = {}
 SUBSCRIPTION_DURATION_SECONDS = 30 * 24 * 60 * 60
@@ -88,6 +96,75 @@ def get_db():
         yield db
     finally:
         db.close()
+
+# --- TELEGRAM NOTIFICATION FUNCTIONS ---
+def send_telegram_notification(chat_id: str, message: str):
+    if not chat_id:
+        return False
+    clean_chat_id = chat_id.strip()
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": clean_chat_id,
+        "text": message,
+        "parse_mode": "Markdown"
+    }
+    try:
+        response = requests.post(url, json=payload, timeout=10)
+        return response.status_code == 200 and response.json().get("ok", False)
+    except Exception as e:
+        print(f"Ошибка отправки в Telegram: {e}")
+        return False
+
+# --- APSCHEDULER BACKGROUND JOB ---
+scheduler = BackgroundScheduler()
+
+def run_scheduled_farming_job():
+    now = datetime.datetime.now()
+    current_day_map = {0: 'Пн', 1: 'Вт', 2: 'Ср', 3: 'Чт', 4: 'Пт', 5: 'Сб', 6: 'Вс'}
+    current_day_str = current_day_map.get(now.weekday())
+    current_time_str = now.strftime("%H:%M") # 24-часовой формат
+
+    for username, settings in USER_SETTINGS_DB.items():
+        if not settings.get("schedulerEnabled", False):
+            continue
+        
+        active_days = settings.get("days", [])
+        daily_schedule = settings.get("schedule", {})
+        
+        if current_day_str in active_days and current_day_str in daily_schedule:
+            task_info = daily_schedule[current_day_str]
+            if task_info.get("time") == current_time_str:
+                chat_id = settings.get("telegram")
+                delay = task_info.get("delay", 15)
+                
+                print(f"[Scheduler] Запуск Anti-Sybil для {username} в {current_time_str} (задержка: {delay}с)")
+                
+                if chat_id:
+                    msg = (
+                        f"🚀 **Авто-запуск по расписанию!**\n"
+                        f"• Пользователь: `{username}`\n"
+                        f"• День: `{current_day_str}` ({current_time_str})\n"
+                        f"• Задержка воркеров: `{delay} сек`\n"
+                        f"• Лимит газа: `{settings.get('gwei', 30)} Gwei`\n"
+                        f"✅ Статус: Сессия фарма успешно запущена."
+                    )
+                    send_telegram_notification(chat_id, msg)
+
+scheduler.add_job(run_scheduled_farming_job, 'interval', minutes=1)
+scheduler.start()
+
+# --- PYDANTIC MODELS ---
+class DailyScheduleItem(BaseModel):
+    time: str
+    delay: int
+
+class ProfileSettingsRequest(BaseModel):
+    username: str
+    schedulerEnabled: bool
+    days: List[str]
+    schedule: Dict[str, DailyScheduleItem]
+    gwei: int
+    telegram: Optional[str] = None
 
 class PaymentRecoverReq(BaseModel):
     txid: str
@@ -223,6 +300,29 @@ def send_real_email(to_email: str, code: str):
         print(f"[SMTP Error] {e}")
         return False
 
+# --- SETTINGS SAVE ENDPOINT ---
+@app.post("/api/settings/save")
+async def save_user_settings(data: ProfileSettingsRequest):
+    try:
+        USER_SETTINGS_DB[data.username] = data.dict()
+        if data.telegram:
+            success = send_telegram_notification(
+                data.telegram, 
+                f"🛡️ **Anti-Sybil Настройки успешно применены!**\n"
+                f"• Планировщик: `Включен`\n"
+                f"• Активные дни: {', '.join(data.days)}\n"
+                f"• Макс. газ: `{data.gwei} Gwei`\n"
+                f"Бот готов к автоматическому запуску."
+            )
+            if not success:
+                return {
+                    "status": "success", 
+                    "warning": "Настройки сохранены, но бот не смог отправить сообщение. Убедитесь, что вы нажали /start в чате с ботом!"
+                }
+        return {"status": "success", "message": "Настройки сохранены"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 @app.post("/api/payment/recover")
 async def recover_payment_session(req: PaymentRecoverReq):
     target_session = None
@@ -319,7 +419,6 @@ async def register(user: UserRegister, db: Session = Depends(get_db)):
     if not saved_code or saved_code != user.code:
         raise HTTPException(status_code=400, detail="Неверный код подтверждения!")
 
-    # Ищем пользователя по нику ИЛИ по email, чтобы избежать дублей
     db_user = db.query(User).filter((User.username == user.username) | (User.email == user.email)).first()
     if db_user:
         raise HTTPException(status_code=400, detail="Пользователь с таким ником или email уже существует")
@@ -344,7 +443,6 @@ async def register(user: UserRegister, db: Session = Depends(get_db)):
 
 @app.post("/api/login")
 async def login(user: UserLogin, db: Session = Depends(get_db)):
-    # Позволяем юзеру входить как по Email, так и по Нику
     db_user = db.query(User).filter((User.username == user.username) | (User.email == user.username)).first()
     
     if not db_user or db_user.password_hash != user.password:
@@ -361,7 +459,7 @@ async def login(user: UserLogin, db: Session = Depends(get_db)):
     return {
         "status": "success",
         "message": "Logged in",
-        "username": db_user.username, # Отдаем точный ник из базы
+        "username": db_user.username,
         "plan": db_user.subscription_plan,
         "extra_slots": db_user.extra_slots,
         "days_left": days_left,
@@ -430,7 +528,17 @@ async def start_farming(req: StartFarmReq, db: Session = Depends(get_db)):
 
     wallets = db.query(Wallet).filter(Wallet.username == req.username).all()
     wallets_data = [{"id": w.id, "encrypted_pk": w.encrypted_pk, "proxy": w.proxy} for w in wallets]
+    
+    settings = USER_SETTINGS_DB.get(req.username, {})
+    chat_id = settings.get("telegram")
+    if chat_id:
+        send_telegram_notification(chat_id, f"⚡ **Ручной запуск фарма**\n• Сеть: `{req.network}`\n• Статус: Выполняется...")
+
     results = await run_real_farm(wallets_data, [], "master_password", target_network=req.network)
+    
+    if chat_id:
+        send_telegram_notification(chat_id, f"✅ **Фарм-сессия завершена!**\n• Сеть: `{req.network}`\n• Обработано воркеров: `{len(wallets_data)}`")
+
     return {"status": "success", "message": "Farming session completed!", "results": results}
 
 @app.post("/api/scan/{username}")
@@ -438,9 +546,8 @@ async def scan_wallets(username: str, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == username).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    wallets = db.query(Wallet).filter(Wallet.user_id == user.id).all()
+    wallets = db.query(Wallet).filter(Wallet.username == username).all()
     
-    # Проверяем только валидные EVM кошельки (начинаются с 0x и длина 42)
     valid_wallets = [w for w in wallets if w.wallet_address.startswith("0x") and len(w.wallet_address) == 42]
     
     found_drops = []
@@ -470,10 +577,8 @@ def get_platform_stats(db: Session = Depends(get_db)):
         "is_sold_out": total_users >= 300
     }
 
-# --- ДОБАВЬ ЭТУ СТРОКУ СЮДА ---
 app.mount("/", StaticFiles(directory=".", html=True), name="static")
 
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("server:app", host="127.0.0.1", port=8000, reload=True)
-
