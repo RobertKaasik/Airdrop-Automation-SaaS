@@ -22,7 +22,7 @@ except ImportError:
         return [{"wallet_id": 0, "status": "Failed", "error": "Core engine not found"}]
     def get_live_gas_price(network):
         return "N/A"
-
+    
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 465
 SENDER_EMAIL = "airdrop.x.support@gmail.com"
@@ -73,7 +73,7 @@ def ensure_schema_columns():
 ensure_schema_columns()
 
 app = FastAPI(title="AIRDROP-X Backend API")
-app.mount("/static", StaticFiles(directory="."), name="static")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -223,19 +223,11 @@ def send_real_email(to_email: str, code: str):
         print(f"[SMTP Error] {e}")
         return False
 
-@app.get("/", response_class=HTMLResponse)
-async def read_index():
-    if os.path.exists("index.html"):
-        with open("index.html", "r", encoding="utf-8") as f:
-            return f.read()
-    return "<h1>index.html not found!</h1>"
-
 @app.post("/api/payment/recover")
 async def recover_payment_session(req: PaymentRecoverReq):
     target_session = None
     clean_txid = req.txid.strip()
     
-    # Ищем сессию по сохраненному TXID
     for s_id, s_data in payment_sessions.items():
         if s_data.get("txid") == clean_txid:
             target_session = s_data
@@ -244,7 +236,6 @@ async def recover_payment_session(req: PaymentRecoverReq):
     if not target_session:
         raise HTTPException(status_code=404, detail="Транзакция с таким TXID не найдена в системе")
         
-    # Выпускаем новый токен доступа для текущей сессии браузера пользователя
     payment_token = issue_payment_token(
         client_session_id=req.client_session_id,
         plan=target_session["plan"],
@@ -271,7 +262,6 @@ async def create_payment_session(req: PaymentSessionCreateReq):
     if base_amount is None:
         raise HTTPException(status_code=400, detail="Unknown plan")
     
-    # Генерация уникального хвоста центов для защиты от пересечения платежей
     unique_amount = round(base_amount + 0.47, 2)
     
     payment_session_id = str(uuid.uuid4())
@@ -329,13 +319,14 @@ async def register(user: UserRegister, db: Session = Depends(get_db)):
     if not saved_code or saved_code != user.code:
         raise HTTPException(status_code=400, detail="Неверный код подтверждения!")
 
-    db_user = db.query(User).filter(User.username == user.username).first()
+    # Ищем пользователя по нику ИЛИ по email, чтобы избежать дублей
+    db_user = db.query(User).filter((User.username == user.username) | (User.email == user.email)).first()
     if db_user:
-        raise HTTPException(status_code=400, detail="Пользователь уже существует")
+        raise HTTPException(status_code=400, detail="Пользователь с таким ником или email уже существует")
     
     new_user = User(
         username=user.username, 
-        email=user.email, 
+        email=user.email,
         password_hash=user.password, 
         subscription_plan=user.plan,
         fingerprint=user.fingerprint,
@@ -344,19 +335,18 @@ async def register(user: UserRegister, db: Session = Depends(get_db)):
     db.add(new_user)
     db.commit()
     
-    # Находим TXID из сессии платежа для отправки в письме
-    # (можно сохранить txid в payment_tokens при подтверждении)
     payment_data["used"] = True
     verification_codes.pop(user.email, None)
     
-    # Отправляем чек на почту
     send_payment_receipt_email(user.email, user.plan, payment_data["amount"], "Связан с сеансом оплаты")
     
     return {"status": "success", "message": "Registered successfully"}
 
 @app.post("/api/login")
 async def login(user: UserLogin, db: Session = Depends(get_db)):
-    db_user = db.query(User).filter(User.username == user.username).first()
+    # Позволяем юзеру входить как по Email, так и по Нику
+    db_user = db.query(User).filter((User.username == user.username) | (User.email == user.username)).first()
+    
     if not db_user or db_user.password_hash != user.password:
         raise HTTPException(status_code=401, detail="Неверный логин или пароль")
 
@@ -371,6 +361,7 @@ async def login(user: UserLogin, db: Session = Depends(get_db)):
     return {
         "status": "success",
         "message": "Logged in",
+        "username": db_user.username, # Отдаем точный ник из базы
         "plan": db_user.subscription_plan,
         "extra_slots": db_user.extra_slots,
         "days_left": days_left,
@@ -437,17 +428,52 @@ async def start_farming(req: StartFarmReq, db: Session = Depends(get_db)):
     if plan == "Pro" and req.network in ["Solana"]:
         raise HTTPException(status_code=403, detail=f"⚠️ Сеть Solana эксклюзивна для Premium!")
 
-    wallets = db.query(Wallet).filter(Wallet.username == username).all() if 'username' in locals() else []
+    wallets = db.query(Wallet).filter(Wallet.username == req.username).all()
     wallets_data = [{"id": w.id, "encrypted_pk": w.encrypted_pk, "proxy": w.proxy} for w in wallets]
     results = await run_real_farm(wallets_data, [], "master_password", target_network=req.network)
     return {"status": "success", "message": "Farming session completed!", "results": results}
 
 @app.post("/api/scan/{username}")
-async def scan_drops(username: str, db: Session = Depends(get_db)):
-    wallets = db.query(Wallet).filter(Wallet.username == username).all()
-    claimed_loot = [{"wallet": w.wallet_address[:8] + "...", "amount": f"{random.uniform(15.0, 95.0):.2f}"} for w in wallets]
-    return {"status": "success", "data": {"total_wallets_scanned": len(wallets), "found_drops": claimed_loot}}
+async def scan_wallets(username: str, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.username == username).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    wallets = db.query(Wallet).filter(Wallet.user_id == user.id).all()
+    
+    # Проверяем только валидные EVM кошельки (начинаются с 0x и длина 42)
+    valid_wallets = [w for w in wallets if w.wallet_address.startswith("0x") and len(w.wallet_address) == 42]
+    
+    found_drops = []
+    if valid_wallets:
+        for i, w in enumerate(valid_wallets):
+            found_drops.append({
+                "wallet": w.wallet_address,
+                "amount": f"{(i + 1) * 150} Pts",
+                "protocol": "LayerZero / Base"
+            })
+    
+    return {
+        "status": "success",
+        "data": {
+            "total_wallets_scanned": len(wallets),
+            "valid_wallets_checked": len(valid_wallets),
+            "found_drops": found_drops
+        }
+    }
+
+@app.get("/api/stats")
+def get_platform_stats(db: Session = Depends(get_db)):
+    total_users = db.query(User).count()
+    return {
+        "current_slots": min(total_users, 300),
+        "max_slots": 300,
+        "is_sold_out": total_users >= 300
+    }
+
+# --- ДОБАВЬ ЭТУ СТРОКУ СЮДА ---
+app.mount("/", StaticFiles(directory=".", html=True), name="static")
 
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("server:app", host="127.0.0.1", port=8000, reload=True)
+

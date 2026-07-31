@@ -130,6 +130,16 @@
             <div style="display: flex; flex-direction: column; gap: 14px;">
                 <div style="background: #07050c; padding: 14px; border-radius: 14px; border: 1px solid rgba(0,217,95,0.4);">
                     <div style="font-size: 12px; font-weight: bold; color: #00d95f; margin-bottom: 10px;" id="wm-dep-title">➕ Пополнить баланс воркера:</div>
+                    
+                    <!-- Вывод мастер-кошелька -->
+                    <div style="margin-bottom: 12px;">
+                        <label style="font-size: 10px; color: #b19cd9; display: block; margin-bottom: 4px;">Ваш мастер-кошелек (отсюда спишется газ):</label>
+                        <div style="display: flex; align-items: center; justify-content: space-between; background: #120c22; padding: 6px 10px; border-radius: 8px; border: 1px solid rgba(157,78,221,0.2);">
+                            <span style="font-family: monospace; font-size: 11px; color: #fff;">0x5e5316Dea1c44d220d4c60A5fcC2949E5A06Fc66</span>
+                            <button type="button" class="btn-dark-sm" style="padding: 4px 8px; font-size: 11px;" onclick="copyWalletAddress('0x5e5316Dea1c44d220d4c60A5fcC2949E5A06Fc66', this)">📋</button>
+                        </div>
+                    </div>
+
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
                         <div>
                             <label style="font-size: 10px; color: #b19cd9; display: block; margin-bottom: 2px;" id="wm-net-lbl">Сеть:</label>
@@ -162,7 +172,7 @@
                     <button type="button" onclick="executeWalletUpdate()" class="btn-modal-primary" id="wm-save-btn" style="padding: 10px; font-size: 13px;">💾 Сохранить изменения</button>
                 </div>
 
-                <button type="button" onclick="executeWalletDeleteFromModal()" class="btn-modal-secondary" id="wm-del-btn" style="border-color: rgba(255, 51, 102, 0.5); color: #ff88aa; padding: 10px; font-size: 13px;">🗑️ Удалить кошелек навсегда</button>
+                <button type="button" onclick="executeWalletDeleteFromModal()" class="btn-modal-secondary" id="wm-del-btn" style="border-color: rgba(255, 51, 102, 0.5); color: #ff88aa; padding: 10px; font-size: 13px; background: transparent; border-radius: 14px;">🗑️ Удалить кошелек навсегда</button>
             </div>
             <div id="walletActionMsg" style="margin-top: 10px; font-size: 12px; text-align: center;"></div>
         </div>
@@ -189,12 +199,12 @@
 
         <div style="width: 100%; max-width: 900px; margin: 0 auto; padding: 0 16px;">
             <div class="status-banner">
-                <div class="status-left">
-                    <span>🛡️</span>
-                    <span id="banner-text">Приватное ПО с ограниченным количеством слотов для защиты от детектирования.</span>
-                </div>
-                <div class="status-right">284 / 300 SLOTS</div>
+            <div class="status-left">
+                <span>🛡️ Статус ядра:</span>
+                <span style="color: #22c55e; font-weight: bold;">Защищено / Онлайн</span>
             </div>
+            <div class="status-right" id="slots-counter-text">Приватное ПО с ограниченным количеством слотов. Загрузка...</div>
+        </div>
         </div>
 
         <div id="features-section" class="section-title">Возможности платформы</div>
@@ -298,13 +308,121 @@
         <button class="mobile-nav-item" onclick="openBottomSheetMenu()"><span class="icon">☰</span><span id="mn-more">Ещё</span></button>
     </div>
 
-    <div class="footer">
-        <div>AIRDROP-X © 2026. All rights reserved.</div>
-        <div style="display: flex; gap: 20px; justify-content: center;">
-            <a href="#" style="color: #b19cd9; text-decoration: none;">Telegram</a>
-            <a href="#" style="color: #b19cd9; text-decoration: none;">GitHub</a>
+    <footer class="footer" style="border-top: 1px solid var(--border-color); padding: 24px 20px; display: flex; justify-content: space-between; align-items: center; background: var(--bg-main); color: var(--text-muted); font-size: 13px;">
+    <div>AIRDROP-X © 2026. All rights reserved.</div>
+    <div style="display: flex; gap: 20px; align-items: center;">
+        <span onclick="openLegalModal('privacy')" style="cursor: pointer; transition: 0.2s;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--text-muted)'">Privacy Policy</span>
+        <span onclick="openLegalModal('terms')" style="cursor: pointer; transition: 0.2s;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--text-muted)'">Terms of Use</span>
+        <a href="https://t.me" target="_blank" style="color: var(--text-muted); text-decoration: none; transition: 0.2s;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--text-muted)'">Telegram</a>
+        <a href="https://github.com" target="_blank" style="color: var(--text-muted); text-decoration: none; transition: 0.2s;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--text-muted)'">GitHub</a>
+    </div>
+</footer>
+
+<!-- Модальное окно для юридических документов -->
+<div id="legalModal" class="modal-overlay" onclick="closeLegalModal(event)">
+    <div class="auth-modal" style="max-width: 680px; max-height: 85vh; overflow-y: auto;">
+        <div class="modal-logo">
+            <span id="legalModalTitle" style="font-size: 16px; font-weight: bold; color: #fff;">Документ</span>
+            <span onclick="document.getElementById('legalModal').classList.remove('show')" style="cursor: pointer; color: var(--text-muted); font-size: 18px;">✕</span>
+        </div>
+        <div id="legalModalContent" style="color: var(--text-muted); font-size: 12px; line-height: 1.6;">
+            <!-- Текст подставляется динамически -->
         </div>
     </div>
-    <script src="app.js"></script>
+</div>
+
+<script>
+    function openLegalModal(type) {
+        const modal = document.getElementById('legalModal');
+        const title = document.getElementById('legalModalTitle');
+        const content = document.getElementById('legalModalContent');
+        
+        if (type === 'terms') {
+            title.innerText = 'Terms of Use (Условия использования)';
+            content.innerHTML = `
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">1. Общие положения и акцепт</p>
+                <p style="margin-bottom:12px;">Настоящие Условия использования (далее — «Соглашение») регулируют правоотношения между программным обеспечением Airdrop-X (далее — «Сервис», «Мы») и физическим или юридическим лицом («Пользователь», «Вы»), использующим сайт, программный интерфейс или приобретшим подписку. Начиная использовать Сервис, вы подтверждаете, что ознакомились с настоящим Соглашением и принимаете его в полном объеме.</p>
+                
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">2. Предмет и описание услуг</p>
+                <p style="margin-bottom:12px;">Сервис предоставляет программное обеспечение для автоматизации рутинных операций в децентрализованных сетях (сканирование распределений, клейм токенов, управление мультиаккаунтингом). Функционал доступен в рамках выбранных тарифных подписок (Standard, PRO, Premium).</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">3. Требования к пользователям и регистрация</p>
+                <p style="margin-bottom:12px;">Для использования Сервиса пользователь обязан пройти процедуру регистрации, указав достоверный адрес электронной почты. Вы несете полную ответственность за сохранность учетных данных, пароля и доступов к вашему аккаунту.</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">4. Финансовые условия и оплата</p>
+                <p style="margin-bottom:12px;">Оплата тарифных планов и дополнительных слотов производится в криптовалюте через поддерживаемые блокчейн-сети на указанный мастер-адрес. После подтверждения транзакции и проверки TXID доступ к функционалу активируется автоматически.</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">5. Политика возврата средств (Refund Policy)</p>
+                <p style="margin-bottom:12px;">В связи со спецификой цифровых программных продуктов и блокчейн-индустрии, все платежи за подписки и цифровые лицензии являются окончательными и не подлежат возврату после активации доступа и успешного прохождения транзакции.</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">6. Безопасность кошельков и использование приватных ключей</p>
+                <p style="margin-bottom:12px;">Пользователь самостоятельно несет ответственность за добавление приватных ключей воркеров. Администрация настоятельно рекомендует использовать пустые или вспомогательные кошельки (burner wallets) для автоматизации, не храня на них критически важные сбережения.</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">7. Запрещенные виды деятельности</p>
+                <p style="margin-bottom:12px;">Строго запрещается использовать Сервис для хакерских атак, взлома смарт-контрактов, отмывания средств, полученных незаконным путем, а также предпринимать попытки реверс-инжиниринга и взлома серверной архитектуры Airdrop-X.</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">8. Отказ от финансовых гарантий (Disclaimer)</p>
+                <p style="margin-bottom:12px;">Сервис предоставляется по принципу «как есть» (as is). Разработчики не гарантируют получение прибыли, успешный клейм аирдропов и не несут ответственности за блокировки ваших кошельков сторонними проектами или протоколами безопасности (Anti-Sybil).</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">9. Интеллектуальная собственность</p>
+                <p style="margin-bottom:12px;">Все элементы интерфейса, исходный код программного обеспечения, дизайн, логотипы и текстовые материалы являются исключительной собственностью Airdrop-X и защищены законами об авторском праве.</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">10. Ограничение ответственности</p>
+                <p style="margin-bottom:12px;">Администрация ни при каких условиях не несет ответственности за любые прямые или косвенные убытки, возникшие в результате использования или невозможности использования Сервиса.</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">11. Изменение условий соглашения</p>
+                <p style="margin-bottom:12px;">Мы оставляем за собой право в любое время обновлять или изменять настоящее Соглашение. Изменения вступают в силу сразу после их публикации на официальном сайте.</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">12. Контактная информация</p>
+                <p style="margin-bottom:4px;">По всем вопросам, связанным с работой Сервиса или условиями использования, вы можете обратиться через официальные каналы связи или службу поддержки проекта.</p>
+            `;
+        } else {
+            title.innerText = 'Privacy Policy (Политика конфиденциальности)';
+            content.innerHTML = `
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">1. Введение и область применения</p>
+                <p style="margin-bottom:12px;">Настоящая Политика конфиденциальности описывает, как Airdrop-X собирает, использует, хранит и защищает персональные данные пользователей при взаимодействии с нашей платформой.</p>
+                
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">2. Категории собираемой информации</p>
+                <p style="margin-bottom:12px;">Мы собираем минимально необходимый объем данных: адрес электронной почты (для авторизации), выбранный никнейм, данные о транзакциях (TXID подписок), а также технические характеристики устройства и браузера (fingerprint).</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">3. Обработка приватных ключей и прокси</p>
+                <p style="margin-bottom:12px;">Все загружаемые вами приватные ключи воркеров и данные прокси-серверов шифруются на сервере с использованием современных стандартов криптографии. Команда проекта не имеет прямого доступа к вашим средствам.</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">4. Цели сбора и обработки данных</p>
+                <p style="margin-bottom:12px;">Собранная информация используется исключительно для обеспечения работоспособности аккаунта, проверки статуса подписки, авторизации в системе и предотвращения мошеннических действий.</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">5. Использование файлов Cookies и LocalStorage</p>
+                <p style="margin-bottom:12px;">Мы используем локальное хранилище браузера и файлы куки для сохранения пользовательской сессии, выбранного языка интерфейса и токенов безопасности.</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">6. Безопасность и защита информации</p>
+                <p style="margin-bottom:12px;">Мы применяем комплексные технические и организационные меры безопасности (включая SSL-шифрование и защиту от DDoS-атак) для предотвращения несанкционированного доступа к вашим данным.</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">7. Передача данных третьим лицам</p>
+                <p style="margin-bottom:12px;">Ваши персональные данные никогда не продаются, не передаются и не сдаются в аренду сторонним коммерческим компаниям или рекламным брокерам.</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">8. Исключения по запросам правоохранительных органов</p>
+                <p style="margin-bottom:12px;">Мы можем раскрыть информацию о пользователе в исключительных случаях, если этого требует действующее законодательство или официальный запрос уполномоченных органов в рамках расследования киберпреступлений.</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">9. Права пользователя в отношении данных</p>
+                <p style="margin-bottom:12px;">Вы имеете право запросить информацию об имеющихся у нас ваших данных, потребовать их изменения или полного удаления путем обращения в службу поддержки.</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">10. Изменения в политике конфиденциальности</p>
+                <p style="margin-bottom:12px;">Мы вправе периодически обновлять настоящую Политику конфиденциальности. Новая редакция вступает в силу с момента ее публикации на сайте.</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">11. Контакты по вопросам конфиденциальности</p>
+                <p style="margin-bottom:4px;">Если у вас возникли вопросы относительно защиты персональных данных, вы можете связаться с нами через службу поддержки проекта.</p>
+            `;
+        }
+        modal.classList.add('show');
+    }
+
+    function closeLegalModal(e) {
+        if (e.target.id === 'legalModal') {
+            document.getElementById('legalModal').classList.remove('show');
+        }
+    }
+    
+</script>
+<script src="app.js"></script>
 </body>
 </html>
