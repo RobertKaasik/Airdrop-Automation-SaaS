@@ -570,6 +570,7 @@ async function loadWalletsFromDB() {
     if(badge) badge.innerText = `Слоты: ${data.wallets.length} / ${data.max_slots} (${data.plan})`;
     
     if(data.wallets.length > 0) {
+        container.id = 'walletsListContainer';
         container.innerHTML = data.wallets.map(w => {
             const mockBalance = (Math.abs(hashCode(w.wallet_address)) % 1500 + 45).toFixed(2);
             return `
@@ -579,6 +580,7 @@ async function loadWalletsFromDB() {
                         <div style="color: var(--text-muted); font-size: 11px; margin-top:2px;">Баланс: <b style="color:#fff;">$${mockBalance}</b> | Proxy: ${w.proxy || 'Не задан'}</div>
                     </div>
                     <div style="display:flex; gap:6px;">
+                        <button type="button" onclick="testWalletProxy(${w.id}, this)" style="background: rgba(34,197,94,0.1); color: #22c55e; border: 1px solid rgba(34,197,94,0.2); padding: 6px 10px; border-radius: 8px; font-size: 11px; cursor:pointer;">🔍 Проверить</button>
                         <button type="button" onclick="deleteWallet(${w.id})" style="background: rgba(239,68,68,0.1); color: #ef4444; border: 1px solid rgba(239,68,68,0.2); padding: 6px 10px; border-radius: 8px; font-size: 11px; cursor:pointer;">Удалить</button>
                     </div>
                 </div>
@@ -587,6 +589,30 @@ async function loadWalletsFromDB() {
     } else {
         container.innerHTML = `<div style="color: var(--text-muted); font-size: 13px;">Кошельков пока нет.</div>`;
     }
+}
+
+async function testWalletProxy(walletId, btn) {
+    const originalText = btn.innerHTML;
+    btn.innerHTML = '⏳ Проверка...';
+    btn.disabled = true;
+    try {
+        const res = await fetch(`/api/wallets/test-proxy/${walletId}`, { method: 'POST' });
+        const data = await res.json();
+        if (res.ok && data.status === 'success') {
+            showNotification(data.message);
+            btn.innerHTML = '✅ ОК';
+        } else {
+            showNotification(data.message || 'Ошибка проверки прокси', 'error');
+            btn.innerHTML = '❌ Ошибка';
+        }
+    } catch (e) {
+        showNotification('Не удалось подключиться к серверу проверки', 'error');
+        btn.innerHTML = '❌ Сбой';
+    }
+    setTimeout(() => {
+        btn.innerHTML = originalText;
+        btn.disabled = false;
+    }, 3500);
 }
 
 async function deleteWallet(id) {

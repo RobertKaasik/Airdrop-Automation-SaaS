@@ -507,6 +507,44 @@ async def get_wallets(username: str, db: Session = Depends(get_db)):
         "wallets": [{"id": w.id, "wallet_address": w.wallet_address, "proxy": w.proxy} for w in wallets]
     }
 
+import time
+
+@app.post("/api/wallets/test-proxy/{wallet_id}")
+async def test_wallet_proxy(wallet_id: int, db: Session = Depends(get_db)):
+    wallet = db.query(Wallet).filter(Wallet.id == wallet_id).first()
+    if not wallet or not wallet.proxy:
+        raise HTTPException(status_code=404, detail="Кошелек или прокси не найден")
+    
+    proxy_raw = wallet.proxy.strip()
+    # Поддерживаем оба формата: ip:port:login:pass и socks5://login:pass@ip:port
+    parts = proxy_raw.split(':')
+    if len(parts) == 4 and "://" not in proxy_raw:
+        ip, port, user, pwd = parts
+        proxy_url = f"socks5://{user}:{pwd}@{ip}:{port}"
+    else:
+        proxy_url = proxy_raw
+        
+    proxies = {
+        "http": proxy_url,
+        "https": proxy_url
+    }
+    
+    start_time = time.time()
+    try:
+        # Делаем тестовый запрос через прокси к сервису проверки IP
+        resp = requests.get("https://api.ipify.org?format=json", proxies=proxies, timeout=6)
+        ping_ms = int((time.time() - start_time) * 1000)
+        if resp.status_code == 200:
+            external_ip = resp.json().get("ip", "Unknown")
+            return {
+                "status": "success", 
+                "message": f"Прокси рабочий! Пинг: {ping_ms}ms (IP: {external_ip})"
+            }
+        else:
+            return {"status": "error", "message": "Прокси ответил, но с ошибкой"}
+    except Exception as e:
+        return {"status": "error", "message": f"Ошибка соединения: {str(e)}"}
+
 @app.delete("/api/wallets/delete/{wallet_id}")
 async def delete_wallet(wallet_id: int, db: Session = Depends(get_db)):
     wallet = db.query(Wallet).filter(Wallet.id == wallet_id).first()
