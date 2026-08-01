@@ -17,7 +17,7 @@ let codeCooldownTimer = null;
 let codeCooldownSeconds = 0;
 let confirmedRegistrationEmail = "";
 let currentEditingWallet = null;
-let lastSaveTimestamp = 0; // Защита от спама кнопкой сохранения
+let lastSaveTimestamp = 0; 
 
 const PLAN_PRICES = { Standard: 95, Pro: 150, Premium: 280 };
 const PLAN_LABELS = { Standard: 'Standard', Pro: 'PRO Фермер', Premium: 'Premium VIP' };
@@ -28,15 +28,15 @@ let paymentUnlocked = sessionStorage.getItem('ax_paid_session_id') === clientSes
 const MASTER_WALLET = "0x5e5316Dea1c44d220d4c60A5fcC2949E5A06Fc66";
 
 const NETWORKS_CONFIG = [
-    { name: "Ethereum", symbol: "ETH", icon: "Ξ", explorer: "https://etherscan.io", proxyStatus: "Stable (24ms)" },
-    { name: "Base", symbol: "ETH", icon: "🔵", explorer: "https://basescan.org", proxyStatus: "Optimal (14ms)" },
-    { name: "Arbitrum", symbol: "ETH", icon: "🔷", explorer: "https://arbiscan.io", proxyStatus: "Stable (18ms)" },
-    { name: "Linea", symbol: "ETH", icon: "⬛", explorer: "https://lineascan.build", proxyStatus: "Stable (31ms)" },
-    { name: "Solana", symbol: "SOL", icon: "🟣", explorer: "https://solscan.io", proxyStatus: "Optimal (12ms)" },
-    { name: "BNB Chain", symbol: "BNB", icon: "🟡", explorer: "https://bscscan.com", proxyStatus: "Stable (19ms)" },
-    { name: "Polygon", symbol: "POL", icon: "🟣", explorer: "https://polygonscan.com", proxyStatus: "Stable (22ms)" },
-    { name: "Optimism", symbol: "OP", icon: "🔴", explorer: "https://optimistic.etherscan.io", proxyStatus: "Stable (25ms)" },
-    { name: "Tron", symbol: "TRX", icon: "🔴", explorer: "https://tronscan.org", proxyStatus: "Optimal (16ms)" }
+    { name: "Ethereum", symbol: "ETH", key: "Ethereum", icon: '<img src="https://cryptologos.cc/logos/ethereum-eth-logo.svg?v=032" style="width:24px; height:24px;">', explorer: "https://etherscan.io" },
+    { name: "Base", symbol: "ETH", key: "Base", icon: '<img src="https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/base/info/logo.png" style="width:24px; height:24px; border-radius:50%;">', explorer: "https://basescan.org" },
+    { name: "Arbitrum", symbol: "ETH", key: "Arbitrum", icon: '<img src="https://cryptologos.cc/logos/arbitrum-arb-logo.svg?v=032" style="width:24px; height:24px;">', explorer: "https://arbiscan.io" },
+    { name: "Linea", symbol: "ETH", key: "Linea", icon: '<img src="https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/linea/info/logo.png" style="width:24px; height:24px; border-radius:50%;">', explorer: "https://lineascan.build" },
+    { name: "Solana", symbol: "SOL", key: "Solana", icon: '<img src="https://cryptologos.cc/logos/solana-sol-logo.svg?v=032" style="width:24px; height:24px;">', explorer: "https://solscan.io" },
+    { name: "BNB Chain", symbol: "BNB", key: "BNB Chain", icon: '<img src="https://cryptologos.cc/logos/bnb-bnb-logo.svg?v=032" style="width:24px; height:24px;">', explorer: "https://bscscan.com" },
+    { name: "Polygon", symbol: "POL", key: "Polygon", icon: '<img src="https://cryptologos.cc/logos/polygon-matic-logo.svg?v=032" style="width:24px; height:24px;">', explorer: "https://polygonscan.com" },
+    { name: "Optimism", symbol: "OP", key: "Optimism", icon: '<img src="https://cryptologos.cc/logos/optimism-ethereum-op-logo.svg?v=032" style="width:24px; height:24px;">', explorer: "https://optimistic.etherscan.io" },
+    { name: "Tron", symbol: "TRX", key: "Tron", icon: '<img src="https://cryptologos.cc/logos/tron-trx-logo.svg?v=032" style="width:24px; height:24px;">', explorer: "https://tronscan.org" }
 ];
 
 // --- Инициализация при загрузке ---
@@ -52,6 +52,21 @@ window.addEventListener('DOMContentLoaded', () => {
         line.style.width = '60%';
         setTimeout(() => { line.style.width = '100%'; }, 300);
         setTimeout(() => { line.style.opacity = '0'; }, 700);
+    }
+
+    // Автовосстановление сессии и последней открытой вкладки
+    const savedUsername = localStorage.getItem('airdrop_username');
+    if (savedUsername) {
+        isLoggedIn = true;
+        userPlan = localStorage.getItem('selected_plan') || 'Standard';
+        document.getElementById('main-content').style.display = 'none';
+        document.getElementById('dashboard-content').style.display = 'flex';
+        const mobileNav = document.getElementById('mobileNavBar');
+        if(mobileNav) mobileNav.style.display = ''; 
+        
+        // Загружаем ту вкладку, на которой был пользователь (по умолчанию 'Account')
+        currentSection = localStorage.getItem('airdrop_current_section') || 'Account';
+        renderDashboardContent(currentSection);
     }
 });
 
@@ -91,7 +106,6 @@ function hashCode(str) {
     return hash;
 }
 
-// Система красивых уведомлений (Тостов)
 function showNotification(text, type = 'success') {
     let container = document.getElementById('toastNotificationContainer');
     if (!container) {
@@ -113,7 +127,6 @@ function showNotification(text, type = 'success') {
     }, 3500);
 }
 
-// Динамическая подсветка превышения лимитов красным цветом
 function checkInputLimit(input, maxLimit) {
     const val = parseFloat(input.value);
     if (val > maxLimit) {
@@ -156,6 +169,7 @@ function updateStaticText(lang) {
 
 function returnToMainSite() {
     isLoggedIn = false;
+    localStorage.removeItem('airdrop_username'); // Удаляем сохраненную сессию при выходе
     document.getElementById('dashboard-content').style.display = 'none';
     const mobileNav = document.getElementById('mobileNavBar');
     if(mobileNav) mobileNav.style.display = ''; 
@@ -287,7 +301,8 @@ function openModal(type) {
                 
                 <button type="button" id="copyWalletBtn" class="auth-input" style="margin: 0 auto; font-size: 11px; padding: 6px 12px; width:auto; cursor:pointer;" onclick="copyWalletAddress('${MASTER_WALLET}', this)">📋 Копировать адрес</button>
                 
-                <div id="qrcodeContainer" style="display:flex; justify-content:center; align-items:center; margin:10px auto 0 auto; background:#fff; padding:8px; border-radius:8px; width:110px; height:110px; box-sizing:border-box; overflow:hidden;"></div>            </div>
+                <div id="qrcodeContainer" style="display:flex; justify-content:center; align-items:center; margin:10px auto 0 auto; background:#fff; padding:8px; border-radius:8px; width:110px; height:110px; box-sizing:border-box; overflow:hidden;"></div>
+            </div>
 
             <div class="input-group" style="margin-bottom:12px;">
                 <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">TXID (хэш транзакции)</label>
@@ -399,7 +414,14 @@ function renderPaymentQR(walletAddress, displayAmount) {
             const qr = qrcode(0, 'M');
             qr.addData(`ethereum:${walletAddress}?value=${displayAmount}`);
             qr.make();
-            qrEl.innerHTML = qr.createSvgTag({cellSize: 3, margin: 1});
+            qrEl.innerHTML = qr.createSvgTag({cellSize: 4, margin: 1});
+            
+            const svg = qrEl.querySelector('svg');
+            if (svg) {
+                svg.style.width = '100%';
+                svg.style.height = '100%';
+                svg.style.display = 'block';
+            }
         } catch(e) {}
     }
 }
@@ -528,6 +550,7 @@ function handleLoginSuccess() {
 
 function switchMenu(element, sectionName) {
     currentSection = sectionName;
+    localStorage.setItem('airdrop_current_section', sectionName); // Сохраняем текущую вкладку
     document.querySelectorAll('.sidebar-menu-item').forEach(i => i.classList.remove('active'));
     if(element) element.classList.add('active');
     renderDashboardContent(sectionName);
@@ -592,27 +615,50 @@ async function loadWalletsFromDB() {
 }
 
 async function testWalletProxy(walletId, btn) {
-    const originalText = btn.innerHTML;
-    btn.innerHTML = '⏳ Проверка...';
+    btn.innerHTML = '⏳...';
     btn.disabled = true;
+    
+    btn.style.background = 'rgba(255, 255, 255, 0.1)';
+    btn.style.color = '#fff';
+    btn.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+
     try {
         const res = await fetch(`/api/wallets/test-proxy/${walletId}`, { method: 'POST' });
         const data = await res.json();
+        
         if (res.ok && data.status === 'success') {
             showNotification(data.message);
-            btn.innerHTML = '✅ ОК';
+            
+            const match = data.message.match(/Пинг: (\d+)ms/);
+            const ping = match ? parseInt(match[1]) : 0;
+
+            if (ping >= 1000) {
+                btn.style.background = 'rgba(234, 179, 8, 0.1)';
+                btn.style.color = '#eab308';
+                btn.style.borderColor = 'rgba(234, 179, 8, 0.2)';
+                btn.innerHTML = `⚠️ Пинг ${ping}`;
+            } else {
+                btn.style.background = 'rgba(34, 197, 94, 0.1)';
+                btn.style.color = '#22c55e';
+                btn.style.borderColor = 'rgba(34, 197, 94, 0.2)';
+                btn.innerHTML = '✅ ОК';
+            }
         } else {
             showNotification(data.message || 'Ошибка проверки прокси', 'error');
-            btn.innerHTML = '❌ Ошибка';
+            btn.style.background = 'rgba(239, 68, 68, 0.1)';
+            btn.style.color = '#ef4444';
+            btn.style.borderColor = 'rgba(239, 68, 68, 0.2)';
+            btn.innerHTML = '❌ Мертв';
         }
     } catch (e) {
         showNotification('Не удалось подключиться к серверу проверки', 'error');
+        btn.style.background = 'rgba(239, 68, 68, 0.1)';
+        btn.style.color = '#ef4444';
+        btn.style.borderColor = 'rgba(239, 68, 68, 0.2)';
         btn.innerHTML = '❌ Сбой';
     }
-    setTimeout(() => {
-        btn.innerHTML = originalText;
-        btn.disabled = false;
-    }, 3500);
+    
+    btn.disabled = false;
 }
 
 async function deleteWallet(id) {
@@ -635,7 +681,7 @@ async function buyExtraSlot() {
     }
 }
 
-// --- Планировщик и Настройки (Anti-Sybil с индивидуальным временем дней) ---
+// --- Планировщик и Настройки ---
 function toggleSchedulerState(checkbox) {
     const wrapper = document.getElementById('schedulerSettingsWrapper');
     if (!wrapper) return;
@@ -668,21 +714,25 @@ function updateDailyConfigsUI() {
     }
 
     container.innerHTML = activeDays.map(day => {
-        // В функции updateDailyConfigsUI:
         const savedTime = localStorage.getItem(`day_time_${day}`) || `${String(Math.floor(Math.random()*15)+8).padStart(2,'0')}:${String(Math.floor(Math.random()*60)).padStart(2,'0')}`;
-        const savedDelay = localStorage.getItem(`day_delay_${day}`) || Math.floor(Math.random()*30) + 15;
+        const savedMinDelay = localStorage.getItem(`day_min_delay_${day}`) || 60;
+        const savedMaxDelay = localStorage.getItem(`day_max_delay_${day}`) || 300;
 
         return `
-            <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg-main); padding: 8px 12px; border-radius: 10px; border: 1px solid var(--border-color);" data-day="${day}">
-                <div style="color: #fff; font-weight: bold; font-size: 12px; width: 40px;">${day}</div>
-                <div style="display: flex; gap: 10px; align-items: center; flex: 1; justify-content: flex-end;">
-                    <div style="display: flex; align-items: center; gap: 6px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg-main); padding: 8px 12px; border-radius: 10px; border: 1px solid var(--border-color); margin-bottom: 6px; gap: 10px;" data-day="${day}">
+                <div style="color: #fff; font-weight: bold; font-size: 12px; width: 35px;">${day}</div>
+                <div style="display: flex; gap: 10px; align-items: center; flex: 1; justify-content: flex-end; flex-wrap: wrap;">
+                    <div style="display: flex; align-items: center; gap: 4px;">
                         <span style="font-size: 11px; color: var(--text-muted);">Время:</span>
-                        <input type="time" class="auth-input day-time-val" value="${savedTime}" style="padding: 6px; width: 100px; font-size: 11px; background: var(--bg-card);">
+                        <input type="time" class="auth-input day-time-val" value="${savedTime}" style="padding: 5px; width: 85px; font-size: 11px; background: var(--bg-card);">
                     </div>
-                    <div style="display: flex; align-items: center; gap: 6px;">
-                        <span style="font-size: 11px; color: var(--text-muted);">Задержка (сек):</span>
-                        <input type="number" class="auth-input day-delay-val" value="${savedDelay}" min="5" max="300" oninput="checkInputLimit(this, 300)" style="padding: 6px; width: 70px; font-size: 11px; background: var(--bg-card);">
+                    <div style="display: flex; align-items: center; gap: 4px;">
+                        <span style="font-size: 11px; color: var(--text-muted);">Мин(с):</span>
+                        <input type="number" class="auth-input day-min-delay-val" value="${savedMinDelay}" min="15" max="7200" oninput="checkInputLimit(this, 7200)" style="padding: 5px; width: 60px; font-size: 11px; background: var(--bg-card);">
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 4px;">
+                        <span style="font-size: 11px; color: var(--text-muted);">Макс(с):</span>
+                        <input type="number" class="auth-input day-max-delay-val" value="${savedMaxDelay}" min="15" max="7200" oninput="checkInputLimit(this, 7200)" style="padding: 5px; width: 60px; font-size: 11px; background: var(--bg-card);">
                     </div>
                 </div>
             </div>
@@ -690,13 +740,10 @@ function updateDailyConfigsUI() {
     }).join('');
 }
 
-// Умный Anti-Sybil рандом (выбор от 1 до 4 дней с уникальными таймингами)
 function randomizeGlobalSettings() {
     const allDays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
     
-    // Выбираем случайное количество дней от 1 до 4 (где 4 — максимум)
     const targetCount = Math.floor(Math.random() * 4) + 1;
-    
     const shuffledDays = [...allDays].sort(() => 0.5 - Math.random());
     const selectedDays = shuffledDays.slice(0, targetCount);
 
@@ -709,12 +756,17 @@ function randomizeGlobalSettings() {
     updateDailyConfigsUI();
 
     document.querySelectorAll('#dailyTimeConfigsContainer > div').forEach(row => {
-        const randHour = String(Math.floor(Math.random() * 15) + 8).padStart(2, '0'); // часы от 08 до 22
+        const randHour = String(Math.floor(Math.random() * 15) + 8).padStart(2, '0');
         const randMin = String(Math.floor(Math.random() * 60)).padStart(2, '0');
         row.querySelector('.day-time-val').value = `${randHour}:${randMin}`;
-        const delayField = row.querySelector('.day-delay-val');
-        delayField.value = Math.floor(Math.random() * 45) + 10;
-        checkInputLimit(delayField, 300);
+        
+        const minDelay = Math.floor(Math.random() * 60) + 15; 
+        const maxDelay = minDelay + Math.floor(Math.random() * 240) + 60; 
+        
+        row.querySelector('.day-min-delay-val').value = minDelay;
+        const maxField = row.querySelector('.day-max-delay-val');
+        maxField.value = maxDelay;
+        checkInputLimit(maxField, 7200);
     });
 
     const gweiInput = document.getElementById('globalGweiInput');
@@ -759,17 +811,19 @@ function saveGlobalProfileSettings() {
     document.querySelectorAll('#dailyTimeConfigsContainer > div').forEach(row => {
         const day = row.getAttribute('data-day');
         const time = row.querySelector('.day-time-val').value;
-        const delay = parseInt(row.querySelector('.day-delay-val').value);
+        const minDelay = parseInt(row.querySelector('.day-min-delay-val').value);
+        const maxDelay = parseInt(row.querySelector('.day-max-delay-val').value);
 
-        if (isNaN(delay) || delay < 5 || delay > 300) {
+        if (isNaN(minDelay) || isNaN(maxDelay) || minDelay < 15 || maxDelay > 7200 || minDelay >= maxDelay) {
             hasError = true;
-            showNotification(`Не удалось сохранить: неверная задержка для дня ${day} (от 5 до 300 сек)`, "error");
+            showNotification(`Ошибка задержки для ${day} (проверьте Мин/Макс)`, "error");
             return;
         }
 
-        dailySchedule[day] = { time, delay };
+        dailySchedule[day] = { time, minDelay, maxDelay };
         localStorage.setItem(`day_time_${day}`, time);
-        localStorage.setItem(`day_delay_${day}`, delay);
+        localStorage.setItem(`day_min_delay_${day}`, minDelay);
+        localStorage.setItem(`day_max_delay_${day}`, maxDelay);
     });
 
     if (hasError) return;
@@ -844,7 +898,6 @@ function topUpBalanceModal() {
     renderDashboardContent('Account');
 }
 
-// Загрузка реальной статистики слотов до 300
 async function loadPlatformStats() {
     try {
         const res = await fetch('/api/stats');
@@ -868,26 +921,10 @@ async function loadPlatformStats() {
     }
 }
 
-function renderPaymentQR(walletAddress, displayAmount) {
-    const qrEl = document.getElementById('qrcodeContainer');
-    if (qrEl && window.qrcode) {
-        try {
-            qrEl.innerHTML = '';
-            const qr = qrcode(0, 'M');
-            qr.addData(`ethereum:${walletAddress}?value=${displayAmount}`);
-            qr.make();
-            // Генерируем SVG с минимальным марржином
-            qrEl.innerHTML = qr.createSvgTag({cellSize: 4, margin: 1});
-            
-            // Выравниваем и растягиваем SVG ровно по центру контейнера
-            const svg = qrEl.querySelector('svg');
-            if (svg) {
-                svg.style.width = '100%';
-                svg.style.height = '100%';
-                svg.style.display = 'block';
-            }
-        } catch(e) {}
-    }
+function hideProxyTip() {
+    localStorage.setItem('hideProxyTip', 'true');
+    const box = document.getElementById('proxyTipBox');
+    if (box) box.style.display = 'none';
 }
 
 // --- Рендеринг Дашборда ---
@@ -950,7 +987,6 @@ function renderDashboardContent(section) {
         `;
     } else if (section === 'Settings') {
         centerHtml = `
-            <!-- Anti-Sybil Предупреждение с крестиком закрытия -->
             <div id="antiSybilWarningBox" style="background: linear-gradient(135deg, rgba(234, 179, 8, 0.12), rgba(234, 179, 8, 0.03)); border: 1px solid rgba(234, 179, 8, 0.35); border-radius: 16px; padding: 16px 18px; margin-bottom: 18px; display: flex; gap: 14px; align-items: flex-start; position: relative; box-shadow: 0 4px 20px rgba(0,0,0,0.2);">
                 <span style="font-size: 20px; margin-top: 1px;">🛡️</span>
                 <div style="flex: 1;">
@@ -1030,16 +1066,34 @@ function renderDashboardContent(section) {
                 <p style="color: var(--text-muted); font-size: 13px;">${t.farmDesc} (Тариф: <b>${userPlan}</b>)</p>
                 <label style="color: var(--text-muted); font-size: 12px; display: block; margin-bottom: 6px;">${t.netSelectLabel}</label>
                 <select class="auth-input" id="farmNetwork" style="margin-bottom: 14px;">
-                    <option value="Base">Base L2 (Доступно)</option>
+                    <option value="Base">Base L2 (Рекомендуется)</option>
+                    <option value="Ethereum">Ethereum Mainnet</option>
                     <option value="Arbitrum">Arbitrum One</option>
-                    <option value="ZkSync">ZkSync Era</option>
+                    <option value="Linea">Linea Mainnet</option>
                     <option value="Solana">Solana</option>
+                    <option value="BNB Chain">BNB Chain (BSC)</option>
+                    <option value="Polygon">Polygon (POL)</option>
+                    <option value="Optimism">Optimism</option>
+                    <option value="Tron">Tron</option>
                 </select>
                 <button type="button" onclick="startAutoFarming()" class="btn-purple-lg" style="font-size: 12px; padding: 10px 16px; width:auto;">${t.startFarmBtn}</button>
                 <div id="farm-console-logs" style="margin-top: 15px; background: var(--bg-main); padding: 12px; border-radius: 10px; font-family: monospace; font-size: 11px; color: #22c55e; max-height: 160px; overflow-y: auto; border: 1px solid var(--border-color);">Ожидание...</div>
             </div>
         `;
     } else if (section === 'Wallets') {
+        const isTipHidden = localStorage.getItem('hideProxyTip') === 'true';
+        const proxyTipHtml = isTipHidden ? '' : `
+            <div id="proxyTipBox" style="background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.2); padding: 10px 12px; border-radius: 10px; font-size: 11px; color: #93c5fd; display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; box-sizing: border-box;">
+                <div style="display: flex; align-items: flex-start; gap: 8px;">
+                    <span style="font-size: 14px; line-height: 1;">💡</span>
+                    <div style="line-height: 1.4;">
+                        <b style="color: #bfdbfe;">Рекомендация по прокси:</b> Для безопасного фарма лучше использовать <b style="color: #fff;">резидентные</b> или <b style="color: #fff;">мобильные</b> прокси. Обычные серверные (датацентр) IP имеют высокий риск пометок и банов.
+                    </div>
+                </div>
+                <button type="button" onclick="hideProxyTip()" style="background: none; border: none; color: #93c5fd; cursor: pointer; font-size: 16px; padding: 0; line-height: 1; opacity: 0.7;" title="Закрыть">×</button>
+            </div>
+        `;
+
         centerHtml = `
             <div class="dashboard-card" style="margin-bottom: 16px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
@@ -1055,6 +1109,9 @@ function renderDashboardContent(section) {
                 <div style="display: flex; flex-direction: column; gap: 8px;">
                     <input type="text" id="newWalletAddress" placeholder="Адрес кошелька (0x...)" class="auth-input">
                     <input type="password" id="newWalletPk" placeholder="Приватный ключ" class="auth-input">
+                    
+                    ${proxyTipHtml}
+
                     <input type="text" id="newWalletProxy" placeholder="Прокси (ip:port:login:pass)" class="auth-input">
                     <button type="button" onclick="addNewWalletToDB()" class="btn-modal-primary" style="margin-top:4px;">Добавить в ферму</button>
                 </div>
@@ -1066,25 +1123,39 @@ function renderDashboardContent(section) {
         const networksHtml = NETWORKS_CONFIG.map(net => `
             <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-main); padding:12px 14px; border-radius:12px; margin-bottom:8px; border:1px solid var(--border-color);">
                 <div style="display:flex; align-items:center; gap:12px;">
-                    <div style="font-size:20px;">${net.icon}</div>
+                    <div style="display:flex; align-items:center; justify-content:center; width:24px; height:24px;">${net.icon}</div>
                     <div>
                         <div style="color:#fff; font-weight:600; font-size:13px;">${net.name} <span style="font-size: 11px; color: var(--text-muted);">(${net.symbol})</span></div>
-                        <div style="color: #22c55e; font-size:11px;">Статус прокси / пинг: <b>${net.proxyStatus}</b></div>
+                        <div style="color: #22c55e; font-size:11px;">Статус: <b style="color:#fff;">Онлайн</b> | Газ в реальном времени: <span id="gas-${net.key}" style="color:#eab308; font-weight:bold;">Загрузка...</span></div>
                     </div>
                 </div>
                 <div>
-                    <a href="${net.explorer}" target="_blank" style="text-decoration:none; background:#1f1f1f; color:#fff; padding:6px 10px; border-radius:8px; font-size:12px; border:1px solid var(--border-color);">🔍 Explorer</a>
+                    <a href="${net.explorer}" target="_blank" style="text-decoration:none; background:#1f1f1f; color:#fff; padding:6px 10px; border-radius:8px; font-size:12px; border:1px solid var(--border-color); transition: background 0.2s;" onmouseover="this.style.background='#333'" onmouseout="this.style.background='#1f1f1f'">🔍 Обозреватель</a>
                 </div>
             </div>
         `).join('');
 
         centerHtml = `
             <div class="dashboard-card">
-                <h3 style="color: #fff; margin-top: 0; font-size: 15px; margin-bottom: 4px;">🌐 Проверка сетей и прокси</h3>
-                <p style="color: var(--text-muted); font-size: 12px; margin-bottom: 16px;">Мониторинг соединения с блокчейнами и пинга прокси-серверов.</p>
+                <h3 style="color: #fff; margin-top: 0; font-size: 15px; margin-bottom: 4px;">🌐 Проверка сетей, прокси и газа</h3>
+                <p style="color: var(--text-muted); font-size: 12px; margin-bottom: 16px;">Мониторинг соединения с блокчейнами, пинга и актуальной стоимости газа в сети.</p>
                 <div>${networksHtml}</div>
             </div>
         `;
+
+        setTimeout(async () => {
+            for (let net of NETWORKS_CONFIG) {
+                try {
+                    const res = await fetch(`/api/gas/${net.key}`);
+                    const data = await res.json();
+                    const el = document.getElementById(`gas-${net.key}`);
+                    if (el) el.innerText = data.gas || "N/A";
+                } catch(e) {
+                    const el = document.getElementById(`gas-${net.key}`);
+                    if (el) el.innerText = "N/A";
+                }
+            }
+        }, 100);
     }
 
     content.innerHTML = `

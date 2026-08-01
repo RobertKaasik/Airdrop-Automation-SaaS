@@ -7,6 +7,7 @@ import secrets
 import uuid
 import datetime
 import requests
+import logging
 from email.message import EmailMessage
 
 from fastapi.staticfiles import StaticFiles
@@ -18,6 +19,10 @@ from typing import Dict, List, Optional
 from sqlalchemy import create_engine, Column, Integer, String, text
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
 from apscheduler.schedulers.background import BackgroundScheduler
+
+# --- ОТКЛЮЧЕНИЕ СПАМА APSCHEDULER В ТЕРМИНАЛЕ ---
+logging.getLogger('apscheduler.executors.default').setLevel(logging.WARNING)
+logging.getLogger('apscheduler.scheduler').setLevel(logging.WARNING)
 
 try:
     from core_engine import run_real_farm, get_live_gas_price
@@ -32,7 +37,6 @@ SMTP_PORT = 465
 SENDER_EMAIL = "airdrop.x.support@gmail.com"
 SENDER_PASSWORD = "salucffjamydmmgf"
 
-# --- TELEGRAM BOT CONFIG ---
 TELEGRAM_BOT_TOKEN = "8615804174:AAEpbK_sUProWJIDNBye_pv36DxdXjQOQ_Y"
 USER_SETTINGS_DB = {}
 
@@ -97,7 +101,6 @@ def get_db():
     finally:
         db.close()
 
-# --- TELEGRAM NOTIFICATION FUNCTIONS ---
 def send_telegram_notification(chat_id: str, message: str):
     if not chat_id:
         return False
@@ -115,14 +118,13 @@ def send_telegram_notification(chat_id: str, message: str):
         print(f"Ошибка отправки в Telegram: {e}")
         return False
 
-# --- APSCHEDULER BACKGROUND JOB ---
 scheduler = BackgroundScheduler()
 
 def run_scheduled_farming_job():
     now = datetime.datetime.now()
     current_day_map = {0: 'Пн', 1: 'Вт', 2: 'Ср', 3: 'Чт', 4: 'Пт', 5: 'Сб', 6: 'Вс'}
     current_day_str = current_day_map.get(now.weekday())
-    current_time_str = now.strftime("%H:%M") # 24-часовой формат
+    current_time_str = now.strftime("%H:%M")
 
     for username, settings in USER_SETTINGS_DB.items():
         if not settings.get("schedulerEnabled", False):
@@ -137,14 +139,13 @@ def run_scheduled_farming_job():
                 chat_id = settings.get("telegram")
                 delay = task_info.get("delay", 15)
                 
-                print(f"[Scheduler] Запуск Anti-Sybil для {username} в {current_time_str} (задержка: {delay}с)")
+                print(f"[Scheduler] Запуск Anti-Sybil для {username} в {current_time_str}")
                 
                 if chat_id:
                     msg = (
                         f"🚀 **Авто-запуск по расписанию!**\n"
                         f"• Пользователь: `{username}`\n"
                         f"• День: `{current_day_str}` ({current_time_str})\n"
-                        f"• Задержка воркеров: `{delay} сек`\n"
                         f"• Лимит газа: `{settings.get('gwei', 30)} Gwei`\n"
                         f"✅ Статус: Сессия фарма успешно запущена."
                     )
@@ -153,7 +154,6 @@ def run_scheduled_farming_job():
 scheduler.add_job(run_scheduled_farming_job, 'interval', minutes=1)
 scheduler.start()
 
-# --- PYDANTIC MODELS ---
 class DailyScheduleItem(BaseModel):
     time: str
     delay: int
@@ -245,9 +245,6 @@ def send_payment_receipt_email(to_email: str, plan: str, amount: float, txid: st
             <div style="margin-bottom: 8px;"><b>Сумма:</b> <span style="color: #00d95f;">${amount}</span></div>
             <div style="word-break: break-all;"><b>TXID:</b> <span style="color: #b19cd9; font-size: 11px;">{txid}</span></div>
           </div>
-          <p style="color: #7b68ee; font-size: 12px; margin: 0;">
-            Сохраните этот хэш (TXID) на случай восстановления доступа к панели.
-          </p>
         </div>
       </div>
     </div>
@@ -300,7 +297,6 @@ def send_real_email(to_email: str, code: str):
         print(f"[SMTP Error] {e}")
         return False
 
-# --- SETTINGS SAVE ENDPOINT ---
 @app.post("/api/settings/save")
 async def save_user_settings(data: ProfileSettingsRequest):
     try:
@@ -322,6 +318,11 @@ async def save_user_settings(data: ProfileSettingsRequest):
         return {"status": "success", "message": "Настройки сохранены"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/api/gas/{network}")
+async def get_network_gas(network: str):
+    gas = get_live_gas_price(network)
+    return {"status": "success", "network": network, "gas": gas}
 
 @app.post("/api/payment/recover")
 async def recover_payment_session(req: PaymentRecoverReq):
@@ -507,8 +508,6 @@ async def get_wallets(username: str, db: Session = Depends(get_db)):
         "wallets": [{"id": w.id, "wallet_address": w.wallet_address, "proxy": w.proxy} for w in wallets]
     }
 
-import time
-
 @app.post("/api/wallets/test-proxy/{wallet_id}")
 async def test_wallet_proxy(wallet_id: int, db: Session = Depends(get_db)):
     wallet = db.query(Wallet).filter(Wallet.id == wallet_id).first()
@@ -516,7 +515,6 @@ async def test_wallet_proxy(wallet_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Кошелек или прокси не найден")
     
     proxy_raw = wallet.proxy.strip()
-    # Поддерживаем оба формата: ip:port:login:pass и socks5://login:pass@ip:port
     parts = proxy_raw.split(':')
     if len(parts) == 4 and "://" not in proxy_raw:
         ip, port, user, pwd = parts
@@ -531,7 +529,6 @@ async def test_wallet_proxy(wallet_id: int, db: Session = Depends(get_db)):
     
     start_time = time.time()
     try:
-        # Делаем тестовый запрос через прокси к сервису проверки IP
         resp = requests.get("https://api.ipify.org?format=json", proxies=proxies, timeout=6)
         ping_ms = int((time.time() - start_time) * 1000)
         if resp.status_code == 200:
@@ -556,14 +553,6 @@ async def delete_wallet(wallet_id: int, db: Session = Depends(get_db)):
 
 @app.post("/api/start")
 async def start_farming(req: StartFarmReq, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.username == req.username).first()
-    plan = user.subscription_plan if user else "Standard"
-    
-    if plan == "Standard" and req.network not in ["Base"]:
-        raise HTTPException(status_code=403, detail=f"⚠️ Сеть '{req.network}' недоступна на тарифе Standard!")
-    if plan == "Pro" and req.network in ["Solana"]:
-        raise HTTPException(status_code=403, detail=f"⚠️ Сеть Solana эксклюзивна для Premium!")
-
     wallets = db.query(Wallet).filter(Wallet.username == req.username).all()
     wallets_data = [{"id": w.id, "encrypted_pk": w.encrypted_pk, "proxy": w.proxy} for w in wallets]
     
