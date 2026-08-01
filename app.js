@@ -54,17 +54,19 @@ window.addEventListener('DOMContentLoaded', () => {
         setTimeout(() => { line.style.opacity = '0'; }, 700);
     }
 
-    // Автовосстановление сессии и последней открытой вкладки
     const savedUsername = localStorage.getItem('airdrop_username');
     if (savedUsername) {
         isLoggedIn = true;
         userPlan = localStorage.getItem('selected_plan') || 'Standard';
+        
+        const loginBtn = document.getElementById('login-btn');
+        if (loginBtn) loginBtn.style.display = 'none';
+
         document.getElementById('main-content').style.display = 'none';
         document.getElementById('dashboard-content').style.display = 'flex';
         const mobileNav = document.getElementById('mobileNavBar');
         if(mobileNav) mobileNav.style.display = ''; 
         
-        // Загружаем ту вкладку, на которой был пользователь (по умолчанию 'Account')
         currentSection = localStorage.getItem('airdrop_current_section') || 'Account';
         renderDashboardContent(currentSection);
     }
@@ -169,10 +171,15 @@ function updateStaticText(lang) {
 
 function returnToMainSite() {
     isLoggedIn = false;
-    localStorage.removeItem('airdrop_username'); // Удаляем сохраненную сессию при выходе
+    localStorage.removeItem('airdrop_username');
+    localStorage.removeItem('airdrop_current_section');
+    
+    const loginBtn = document.getElementById('login-btn');
+    if (loginBtn) loginBtn.style.display = '';
+
     document.getElementById('dashboard-content').style.display = 'none';
     const mobileNav = document.getElementById('mobileNavBar');
-    if(mobileNav) mobileNav.style.display = ''; 
+    if(mobileNav) mobileNav.style.display = 'none'; 
     document.getElementById('main-content').style.display = 'block';
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -252,24 +259,26 @@ function openModal(type) {
 
     if (type === 'login') {
         container.innerHTML = `
-            <div class="modal-logo" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-                <span style="font-weight:bold; font-size:16px;">Войти в систему</span>
-                <span onclick="closeAuthModal()" style="cursor: pointer; color: #a3a3a3; font-size: 18px;">✕</span>
-            </div>
-            <div style="font-size:12px; color:#a3a3a3; margin-bottom:15px;">Нет аккаунта? <span style="color:#fff; cursor:pointer; text-decoration:underline;" onclick="openPricingModal()">Создать аккаунт</span></div>
-            <div class="input-group" style="margin-bottom:12px;">
-                <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">Логин (Email или Ник)</label>
-                <input type="text" class="auth-input" placeholder="Введите Email или Никнейм" id="loginUsername">
-            </div>
-            <div class="input-group" style="margin-bottom:16px;">
-                <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">Пароль</label>
-                <div class="password-wrapper" style="position:relative;">
-                    <input type="password" class="auth-input" placeholder="Пароль" id="loginPass" style="padding-right: 35px;">
-                    <span class="password-toggle-icon" onclick="togglePasswordVisibility('loginPass', this)" style="position:absolute; right:12px; top:50%; transform:translateY(-50%); cursor:pointer; font-size:14px;">👁️</span>
+            <form onsubmit="event.preventDefault(); validateLogin();">
+                <div class="modal-logo" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                    <span style="font-weight:bold; font-size:16px;">Войти в систему</span>
+                    <span onclick="closeAuthModal()" style="cursor: pointer; color: #a3a3a3; font-size: 18px;">✕</span>
                 </div>
-            </div>
-            <button type="button" class="btn-modal-primary" onclick="validateLogin()" style="width:100%; padding:12px;">Войти</button>
-            <div id="loginErrorContainer" style="margin-top:10px;"></div>
+                <div style="font-size:12px; color:#a3a3a3; margin-bottom:15px;">Нет аккаунта? <span style="color:#fff; cursor:pointer; text-decoration:underline;" onclick="openPricingModal()">Создать аккаунт</span></div>
+                <div class="input-group" style="margin-bottom:12px;">
+                    <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">Логин (Email или Ник)</label>
+                    <input type="text" class="auth-input" placeholder="Введите Email или Никнейм" id="loginUsername">
+                </div>
+                <div class="input-group" style="margin-bottom:16px;">
+                    <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">Пароль</label>
+                    <div class="password-wrapper" style="position:relative;">
+                        <input type="password" class="auth-input" placeholder="Пароль" id="loginPass" style="padding-right: 35px;">
+                        <span class="password-toggle-icon" onclick="togglePasswordVisibility('loginPass', this)" style="position:absolute; right:12px; top:50%; transform:translateY(-50%); cursor:pointer; font-size:14px;">👁️</span>
+                    </div>
+                </div>
+                <button type="submit" class="btn-modal-primary" style="width:100%; padding:12px;">Войти</button>
+                <div id="loginErrorContainer" style="margin-top:10px;"></div>
+            </form>
         `;
     } else if (type === 'payment') {
         const chosenPlan = localStorage.getItem('selected_plan') || 'Standard';
@@ -322,36 +331,38 @@ function openModal(type) {
         const emailState = codeCooldownSeconds > 0 ? `readonly style="opacity: 0.7;" value="${confirmedRegistrationEmail}"` : '';
 
         container.innerHTML = `
-            <div class="modal-logo" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                <span style="font-weight:bold; font-size:16px;">Регистрация: ${PLAN_LABELS[chosenPlan]} ($${chosenPrice})</span>
-                <span onclick="closeAuthModal()" style="cursor: pointer; color: #a3a3a3; font-size: 18px;">✕</span>
-            </div>
-            
-            <div class="input-group" style="margin-bottom:10px;">
-                <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">Никнейм</label>
-                <input type="text" class="auth-input" placeholder="Придумайте никнейм" id="regUsername">
-            </div>
-            
-            <div class="input-group" style="margin-bottom:10px;">
-                <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">Эл. почта</label>
-                <input type="email" class="auth-input" placeholder="Email" id="regEmail" ${emailState}>
-            </div>
-            
-            <div class="input-group" style="margin-bottom:10px;">
-                <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">Пароль (мин. 8 символов)</label>
-                <input type="password" class="auth-input" placeholder="Пароль" id="regPass">
-            </div>
-            
-            <div class="input-group" style="margin-bottom:14px;">
-                <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">Код подтверждения</label>
-                <div style="display: flex; gap: 8px;">
-                    <input type="text" class="auth-input" placeholder="Код из письма" id="regCode" style="flex: 1; margin: 0;">
-                    <button type="button" id="sendCodeBtn" onclick="sendVerificationEmailCode()" ${btnDisabled} class="auth-input" style="width: auto; background:#1f1f1f; color:#fff; cursor:pointer; font-weight:600;">${btnText}</button>
+            <form onsubmit="event.preventDefault(); validateRegister();">
+                <div class="modal-logo" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                    <span style="font-weight:bold; font-size:16px;">Регистрация: ${PLAN_LABELS[chosenPlan]} ($${chosenPrice})</span>
+                    <span onclick="closeAuthModal()" style="cursor: pointer; color: #a3a3a3; font-size: 18px;">✕</span>
                 </div>
-            </div>
-            
-            <button type="button" class="btn-modal-primary" onclick="validateRegister()" style="width:100%; padding:10px;">Зарегистрироваться</button>
-            <div id="errorContainer" style="margin-top:10px;"></div>
+                
+                <div class="input-group" style="margin-bottom:10px;">
+                    <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">Никнейм</label>
+                    <input type="text" class="auth-input" placeholder="Придумайте никнейм" id="regUsername">
+                </div>
+                
+                <div class="input-group" style="margin-bottom:10px;">
+                    <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">Эл. почта</label>
+                    <input type="email" class="auth-input" placeholder="Email" id="regEmail" ${emailState}>
+                </div>
+                
+                <div class="input-group" style="margin-bottom:10px;">
+                    <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">Пароль (мин. 8 символов)</label>
+                    <input type="password" class="auth-input" placeholder="Пароль" id="regPass">
+                </div>
+                
+                <div class="input-group" style="margin-bottom:14px;">
+                    <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">Код подтверждения</label>
+                    <div style="display: flex; gap: 8px;">
+                        <input type="text" class="auth-input" placeholder="Код из письма" id="regCode" style="flex: 1; margin: 0;">
+                        <button type="button" id="sendCodeBtn" onclick="sendVerificationEmailCode()" ${btnDisabled} class="auth-input" style="width: auto; background:#1f1f1f; color:#fff; cursor:pointer; font-weight:600;">${btnText}</button>
+                    </div>
+                </div>
+                
+                <button type="submit" class="btn-modal-primary" style="width:100%; padding:10px;">Зарегистрироваться</button>
+                <div id="errorContainer" style="margin-top:10px;"></div>
+            </form>
         `;
     }
 }
@@ -505,7 +516,11 @@ async function validateRegister() {
         setTimeout(() => openModal('login'), 1200);
     } else {
         const r = await res.json();
-        err.innerHTML = `<div style="color:#ef4444; font-size:12px;">${r.detail}</div>`;
+        let errMsg = "Ошибка регистрации";
+        if (r.detail) {
+            errMsg = Array.isArray(r.detail) ? r.detail.map(e => e.msg).join(', ') : r.detail;
+        }
+        err.innerHTML = `<div style="color:#ef4444; font-size:12px;">${errMsg}</div>`;
     }
 }
 
@@ -532,12 +547,20 @@ async function validateLogin() {
         subscriptionDaysLeft = data.days_left ?? 29;
         handleLoginSuccess();
     } else {
-        err.innerHTML = `<div style="color:#ef4444; font-size:12px;">${data.detail}</div>`;
+        let errMsg = "Ошибка входа";
+        if (data.detail) {
+            errMsg = Array.isArray(data.detail) ? data.detail.map(e => e.msg).join(', ') : data.detail;
+        }
+        err.innerHTML = `<div style="color:#ef4444; font-size:12px;">${errMsg}</div>`;
     }
 }
 
 function handleLoginSuccess() {
     isLoggedIn = true;
+    
+    const loginBtn = document.getElementById('login-btn');
+    if (loginBtn) loginBtn.style.display = 'none';
+
     document.getElementById('authModal').classList.remove('show');
     document.getElementById('main-content').style.display = 'none';
     document.getElementById('dashboard-content').style.display = 'flex';
@@ -550,7 +573,7 @@ function handleLoginSuccess() {
 
 function switchMenu(element, sectionName) {
     currentSection = sectionName;
-    localStorage.setItem('airdrop_current_section', sectionName); // Сохраняем текущую вкладку
+    localStorage.setItem('airdrop_current_section', sectionName);
     document.querySelectorAll('.sidebar-menu-item').forEach(i => i.classList.remove('active'));
     if(element) element.classList.add('active');
     renderDashboardContent(sectionName);
@@ -577,7 +600,9 @@ async function addNewWalletToDB() {
         document.getElementById('newWalletProxy').value = '';
         loadWalletsFromDB();
     } else {
-        msg.innerHTML = `<span style="color: #ef4444;">${data.detail}</span>`;
+        let errText = data.detail;
+        if (Array.isArray(errText)) errText = errText.map(e => e.msg).join(', ');
+        msg.innerHTML = `<span style="color: #ef4444;">${errText}</span>`;
     }
 }
 
@@ -713,7 +738,13 @@ function updateDailyConfigsUI() {
         return;
     }
 
-    container.innerHTML = activeDays.map(day => {
+    let htmlContent = `
+        <div style="font-size: 11px; color: #b19cd9; background: rgba(157,78,221,0.1); padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(157,78,221,0.3); margin-bottom: 12px;">
+            ℹ️ Время запуска указывается по вашему <b>местному времени</b> в 24-часовом формате.
+        </div>
+    `;
+
+    htmlContent += activeDays.map(day => {
         const savedTime = localStorage.getItem(`day_time_${day}`) || `${String(Math.floor(Math.random()*15)+8).padStart(2,'0')}:${String(Math.floor(Math.random()*60)).padStart(2,'0')}`;
         const savedMinDelay = localStorage.getItem(`day_min_delay_${day}`) || 60;
         const savedMaxDelay = localStorage.getItem(`day_max_delay_${day}`) || 300;
@@ -722,14 +753,32 @@ function updateDailyConfigsUI() {
             <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg-main); padding: 8px 12px; border-radius: 10px; border: 1px solid var(--border-color); margin-bottom: 6px; gap: 10px;" data-day="${day}">
                 <div style="color: #fff; font-weight: bold; font-size: 12px; width: 35px;">${day}</div>
                 <div style="display: flex; gap: 10px; align-items: center; flex: 1; justify-content: flex-end; flex-wrap: wrap;">
+                    
                     <div style="display: flex; align-items: center; gap: 4px;">
                         <span style="font-size: 11px; color: var(--text-muted);">Время:</span>
-                        <input type="time" class="auth-input day-time-val" value="${savedTime}" style="padding: 5px; width: 85px; font-size: 11px; background: var(--bg-card);">
+                        <input 
+                            type="text" 
+                            class="auth-input day-time-val" 
+                            value="${savedTime}" 
+                            placeholder="15:30" 
+                            maxlength="5"
+                            style="padding: 5px; width: 55px; font-size: 11px; background: var(--bg-card); text-align: center;"
+                            oninput="
+                                let v = this.value.replace(/[^0-9]/g, '').substring(0, 4);
+                                let h = v.substring(0, 2);
+                                let m = v.substring(2, 4);
+                                if (h && parseInt(h) > 23) h = '23';
+                                if (m && parseInt(m) > 59) m = '59';
+                                this.value = (v.length > 2) ? h + ':' + m : h;
+                            "
+                        >
                     </div>
+                    
                     <div style="display: flex; align-items: center; gap: 4px;">
                         <span style="font-size: 11px; color: var(--text-muted);">Мин(с):</span>
                         <input type="number" class="auth-input day-min-delay-val" value="${savedMinDelay}" min="15" max="7200" oninput="checkInputLimit(this, 7200)" style="padding: 5px; width: 60px; font-size: 11px; background: var(--bg-card);">
                     </div>
+                    
                     <div style="display: flex; align-items: center; gap: 4px;">
                         <span style="font-size: 11px; color: var(--text-muted);">Макс(с):</span>
                         <input type="number" class="auth-input day-max-delay-val" value="${savedMaxDelay}" min="15" max="7200" oninput="checkInputLimit(this, 7200)" style="padding: 5px; width: 60px; font-size: 11px; background: var(--bg-card);">
@@ -738,6 +787,8 @@ function updateDailyConfigsUI() {
             </div>
         `;
     }).join('');
+
+    container.innerHTML = htmlContent;
 }
 
 function randomizeGlobalSettings() {
@@ -778,26 +829,10 @@ function randomizeGlobalSettings() {
     showNotification("Max Рандом применен: выбрано " + targetCount + " дн. с уникальным расписанием!");
 }
 
-function saveGlobalProfileSettings() {
-    const now = Date.now();
-    if (now - lastSaveTimestamp < 1500) {
-        showNotification("Не удалось сохранить настройки из-за частых запросов (защита от спама)", "error");
-        return;
-    }
-    lastSaveTimestamp = now;
-
+async function saveGlobalProfileSettings() {
     const isSchedulerEnabled = document.getElementById('bgSchedulerToggle')?.checked;
-    let gwei = parseInt(document.getElementById('globalGweiInput')?.value || 30);
     
-    if (isNaN(gwei) || gwei < 5 || gwei > 300) {
-        showNotification("Не удалось сохранить настройки из-за лимита газа (максимум 300 Gwei)", "error");
-        return;
-    }
-
-    const telegram = document.getElementById('globalTelegramInput')?.value;
     const activeDays = [];
-    const dailySchedule = {};
-
     document.querySelectorAll('#globalCalendarGrid .calendar-day.active').forEach(el => {
         activeDays.push(el.innerText);
     });
@@ -808,7 +843,9 @@ function saveGlobalProfileSettings() {
     }
 
     let hasError = false;
-    document.querySelectorAll('#dailyTimeConfigsContainer > div').forEach(row => {
+    const dailySchedule = {};
+
+    document.querySelectorAll('#dailyTimeConfigsContainer > div[data-day]').forEach(row => {
         const day = row.getAttribute('data-day');
         const time = row.querySelector('.day-time-val').value;
         const minDelay = parseInt(row.querySelector('.day-min-delay-val').value);
@@ -816,28 +853,90 @@ function saveGlobalProfileSettings() {
 
         if (isNaN(minDelay) || isNaN(maxDelay) || minDelay < 15 || maxDelay > 7200 || minDelay >= maxDelay) {
             hasError = true;
-            showNotification(`Ошибка задержки для ${day} (проверьте Мин/Макс)`, "error");
+            showNotification(`У вас введена неправильная задержка для дня ${day} (максимум 7200 секунд)`, "error");
             return;
         }
 
         dailySchedule[day] = { time, minDelay, maxDelay };
+    });
+
+    if (hasError) return;
+
+    let gwei = parseInt(document.getElementById('globalGweiInput')?.value || 30);
+    if (isNaN(gwei) || gwei < 5 || gwei > 300) {
+        showNotification("Не удалось сохранить настройки из-за лимита газа (максимум 300 Gwei)", "error");
+        return;
+    }
+
+    const now = Date.now();
+    if (now - lastSaveTimestamp < 1500) {
+        showNotification("Не удалось сохранить настройки из-за частых запросов (защита от спама)", "error");
+        return;
+    }
+    lastSaveTimestamp = now;
+
+    const telegram = document.getElementById('globalTelegramInput')?.value;
+    const notifySettings = document.getElementById('notifSettingsToggle')?.checked ?? true;
+    const notifyStart = document.getElementById('notifStartToggle')?.checked ?? true;
+    const notifySuccess = document.getElementById('notifSuccessToggle')?.checked ?? true;
+    const notifyError = document.getElementById('notifErrorToggle')?.checked ?? true;
+
+    localStorage.setItem('ax_notify_settings', notifySettings);
+    localStorage.setItem('ax_notify_start', notifyStart);
+    localStorage.setItem('ax_notify_success', notifySuccess);
+    localStorage.setItem('ax_notify_error', notifyError);
+
+    document.querySelectorAll('#dailyTimeConfigsContainer > div[data-day]').forEach(row => {
+        const day = row.getAttribute('data-day');
+        const time = row.querySelector('.day-time-val').value;
+        const minDelay = parseInt(row.querySelector('.day-min-delay-val').value);
+        const maxDelay = parseInt(row.querySelector('.day-max-delay-val').value);
+
         localStorage.setItem(`day_time_${day}`, time);
         localStorage.setItem(`day_min_delay_${day}`, minDelay);
         localStorage.setItem(`day_max_delay_${day}`, maxDelay);
     });
 
-    if (hasError) return;
-
+    const username = localStorage.getItem('airdrop_username') || "Robert";
     const profileConfig = { 
+        username,
         schedulerEnabled: isSchedulerEnabled,
         days: activeDays, 
         schedule: dailySchedule, 
         gwei, 
-        telegram 
+        telegram,
+        notifySettings,
+        notifyStart,
+        notifySuccess,
+        notifyError
     };
     
-    localStorage.setItem('ax_global_profile_config', JSON.stringify(profileConfig));
-    showNotification("Настройки профиля и индивидуальное расписание сохранены!");
+    try {
+        const response = await fetch('/api/settings/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(profileConfig)
+        });
+        const result = await response.json();
+
+        if (response.ok && result.status === 'success') {
+            if (result.warning) {
+                showNotification(`⚠️ ${result.warning}`, "error");
+            } else {
+                showNotification("Настройки профиля и индивидуальное расписание сохранены!");
+            }
+        } else {
+            let errorMsg = "Ошибка сохранения на сервере";
+            if (result.detail) {
+                errorMsg = Array.isArray(result.detail) ? result.detail.map(e => e.msg).join(', ') : result.detail;
+            } else if (result.message) {
+                errorMsg = result.message;
+            }
+            showNotification(errorMsg, "error");
+        }
+    } catch (err) {
+        showNotification("Ошибка сети при сохранении настроек", "error");
+    }
 }
 
 // --- Фарм и сканирование лута ---
@@ -878,7 +977,7 @@ async function startScanningDrops() {
     showNotification(`Сканирование завершено. Найдено дропов: ${data.data.found_drops.length}`);
 }
 
-function topUpBalanceModal() {
+async function topUpBalanceModal() {
     const amountStr = prompt("Введите сумму пополнения баланса (USD):", "25");
     if (!amountStr) return;
     const amount = parseFloat(amountStr);
@@ -886,16 +985,30 @@ function topUpBalanceModal() {
         showNotification("Некорректная сумма пополнения", "error");
         return;
     }
-    userInternalBalance += amount;
-    transactionHistory.unshift({
-        id: "tx_" + Math.random().toString(36).slice(2, 6),
-        type: "deposit",
-        amount: `+$${amount.toFixed(2)} USD`,
-        date: new Date().toISOString().slice(0, 16).replace('T', ' '),
-        status: "Completed"
-    });
-    showNotification(`Баланс успешно пополнен на $${amount.toFixed(2)}!`);
-    renderDashboardContent('Account');
+
+    const txid = prompt(`Переведите сумму эквивалент ~$${amount} на мастер-кошелек:\n${MASTER_WALLET}\n\nВведите TXID (хэш транзакции):`, "0x");
+    if (!txid) return;
+
+    const username = localStorage.getItem('airdrop_username') || "Robert";
+    
+    try {
+        const res = await fetch('/api/balance/deposit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, amount, txid })
+        });
+        const data = await res.json();
+        
+        if (res.ok && data.status === 'success') {
+            userInternalBalance = data.new_balance;
+            showNotification(`Баланс успешно пополнен на $${amount.toFixed(2)} через блокчейн!`);
+            renderDashboardContent('Account');
+        } else {
+            showNotification(data.detail || "Блокчейн-шлюз отклонил транзакцию", "error");
+        }
+    } catch (e) {
+        showNotification("Ошибка сети при проверке транзакции", "error");
+    }
 }
 
 async function loadPlatformStats() {
@@ -986,6 +1099,11 @@ function renderDashboardContent(section) {
             </div>
         `;
     } else if (section === 'Settings') {
+        const notifSettingsChecked = localStorage.getItem('ax_notify_settings') !== 'false' ? 'checked' : '';
+        const notifStartChecked = localStorage.getItem('ax_notify_start') !== 'false' ? 'checked' : '';
+        const notifSuccessChecked = localStorage.getItem('ax_notify_success') !== 'false' ? 'checked' : '';
+        const notifErrorChecked = localStorage.getItem('ax_notify_error') !== 'false' ? 'checked' : '';
+
         centerHtml = `
             <div id="antiSybilWarningBox" style="background: linear-gradient(135deg, rgba(234, 179, 8, 0.12), rgba(234, 179, 8, 0.03)); border: 1px solid rgba(234, 179, 8, 0.35); border-radius: 16px; padding: 16px 18px; margin-bottom: 18px; display: flex; gap: 14px; align-items: flex-start; position: relative; box-shadow: 0 4px 20px rgba(0,0,0,0.2);">
                 <span style="font-size: 20px; margin-top: 1px;">🛡️</span>
@@ -1018,17 +1136,20 @@ function renderDashboardContent(section) {
 
                 <div id="schedulerSettingsWrapper" style="transition: opacity 0.3s ease;">
                     <div style="font-size:12px; color:var(--text-muted); margin-bottom:8px; font-weight:600;">Дни активности бота (нажмите, чтобы включить/выключить день):</div>
-                    <div class="calendar-grid" id="globalCalendarGrid" style="margin-bottom:16px; display: flex; gap: 6px;">
-                        <div class="calendar-day active" onclick="handleCalendarDayClick(this)" style="cursor:pointer; user-select:none;">Пн</div>
-                        <div class="calendar-day active" onclick="handleCalendarDayClick(this)" style="cursor:pointer; user-select:none;">Вт</div>
-                        <div class="calendar-day active" onclick="handleCalendarDayClick(this)" style="cursor:pointer; user-select:none;">Ср</div>
-                        <div class="calendar-day active" onclick="handleCalendarDayClick(this)" style="cursor:pointer; user-select:none;">Чт</div>
-                        <div class="calendar-day" onclick="handleCalendarDayClick(this)" style="cursor:pointer; user-select:none;">Пт</div>
-                        <div class="calendar-day" onclick="handleCalendarDayClick(this)" style="cursor:pointer; user-select:none;">Сб</div>
-                        <div class="calendar-day" onclick="handleCalendarDayClick(this)" style="cursor:pointer; user-select:none;">Вс</div>
+                    
+                    <div class="calendar-grid" id="globalCalendarGrid" style="margin-bottom:16px; display: flex; gap: 8px; flex-wrap: wrap;">
+                        <div class="calendar-day active" onclick="handleCalendarDayClick(this)" style="cursor:pointer; user-select:none; flex: 1; min-width: 45px; padding: 12px 6px; font-size: 13px;">Пн</div>
+                        <div class="calendar-day active" onclick="handleCalendarDayClick(this)" style="cursor:pointer; user-select:none; flex: 1; min-width: 45px; padding: 12px 6px; font-size: 13px;">Вт</div>
+                        <div class="calendar-day active" onclick="handleCalendarDayClick(this)" style="cursor:pointer; user-select:none; flex: 1; min-width: 45px; padding: 12px 6px; font-size: 13px;">Ср</div>
+                        <div class="calendar-day active" onclick="handleCalendarDayClick(this)" style="cursor:pointer; user-select:none; flex: 1; min-width: 45px; padding: 12px 6px; font-size: 13px;">Чт</div>
+                        <div class="calendar-day" onclick="handleCalendarDayClick(this)" style="cursor:pointer; user-select:none; flex: 1; min-width: 45px; padding: 12px 6px; font-size: 13px;">Пт</div>
+                        <div class="calendar-day" onclick="handleCalendarDayClick(this)" style="cursor:pointer; user-select:none; flex: 1; min-width: 45px; padding: 12px 6px; font-size: 13px;">Сб</div>
+                        <div class="calendar-day" onclick="handleCalendarDayClick(this)" style="cursor:pointer; user-select:none; flex: 1; min-width: 45px; padding: 12px 6px; font-size: 13px;">Вс</div>
                     </div>
 
-                    <div style="font-size:12px; color:var(--text-muted); margin-bottom:8px; font-weight:600;">Индивидуальное время и задержка для активных дней:</div>
+                    <div style="font-size:12px; color:var(--text-muted); margin-bottom:8px; font-weight:600;">
+                        Индивидуальное время запуска и задержка:
+                    </div>
                     <div id="dailyTimeConfigsContainer" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px;"></div>
                 </div>
 
@@ -1043,6 +1164,17 @@ function renderDashboardContent(section) {
                         <div style="background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 8px; padding: 8px 10px; margin-top: 6px; font-size: 10px; color: var(--text-muted); line-height: 1.3;">
                             ℹ️ Перейдите в бота <b style="color:#fff;">AirdropX Bot (@AirdropX_Support_Bot)</b> и отправьте <code style="color:#fff; background:#1f1f1f; padding:1px 3px; border-radius:3px;">/start</code> перед сохранением.
                         </div>
+                    </div>
+                </div>
+
+                <!-- БЛОК НАСТРОЙКИ ТИПОВ УВЕДОМЛЕНИЙ -->
+                <div style="background: var(--bg-main); border: 1px solid var(--border-color); border-radius: 12px; padding: 14px; margin-bottom: 16px;">
+                    <div style="font-size: 12px; color: #fff; font-weight: 600; margin-bottom: 10px;">🔔 Фильтрация уведомлений в Telegram:</div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 11px; color: var(--text-muted);">
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" id="notifSettingsToggle" ${notifSettingsChecked}> Сохранение настроек</label>
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" id="notifStartToggle" ${notifStartChecked}> Запуск сессий фарма</label>
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" id="notifSuccessToggle" ${notifSuccessChecked}> Успешное завершение</label>
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" id="notifErrorToggle" ${notifErrorChecked}> Ошибки и пропуски</label>
                     </div>
                 </div>
 

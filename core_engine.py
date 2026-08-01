@@ -52,7 +52,7 @@ def get_live_gas_price(network: str) -> str:
             resp = requests.get("https://api.trongrid.io/wallet/getchainparameters", timeout=5)
             data = resp.json()
             params = data.get("chainParameter", [])
-            fee_limit = 10  # дефолтное значение
+            fee_limit = 10 
             for p in params:
                 if p.get("key") == "getTransactionFee":
                     fee_limit = p.get("value", 10)
@@ -101,7 +101,12 @@ class RealFarmWorker:
             
             balance_wei = w3.eth.get_balance(wallet_address)
             balance_eth = w3.from_wei(balance_wei, 'ether')
-            logger.info(f"[Wallet #{self.wallet_id}] Баланс в сети {self.target_network}: {balance_eth} ETH")
+            
+            native_symbol = "ETH"
+            if self.target_network == "BNB Chain": native_symbol = "BNB"
+            elif self.target_network == "Polygon": native_symbol = "POL"
+            
+            logger.info(f"[Wallet #{self.wallet_id}] Баланс в сети {self.target_network}: {balance_eth} {native_symbol}")
             
             if balance_eth == 0:
                 err_msg = f"По нулям в сети {self.target_network}! Закинь копейку на газ."
@@ -111,7 +116,8 @@ class RealFarmWorker:
             weth_addresses = {
                 "Base": "0x4200000000000000000000000000000000000006",
                 "Arbitrum": "0x82aF49447D8a07e3bd95BD0d56f35241523fBab1",
-                "ZkSync": "0x5aea5775956fbc2d5ffbefcd1489bb0987fa490f"
+                "ZkSync": "0x5aea5775956fbc2d5ffbefcd1489bb0987fa490f",
+                "Optimism": "0x4200000000000000000000000000000000000006"
             }
             
             weth_address = Web3.to_checksum_address(weth_addresses.get(self.target_network, weth_addresses["Base"]))
@@ -123,7 +129,7 @@ class RealFarmWorker:
             random_amount_factor = random.uniform(0.000008, 0.000015)
             amount_to_wrap = w3.to_wei(random_amount_factor, 'ether') 
 
-            logger.info(f"[Wallet #{self.wallet_id}] Билдим Anti-Sybil Swap / Wrap транзу (сумма: {random_amount_factor:.6f} ETH)...")
+            logger.info(f"[Wallet #{self.wallet_id}] Билдим Anti-Sybil Swap / Wrap транзу (сумма: {random_amount_factor:.6f} {native_symbol})...")
             
             latest_block = w3.eth.get_block('latest')
             base_fee = latest_block.get('baseFeePerGas', w3.eth.gas_price)
