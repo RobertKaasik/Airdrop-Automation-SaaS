@@ -61,12 +61,18 @@ def get_live_gas_price(network: str) -> str:
             
         else:
             router = MultiRouteRpcRouter(network)
-            w3 = Web3(Web3.HTTPProvider(router.get_rpc()))
-            if not w3.is_connected():
-                return "N/A"
-            gas_price_wei = w3.eth.gas_price
-            gas_gwei = w3.from_wei(gas_price_wei, 'gwei')
-            return f"{float(gas_gwei):.2f} Gwei"
+            nodes = router.rpc_mapping.get(network, [])
+            # Перебираем все доступные ноды по очереди, чтобы исключить N/A из-за сбоя одной
+            for rpc_url in nodes:
+                try:
+                    w3 = Web3(Web3.HTTPProvider(rpc_url, request_kwargs={"timeout": 3}))
+                    if w3.is_connected():
+                        gas_price_wei = w3.eth.gas_price
+                        gas_gwei = w3.from_wei(gas_price_wei, 'gwei')
+                        return f"{float(gas_gwei):.2f} Gwei"
+                except Exception:
+                    continue
+            return "N/A"
     except Exception:
         return "N/A"
 

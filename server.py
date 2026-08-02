@@ -732,15 +732,23 @@ async def start_farming(req: StartFarmReq, db: Session = Depends(get_db)):
     notify_start = settings.get("notifyStart", True)
     notify_success = settings.get("notifySuccess", True)
 
+    telegram_sent = False
     if chat_id and notify_start:
         send_telegram_notification(chat_id, f"⚡ **Ручной запуск фарма**\n• Сеть: `{req.network}`\n• Статус: Выполняется...")
 
     results = await run_real_farm(wallets_data, [], "master_password", target_network=req.network)
     
     if chat_id and notify_success:
-        send_telegram_notification(chat_id, f"✅ **Фарм-сессия завершена!**\n• Сеть: `{req.network}`\n• Обработано воркеров: `{len(wallets_data)}`")
+        telegram_sent = send_telegram_notification(chat_id, f"✅ **Фарм-сессия завершена!**\n• Сеть: `{req.network}`\n• Обработано воркеров: `{len(wallets_data)}`")
 
-    return {"status": "success", "message": "Farming session completed!", "results": results, "new_balance": user.balance if user else 0}
+    return {
+        "status": "success", 
+        "message": "Farming session completed!", 
+        "results": results, 
+        "new_balance": user.balance if user else 0,
+        "telegram_sent": telegram_sent,
+        "chat_id_configured": bool(chat_id)
+    }
 
 @app.post("/api/scan/{username}")
 async def scan_wallets(username: str, db: Session = Depends(get_db)):

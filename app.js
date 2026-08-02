@@ -27,15 +27,15 @@ let paymentUnlocked = sessionStorage.getItem('ax_paid_session_id') === clientSes
 const MASTER_WALLET = "0x5e5316Dea1c44d220d4c60A5fcC2949E5A06Fc66";
 
 const NETWORKS_CONFIG = [
-    { name: "Ethereum", symbol: "ETH", key: "Ethereum", icon: '<img src="https://cryptologos.cc/logos/ethereum-eth-logo.svg?v=032" style="width:24px; height:24px;">', explorer: "https://etherscan.io" },
-    { name: "Base", symbol: "ETH", key: "Base", icon: '<img src="https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/base/info/logo.png" style="width:24px; height:24px; border-radius:50%;">', explorer: "https://basescan.org" },
-    { name: "Arbitrum", symbol: "ETH", key: "Arbitrum", icon: '<img src="https://cryptologos.cc/logos/arbitrum-arb-logo.svg?v=032" style="width:24px; height:24px;">', explorer: "https://arbiscan.io" },
-    { name: "Linea", symbol: "Linea", key: "Linea", icon: '<img src="https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/linea/info/logo.png" style="width:24px; height:24px; border-radius:50%;">', explorer: "https://lineascan.build" },
-    { name: "Solana", symbol: "SOL", key: "Solana", icon: '<img src="https://cryptologos.cc/logos/solana-sol-logo.svg?v=032" style="width:24px; height:24px;">', explorer: "https://solscan.io" },
-    { name: "BNB Chain", symbol: "BNB", key: "BNB Chain", icon: '<img src="https://cryptologos.cc/logos/bnb-bnb-logo.svg?v=032" style="width:24px; height:24px;">', explorer: "https://bscscan.com" },
-    { name: "Polygon", symbol: "POL", key: "Polygon", icon: '<img src="https://cryptologos.cc/logos/polygon-matic-logo.svg?v=032" style="width:24px; height:24px;">', explorer: "https://polygonscan.com" },
-    { name: "Optimism", symbol: "OP", key: "Optimism", icon: '<img src="https://cryptologos.cc/logos/optimism-ethereum-op-logo.svg?v=032" style="width:24px; height:24px;">', explorer: "https://optimistic.etherscan.io" },
-    { name: "Tron", symbol: "TRX", key: "Tron", icon: '<img src="https://cryptologos.cc/logos/tron-trx-logo.svg?v=032" style="width:24px; height:24px;">', explorer: "https://tronscan.org" }
+    { name: "Ethereum", symbol: "ETH", key: "Ethereum", icon: '<img src="https://cryptologos.cc/logos/ethereum-eth-logo.svg?v=032" style="width:32px; height:32px;">', explorer: "https://etherscan.io", deadline: "2026-10-15T00:00:00" },
+    { name: "Base", symbol: "ETH", key: "Base", icon: '<img src="https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/base/info/logo.png" style="width:32px; height:32px; border-radius:50%;">', explorer: "https://basescan.org", deadline: "2026-09-01T23:59:59" },
+    { name: "Arbitrum", symbol: "ARB", key: "Arbitrum", icon: '<img src="https://cryptologos.cc/logos/arbitrum-arb-logo.svg?v=032" style="width:32px; height:32px;">', explorer: "https://arbiscan.io", deadline: "2026-11-20T18:00:00" },
+    { name: "Linea", symbol: "ETH", key: "Linea", icon: '<img src="https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/linea/info/logo.png" style="width:32px; height:32px; border-radius:50%;">', explorer: "https://lineascan.build", deadline: "2026-09-30T23:59:59" },
+    { name: "Solana", symbol: "SOL", key: "Solana", icon: '<img src="https://cryptologos.cc/logos/solana-sol-logo.svg?v=032" style="width:32px; height:32px;">', explorer: "https://solscan.io", deadline: "2026-12-31T23:59:59" },
+    { name: "BNB Chain", symbol: "BNB", key: "BNB Chain", icon: '<img src="https://cryptologos.cc/logos/bnb-bnb-logo.svg?v=032" style="width:32px; height:32px;">', explorer: "https://bscscan.com", deadline: "2026-08-25T12:00:00" },
+    { name: "Polygon", symbol: "POL", key: "Polygon", icon: '<img src="https://cryptologos.cc/logos/polygon-matic-logo.svg?v=032" style="width:32px; height:32px;">', explorer: "https://polygonscan.com", deadline: "2026-10-31T23:59:59" },
+    { name: "Optimism", symbol: "OP", key: "Optimism", icon: '<img src="https://cryptologos.cc/logos/optimism-ethereum-op-logo.svg?v=032" style="width:32px; height:32px;">', explorer: "https://optimistic.etherscan.io", deadline: "2026-09-15T23:59:59" },
+    { name: "Tron", symbol: "TRX", key: "Tron", icon: '<img src="https://cryptologos.cc/logos/tron-trx-logo.svg?v=032" style="width:32px; height:32px;">', explorer: "https://tronscan.org", deadline: "2026-11-10T23:59:59" }
 ];
 
 // --- Полный словарь переводов (Лендинг, Дашборд, Модалки, Тарифы, Оплата) ---
@@ -132,8 +132,8 @@ const translations = {
         payConfirm: "Подтвердить",
 
         // Меню и Дашборд
-        menuMain: "Меню", menuAcc: "👤 Аккаунт & Баланс", menuLooter: "📦 Looter", menuFarm: "🌾 Фарминг", 
-        menuWallets: "👥 Кошельки & Балансы", menuNet: "🌐 Сети & Прокси", menuSet: "🔒 Настройки профиля", menuExit: "🚪 Выйти из аккаунта",
+        menuMain: "Меню", menuAcc: "👤 Аккаунт", menuLooter: "📦 Looter", menuFarm: "🌾 Фарминг", 
+        menuWallets: "👥 Кошельки", menuNet: "🌐 Сети", menuSet: "🔒 Настройки профиля", menuExit: "🚪 Выйти из аккаунта",
         
         accWelcome: "Добро пожаловать",
         accWelcomeDesc: "Система защиты мастер-кошелька активна. Средства для фарма списываются с вашего личного баланса. Пополняйте баланс для бесперебойной работы воркеров.",
@@ -141,7 +141,7 @@ const translations = {
         accDesc: "Доступно для оплаты газа и автоматизации. Защита от перерасхода включена.",
         txTitle: "📊 История транзакций", noTx: "У вас пока не было осуществленных транзакций",
         txDep: "📥 Пополнение", txSlot: "🛒 Покупка слота", txGas: "⛽ Списание газа",
-        subTitle: "👤 Управление подпиской", subPlan: "Тариф", subActive: "Подписка активна", btnChangePlan: "Сменить тариф",
+        subTitle: "✏️ Управление подпиской", subPlan: "Тариф", subActive: "Подписка активна", btnChangePlan: "Сменить тариф",
 
         lootTitle: "Панель поиска и авто-сбора лута",
         lootDesc: "Сканируйте свои кошельки на наличие незабранных наград и запускайте авто-фарминг объема.",
@@ -152,13 +152,13 @@ const translations = {
         netSelect: "Целевая сеть для фарма:", netPh: "Выберите сеть:", btnFarm: "▶ Запустить Anti-Sybil Ядро",
         logWait: "Ожидание...", logStart: "Запуск фарма в сети", logCost: "Списано", logErrNet: "Сеть не выбрана.", logErrBal: "Недостаточно средств на балансе.", logSuccess: "Фарм сессия успешно завершена! Отчет отправлен в Telegram.",
 
-        walTitle: "👥 Кошельки и Балансы воркеров", slotsLabel: "Слоты", btnBuySlot: "➕ Купить +1 слот ($10)",
+        walTitle: "👥 Кошельки", slotsLabel: "Slots", btnBuySlot: "➕ Купить +1 слот ($10)",
         walAddTitle: "➕ Добавить воркера", phAddr: "Адрес кошелька (0x...)", phPk: "Приватный ключ", phProxy: "Прокси (ip:port:login:pass)",
         proxyTipTitle: "Рекомендация по прокси:", proxyTipDesc: "Для безопасного фарма лучше использовать <b>резидентные</b> или <b>мобильные</b> прокси. Обычные серверные IP имеют высокий риск банов.",
         btnAddWal: "Добавить в ферму", btnTest: "🔍 Проверить", btnDel: "Удалить", noWal: "Кошельков пока нет.",
         balLabel: "Баланс:", proxyLabel: "Proxy:", proxyNone: "Не задан",
 
-        netTitle: "🌐 Проверка сетей, прокси и газа", netDesc: "Мониторинг соединения с блокчейнами, пинга и актуальной стоимости газа в сети.",
+        netTitle: "🌐 Проверка сетей и газа", netDesc: "Мониторинг соединения с блокчейнами, пинга и актуальной стоимости газа в сети.",
         statusOnline: "Онлайн", gasLabel: "Газ в реальном времени:", btnExp: "🔍 Обозреватель",
 
         setWarnTitle: "Anti-Sybil Защита Активна", setWarnDesc: "Настройте уникальное время и задержку для каждого отдельного дня недели (1–4 активных дня). Это гарантирует максимальную рандомизацию фермы.",
@@ -172,6 +172,12 @@ const translations = {
         notifTitle: "🔔 Фильтрация уведомлений в Telegram:", notif1: "Сохранение настроек", notif2: "Запуск сессий фарма", notif3: "Успешное завершение", notif4: "Ошибки и пропуски",
         btnSaveSet: "💾 Сохранить настройки профиля",
         
+        setInterfaceTitle: "Интерфейс и подсказки",
+        setInterfaceDesc: "Управление отображением информационных блоков и подсказок на сайте",
+        setHideAllBanners: "Скрывать все информационные подсказки и баннеры",
+        msgBannersHidden: "Все подсказки скрыты",
+        msgBannersShown: "Подсказки включены",
+
         calDays: { 'Пн': 'Пн', 'Вт': 'Вт', 'Ср': 'Ср', 'Чт': 'Чт', 'Пт': 'Пт', 'Сб': 'Сб', 'Вс': 'Вс' }
     },
     en: {
@@ -266,8 +272,8 @@ const translations = {
         payConfirm: "Confirm",
 
         // Menu and Dashboard
-        menuMain: "Menu", menuAcc: "👤 Account & Balance", menuLooter: "📦 Looter", menuFarm: "🌾 Farming", 
-        menuWallets: "👥 Wallets & Balances", menuNet: "🌐 Networks & Proxies", menuSet: "🔒 Profile Settings", menuExit: "🚪 Logout",
+        menuMain: "Menu", menuAcc: "👤 Account", menuLooter: "📦 Looter", menuFarm: "🌾 Farming", 
+        menuWallets: "👥 Wallets", menuNet: "🌐 Networks & Proxies", menuSet: "🔒 Profile Settings", menuExit: "🚪 Logout",
         
         accWelcome: "Welcome",
         accWelcomeDesc: "Master-wallet protection is active. Farming fees are deducted from your personal balance. Top up your balance for uninterrupted worker operation.",
@@ -275,7 +281,7 @@ const translations = {
         accDesc: "Available for gas and automation fees. Overspend protection is enabled.",
         txTitle: "📊 Transaction History", noTx: "You have no completed transactions yet",
         txDep: "📥 Deposit", txSlot: "🛒 Slot Purchase", txGas: "⛽ Gas Fee",
-        subTitle: "👤 Subscription Management", subPlan: "Plan", subActive: "Subscription active", btnChangePlan: "Change Plan",
+        subTitle: "✏️ Subscription Management", subPlan: "Plan", subActive: "Subscription active", btnChangePlan: "Change Plan",
 
         lootTitle: "Loot Search & Auto-Claim Panel",
         lootDesc: "Scan your wallets for unclaimed rewards and launch volume auto-farming.",
@@ -286,13 +292,13 @@ const translations = {
         netSelect: "Target network for farming:", netPh: "Select network:", btnFarm: "▶ Start Anti-Sybil Core",
         logWait: "Awaiting...", logStart: "Starting farm in network", logCost: "Deducted", logErrNet: "Network not selected.", logErrBal: "Insufficient funds.", logSuccess: "Farm session completed successfully! Report sent to Telegram.",
 
-        walTitle: "👥 Wallets and Worker Balances", slotsLabel: "Slots", btnBuySlot: "➕ Buy +1 Slot ($10)",
+        walTitle: "👥 Wallets", slotsLabel: "Slots", btnBuySlot: "➕ Buy +1 Slot ($10)",
         walAddTitle: "➕ Add Worker", phAddr: "Wallet Address (0x...)", phPk: "Private Key", phProxy: "Proxy (ip:port:login:pass)",
         proxyTipTitle: "Proxy Recommendation:", proxyTipDesc: "For safe farming, it is better to use <b>residential</b> or <b>mobile</b> proxies. Datacenter IPs have a high risk of bans.",
         btnAddWal: "Add to Farm", btnTest: "🔍 Test", btnDel: "Delete", noWal: "No wallets added yet.",
         balLabel: "Balance:", proxyLabel: "Proxy:", proxyNone: "Not set",
 
-        netTitle: "🌐 Network, Proxy, and Gas Check", netDesc: "Monitor blockchain connections, ping, and real-time gas costs.",
+        netTitle: "🌐 Network and Gas Check", netDesc: "Monitor blockchain connections, ping, and real-time gas costs.",
         statusOnline: "Online", gasLabel: "Real-time Gas:", btnExp: "🔍 Explorer",
 
         setWarnTitle: "Anti-Sybil Protection Active", setWarnDesc: "Set unique timing and delays for each individual day of the week (1–4 active days). This ensures maximum farm randomization.",
@@ -305,6 +311,12 @@ const translations = {
         tgTip: "Go to bot", tgTip2: "and send", tgTip3: "before saving.",
         notifTitle: "🔔 Telegram Notification Filtering:", notif1: "Settings saved", notif2: "Farm session start", notif3: "Successful completion", notif4: "Errors and skips",
         btnSaveSet: "💾 Save Profile Settings",
+
+        setInterfaceTitle: "Interface & Tips",
+        setInterfaceDesc: "Manage the display of informational blocks and tips on the site",
+        setHideAllBanners: "Hide all informational tips and banners",
+        msgBannersHidden: "All tips hidden",
+        msgBannersShown: "Tips enabled",
 
         calDays: { 'Пн': 'Mo', 'Вт': 'Tu', 'Ср': 'We', 'Чт': 'Th', 'Пт': 'Fr', 'Сб': 'Sa', 'Вс': 'Su' }
     },
@@ -409,7 +421,7 @@ const translations = {
         accDesc: "可用于支付Gas和自动化费用。超支保护已启用。",
         txTitle: "📊 交易记录", noTx: "您目前没有任何交易记录",
         txDep: "📥 充值", txSlot: "🛒 购买槽位", txGas: "⛽ 扣除Gas",
-        subTitle: "👤 订阅管理", subPlan: "套餐", subActive: "订阅有效", btnChangePlan: "更改套餐",
+        subTitle: "✏️ 订阅管理", subPlan: "套餐", subActive: "订阅有效", btnChangePlan: "更改套餐",
 
         lootTitle: "空投搜索与自动领取面板",
         lootDesc: "扫描您的钱包以查找未领取的奖励，并启动自动交互以增加交易量。",
@@ -439,6 +451,12 @@ const translations = {
         tgTip: "前往机器人", tgTip2: "并发送", tgTip3: "然后保存。",
         notifTitle: "🔔 Telegram 通知过滤：", notif1: "保存设置", notif2: "交互会话开始", notif3: "成功完成", notif4: "错误和跳过",
         btnSaveSet: "💾 保存个人资料设置",
+
+        setInterfaceTitle: "界面与提示",
+        setInterfaceDesc: "管理网站上信息块和提示的显示",
+        setHideAllBanners: "隐藏所有信息提示和横幅",
+        msgBannersHidden: "所有提示已隐藏",
+        msgBannersShown: "提示已启用",
 
         calDays: { 'Пн': '一', 'Вт': '二', 'Ср': '三', 'Чт': '四', 'Пт': '五', 'Сб': '六', 'Вс': '日' }
     }
@@ -477,6 +495,27 @@ window.addEventListener('DOMContentLoaded', () => {
         renderDashboardContent(currentSection);
     }
 });
+
+function formatCountdown(deadlineStr) {
+    const total = Date.parse(new Date(deadlineStr)) - Date.now();
+    const currentLang = localStorage.getItem('ax_lang') || 'ru';
+    
+    const texts = {
+        ru: { ended: "⚡ Кампания завершена / Снепшот прошел", label: "До конца:", d: "д", h: "ч", m: "м", s: "с" },
+        en: { ended: "⚡ Campaign ended / Snapshot taken", label: "Remaining:", d: "d", h: "h", m: "m", s: "s" },
+        cn: { ended: "⚡ 活动已结束 / 快照已完成", label: "剩余时间:", d: "天", h: "小时", m: "分", s: "秒" }
+    };
+    
+    const t = texts[currentLang] || texts['ru'];
+    
+    if (total <= 0) return t.ended;
+    const days = Math.floor(total / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((total / (1000 * 60 * 60)) % 24);
+    const minutes = Math.floor((total / 1000 / 60) % 60);
+    const seconds = Math.floor((total / 1000) % 60);
+    
+    return `⏳ ${t.label} ${days}${t.d} ${hours}${t.h} ${minutes}${t.m} ${seconds}${t.s}`;
+}
 
 // --- Вспомогательные функции ---
 function getOrCreateClientSessionId() {
@@ -554,7 +593,7 @@ function checkInputLimit(input, maxLimit) {
     }
 }
 
-// 🌍 Обновление всего статического текста, инструкции, FAQ, тарифов и оплаты
+// 🌍 Обновление всего статического текста
 function updateStaticText(lang) {
     const t = translations[lang];
     if (!t) return;
@@ -595,117 +634,6 @@ function updateStaticText(lang) {
 
         const faqHeadingEl = document.getElementById('faq-heading');
         if (faqHeadingEl) faqHeadingEl.innerText = t.faqHeading;
-
-        const featTitles = mainContent.querySelectorAll('.features-grid h3');
-        if (featTitles.length >= 3) {
-            featTitles[0].innerText = t.feat1Title;
-            featTitles[1].innerText = t.feat2Title;
-            featTitles[2].innerText = t.feat3Title;
-        }
-
-        const featDescs = mainContent.querySelectorAll('.features-grid p');
-        if (featDescs.length >= 3) {
-            featDescs[0].innerText = t.feat1Desc;
-            featDescs[1].innerText = t.feat2Desc;
-            featDescs[2].innerText = t.feat3Desc;
-        }
-
-        const sc1t = document.getElementById('sc1-t');
-        const sc1d1 = document.getElementById('sc1-d1');
-        const sc1d2 = document.getElementById('sc1-d2');
-        const ph1 = document.getElementById('ph1');
-        if (sc1t) sc1t.innerText = t.inst1Title;
-        if (sc1d1) sc1d1.innerHTML = `<b style="color:#fff;">${t.inst1DescBold}</b> ${t.inst1DescText}`;
-        if (sc1d2) sc1d2.innerText = t.inst1DescText2;
-        if (ph1) ph1.innerText = t.ph1;
-
-        const sc2t = document.getElementById('sc2-t');
-        const sc2d1 = document.getElementById('sc2-d1');
-        const sc2d2 = document.getElementById('sc2-d2');
-        const ph2 = document.getElementById('ph2');
-        if (sc2t) sc2t.innerText = t.inst2Title;
-        if (sc2d1) sc2d1.innerHTML = `<b style="color:#fff;">${t.inst2DescBold}</b> ${t.inst2DescText}`;
-        if (sc2d2) sc2d2.innerText = t.inst2DescText2;
-        if (ph2) ph2.innerText = t.ph2;
-
-        const sc3t = document.getElementById('sc3-t');
-        const sc3d1 = document.getElementById('sc3-d1');
-        const sc3d2 = document.getElementById('sc3-d2');
-        const ph3 = document.getElementById('ph3');
-        if (sc3t) sc3t.innerText = t.inst3Title;
-        if (sc3d1) sc3d1.innerHTML = `<b style="color:#fff;">${t.inst3DescBold}</b> ${t.inst3DescText}`;
-        if (sc3d2) sc3d2.innerText = t.inst3DescText2;
-        if (ph3) ph3.innerText = t.ph3;
-
-        const sc4t = document.getElementById('sc4-t');
-        const sc4d1 = document.getElementById('sc4-d1');
-        const ph4 = document.getElementById('ph4');
-        if (sc4t) sc4t.innerText = t.inst4Title;
-        if (sc4d1) sc4d1.innerHTML = `<b style="color:#fff;">${t.inst4DescBold}</b> ${t.inst4DescText}`;
-        if (ph4) ph4.innerText = t.ph4;
-
-        const faqQuestions = mainContent.querySelectorAll('.faq-question span:first-child');
-        if (faqQuestions.length >= 4) {
-            faqQuestions[0].innerText = t.faq1Q;
-            faqQuestions[1].innerText = t.faq2Q;
-            faqQuestions[2].innerText = t.faq3Q;
-            faqQuestions[3].innerText = t.faq4Q;
-        }
-
-        const faqAnswers = mainContent.querySelectorAll('.faq-answer');
-        if (faqAnswers.length >= 4) {
-            faqAnswers[0].innerText = t.faq1A;
-            faqAnswers[1].innerText = t.faq2A;
-            faqAnswers[2].innerText = t.faq3A;
-            faqAnswers[3].innerText = t.faq4A;
-        }
-
-        const footerLinks = mainContent.querySelectorAll('footer a, div[style*="display:flex"] span[onclick*="openLegalModal"]');
-        footerLinks.forEach(link => {
-            const attr = link.getAttribute('onclick') || '';
-            if (attr.includes('privacy') || link.innerText.toLowerCase().includes('privacy')) {
-                link.innerText = t.footerPrivacy;
-            } else if (attr.includes('terms') || link.innerText.toLowerCase().includes('terms')) {
-                link.innerText = t.footerTerms;
-            }
-        });
-    }
-
-    // Обновление модального окна тарифов
-    const pTitleModal = document.getElementById('p-title-modal');
-    if (pTitleModal) pTitleModal.innerText = t.pTitleModal;
-
-    const pDescModal = document.getElementById('p-desc-modal');
-    if (pDescModal) pDescModal.innerText = t.pDescModal;
-
-    const stdTop = document.getElementById('p-std-top');
-    if (stdTop) {
-        stdTop.innerText = t.subTop;
-        document.getElementById('p-std-name').innerText = t.stdName;
-        document.getElementById('p-std-per').innerText = t.stdPer;
-        document.getElementById('p-std-f1').innerText = t.stdF1;
-        document.getElementById('p-std-f2').innerText = t.stdF2;
-        document.getElementById('p-std-f3').innerText = t.stdF3;
-        document.getElementById('p-std-btn').innerText = t.stdBtn;
-
-        document.getElementById('p-pro-badge').innerText = t.proBadge;
-        document.getElementById('p-pro-top').innerText = t.subTop;
-        document.getElementById('p-pro-name').innerText = t.proName;
-        document.getElementById('p-pro-per').innerText = t.proPer;
-        document.getElementById('p-pro-f1').innerText = t.proF1;
-        document.getElementById('p-pro-f2').innerText = t.proF2;
-        document.getElementById('p-pro-f3').innerText = t.proF3;
-        document.getElementById('p-pro-f4').innerText = t.proF4;
-        document.getElementById('p-pro-btn').innerText = t.proBtn;
-
-        document.getElementById('p-prem-top').innerText = t.subTop;
-        document.getElementById('p-prem-name').innerText = t.premName;
-        document.getElementById('p-prem-per').innerText = t.premPer;
-        document.getElementById('p-prem-f1').innerText = t.premF1;
-        document.getElementById('p-prem-f2').innerText = t.premF2;
-        document.getElementById('p-prem-f3').innerText = t.premF3;
-        document.getElementById('p-prem-f4').innerText = t.premF4;
-        document.getElementById('p-prem-btn').innerText = t.premBtn;
     }
 }
 
@@ -1156,11 +1084,11 @@ async function loadWalletsFromDB() {
                 <div style="background: var(--bg-main); border: 1px solid var(--border-color); padding: 14px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center;">
                     <div>
                         <div style="color: #fff; font-weight: 600; font-size: 13px; font-family:monospace;">${w.wallet_address}</div>
-                        <div style="color: var(--text-muted); font-size: 11px; margin-top:2px;">${t.balLabel} <b style="color:#fff;">$${mockBalance}</b> | ${t.proxyLabel} ${w.proxy || t.proxyNone}</div>
+                        <div style="color: var(--text-muted); font-size: 12px; margin-top:2px;">${t.balLabel} <b style="color:#fff;">$${mockBalance}</b> | ${t.proxyLabel} ${w.proxy || t.proxyNone}</div>
                     </div>
                     <div style="display:flex; gap:6px;">
-                        <button type="button" onclick="testWalletProxy(${w.id}, this)" style="background: rgba(34,197,94,0.1); color: #22c55e; border: 1px solid rgba(34,197,94,0.2); padding: 6px 10px; border-radius: 8px; font-size: 11px; cursor:pointer;">${t.btnTest}</button>
-                        <button type="button" onclick="deleteWallet(${w.id})" style="background: rgba(239,68,68,0.1); color: #ef4444; border: 1px solid rgba(239,68,68,0.2); padding: 6px 10px; border-radius: 8px; font-size: 11px; cursor:pointer;">${t.btnDel}</button>
+                        <button type="button" onclick="testWalletProxy(${w.id}, this)" style="background: rgba(34,197,94,0.1); color: #22c55e; border: 1px solid rgba(34,197,94,0.2); padding: 6px 10px; border-radius: 8px; font-size: 12px; cursor:pointer;">${t.btnTest}</button>
+                        <button type="button" onclick="deleteWallet(${w.id})" style="background: rgba(239,68,68,0.1); color: #ef4444; border: 1px solid rgba(239,68,68,0.2); padding: 6px 10px; border-radius: 8px; font-size: 12px; cursor:pointer;">${t.btnDel}</button>
                     </div>
                 </div>
             `;
@@ -1255,6 +1183,7 @@ function updateDailyConfigsUI() {
     const container = document.getElementById('dailyTimeConfigsContainer');
     if (!container) return;
     const t = translations[currentLang];
+    const hideAllBanners = localStorage.getItem('hide_all_banners') === 'true';
     
     const activeDays = [];
     document.querySelectorAll('#globalCalendarGrid .calendar-day.active').forEach(el => {
@@ -1262,12 +1191,12 @@ function updateDailyConfigsUI() {
     });
 
     if (activeDays.length === 0) {
-        container.innerHTML = `<div style="font-size: 11px; color: var(--text-muted); font-style: italic; padding: 6px;">-</div>`;
+        container.innerHTML = `<div style="font-size: 13px; color: var(--text-muted); font-style: italic; padding: 6px;">-</div>`;
         return;
     }
 
-    let htmlContent = `
-        <div style="font-size: 11px; color: #b19cd9; background: rgba(157,78,221,0.1); padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(157,78,221,0.3); margin-bottom: 12px;">
+    let htmlContent = hideAllBanners ? '' : `
+        <div style="font-size: 13px; color: #b19cd9; background: rgba(157,78,221,0.1); padding: 10px 14px; border-radius: 10px; border: 1px solid rgba(157,78,221,0.3); margin-bottom: 14px; line-height: 1.4;">
             ${t.timeAlert}
         </div>
     `;
@@ -1279,25 +1208,25 @@ function updateDailyConfigsUI() {
         const displayDay = t.calDays[day] || day;
 
         return `
-            <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg-main); padding: 8px 12px; border-radius: 10px; border: 1px solid var(--border-color); margin-bottom: 6px; gap: 10px;" data-day="${day}">
-                <div style="color: #fff; font-weight: bold; font-size: 12px; width: 35px;">${displayDay}</div>
+            <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg-main); padding: 10px 14px; border-radius: 10px; border: 1px solid var(--border-color); margin-bottom: 6px; gap: 10px;" data-day="${day}">
+                <div style="color: #fff; font-weight: bold; font-size: 13px; width: 35px;">${displayDay}</div>
                 <div style="display: flex; gap: 10px; align-items: center; flex: 1; justify-content: flex-end; flex-wrap: wrap;">
                     
-                    <div style="display: flex; align-items: center; gap: 4px;">
-                        <span style="font-size: 11px; color: var(--text-muted);">${t.tTime}</span>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <span style="font-size: 12px; color: var(--text-muted);">${t.tTime}</span>
                         <input type="text" class="auth-input day-time-val" value="${savedTime}" placeholder="15:30" maxlength="5"
-                            style="padding: 5px; width: 55px; font-size: 11px; background: var(--bg-card); text-align: center;"
+                            style="padding: 6px; width: 60px; font-size: 13px; background: var(--bg-card); text-align: center;"
                             oninput="let v = this.value.replace(/[^0-9]/g, '').substring(0, 4); let h = v.substring(0, 2); let m = v.substring(2, 4); if (h && parseInt(h) > 23) h = '23'; if (m && parseInt(m) > 59) m = '59'; this.value = (v.length > 2) ? h + ':' + m : h;">
                     </div>
                     
-                    <div style="display: flex; align-items: center; gap: 4px;">
-                        <span style="font-size: 11px; color: var(--text-muted);">${t.tMin}</span>
-                        <input type="number" class="auth-input day-min-delay-val" value="${savedMinDelay}" min="15" max="7200" oninput="checkInputLimit(this, 7200)" style="padding: 5px; width: 60px; font-size: 11px; background: var(--bg-card);">
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <span style="font-size: 12px; color: var(--text-muted);">${t.tMin}</span>
+                        <input type="number" class="auth-input day-min-delay-val" value="${savedMinDelay}" min="15" max="7200" oninput="checkInputLimit(this, 7200)" style="padding: 6px; width: 65px; font-size: 13px; background: var(--bg-card);">
                     </div>
                     
-                    <div style="display: flex; align-items: center; gap: 4px;">
-                        <span style="font-size: 11px; color: var(--text-muted);">${t.tMax}</span>
-                        <input type="number" class="auth-input day-max-delay-val" value="${savedMaxDelay}" min="15" max="7200" oninput="checkInputLimit(this, 7200)" style="padding: 5px; width: 60px; font-size: 11px; background: var(--bg-card);">
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <span style="font-size: 12px; color: var(--text-muted);">${t.tMax}</span>
+                        <input type="number" class="auth-input day-max-delay-val" value="${savedMaxDelay}" min="15" max="7200" oninput="checkInputLimit(this, 7200)" style="padding: 6px; width: 65px; font-size: 13px; background: var(--bg-card);">
                     </div>
                 </div>
             </div>
@@ -1424,6 +1353,13 @@ async function saveGlobalProfileSettings() {
     }
 }
 
+function toggleHideBanners(checkbox) {
+    localStorage.setItem('hide_all_banners', checkbox.checked);
+    const t = translations[currentLang];
+    showNotification(checkbox.checked ? t.msgBannersHidden : t.msgBannersShown, "success");
+    renderDashboardContent(currentSection);
+}
+
 // --- Фарм и сканирование лута ---
 async function startAutoFarming() {
     const netSelect = document.getElementById('farmNetwork');
@@ -1455,9 +1391,20 @@ async function startAutoFarming() {
         const data = await res.json();
         
         if (res.ok) {
-            if (log) log.innerHTML += `<br><span style="color: #22c55e;">✅ ${t.logSuccess}</span>`;
+            if (log) log.innerHTML += `<br><span style="color: #22c55e;">✅ Фарм-сессия успешно завершена!</span>`;
+            
+            if (data.telegram_sent) {
+                if (log) log.innerHTML += `<br><span style="color: #22c55e;">📤 Отчет успешно доставлен в Telegram!</span>`;
+            } else if (!data.chat_id_configured) {
+                if (log) log.innerHTML += `<br><span style="color: #eab308;">⚠️ Telegram пропущен: укажите Chat ID в настройках профиля.</span>`;
+            } else {
+                if (log) log.innerHTML += `<br><span style="color: #ef4444;">❌ Ошибка отправки в Telegram (проверьте, отправлен ли /start боту).</span>`;
+            }
+
             if (data.new_balance !== undefined) {
                 userInternalBalance = data.new_balance;
+                const balEl = document.getElementById('userBalanceValue');
+                if (balEl) balEl.innerText = `$${userInternalBalance.toFixed(2)}`;
             }
         } else {
             if (log) log.innerHTML += `<br><span style="color: #ef4444;">❌ Ошибка: ${data.detail}</span>`;
@@ -1491,12 +1438,12 @@ async function topUpBalanceModal() {
         </div>
         
         <div class="input-group" style="margin-bottom:12px;">
-            <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">USD</label>
+            <label style="font-size: 12px; color: #a3a3a3; display: block; margin-bottom: 4px;">USD</label>
             <input type="number" class="auth-input" value="25" id="topupAmountInput" min="1" max="10000" style="padding: 10px; font-size: 14px;" oninput="updateTopupQR(this.value)">
         </div>
 
         <div style="margin-bottom: 12px;">
-            <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">${t.payNetwork}</label>
+            <label style="font-size: 12px; color: #a3a3a3; display: block; margin-bottom: 4px;">${t.payNetwork}</label>
             <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;">
                 <button type="button" class="btn-dark-sm auth-input" id="net-base" onclick="setTopupNetwork('Base', '${MASTER_WALLET}')" style="background:#1f1f1f; border-color:#fff; cursor:pointer;">Base L2</button>
                 <button type="button" class="btn-dark-sm auth-input" id="net-arb" onclick="setTopupNetwork('Arbitrum', '${MASTER_WALLET}')" style="cursor:pointer;">Arbitrum</button>
@@ -1505,14 +1452,14 @@ async function topUpBalanceModal() {
         </div>
 
         <div style="background:#0a0a0a; border:1px solid var(--border-color); border-radius:12px; padding:12px; margin-bottom:12px; text-align:center;">
-            <div style="font-size:11px; color:#a3a3a3; margin-bottom:2px;">${t.payWallet} (<span id="activeTopupNet">Base L2</span>):</div>
-            <div style="background:#181818; padding:6px 8px; border-radius:8px; font-family:monospace; font-size:11px; color:#fff; word-break:break-all; margin-bottom:6px;">${MASTER_WALLET}</div>
-            <button type="button" class="auth-input" style="margin: 0 auto; font-size: 11px; padding: 6px 12px; width:auto; cursor:pointer;" onclick="copyWalletAddress('${MASTER_WALLET}', this)">${t.payCopy}</button>
+            <div style="font-size:12px; color:#a3a3a3; margin-bottom:2px;">${t.payWallet} (<span id="activeTopupNet">Base L2</span>):</div>
+            <div style="background:#181818; padding:6px 8px; border-radius:8px; font-family:monospace; font-size:12px; color:#fff; word-break:break-all; margin-bottom:6px;">${MASTER_WALLET}</div>
+            <button type="button" class="auth-input" style="margin: 0 auto; font-size: 12px; padding: 6px 12px; width:auto; cursor:pointer;" onclick="copyWalletAddress('${MASTER_WALLET}', this)">${t.payCopy}</button>
             <div id="qrcodeTopupContainer" style="display:flex; justify-content:center; align-items:center; margin:10px auto 0 auto; background:#fff; padding:8px; border-radius:8px; width:110px; height:110px; box-sizing:border-box; overflow:hidden;"></div>
         </div>
 
         <div class="input-group" style="margin-bottom:12px;">
-            <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">${t.payTxid}</label>
+            <label style="font-size: 12px; color: #a3a3a3; display: block; margin-bottom: 4px;">${t.payTxid}</label>
             <input type="text" class="auth-input" placeholder="0x..." id="topupTxidInput">
         </div>
 
@@ -1616,17 +1563,18 @@ function renderDashboardContent(section) {
     const t = translations[currentLang] || translations['ru'];
     const content = document.getElementById('dashboard-content');
     const username = localStorage.getItem('airdrop_username') || "Robert";
+    const hideAllBanners = localStorage.getItem('hide_all_banners') === 'true';
 
     let centerHtml = '';
     
     if (section === 'Account') {
         let guideHtml = '';
-        if (showWelcomeGuide) {
+        if (showWelcomeGuide && !hideAllBanners) {
             guideHtml = `
-                <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; padding: 16px; margin-bottom: 16px; position: relative;" id="welcomeGuideBox">
-                    <span onclick="document.getElementById('welcomeGuideBox').style.display='none'; showWelcomeGuide=false;" style="position: absolute; right: 16px; top: 16px; cursor: pointer; color: var(--text-muted); font-size: 16px;">✕</span>
-                    <h4 style="color: #fff; margin: 0 0 8px 0; font-size: 14px;">👋 ${t.accWelcome}, ${username}!</h4>
-                    <p style="color: var(--text-muted); font-size: 12px; margin: 0; line-height: 1.4;">
+                <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; padding: 18px; margin-bottom: 16px; position: relative;" id="welcomeGuideBox">
+                    <span onclick="document.getElementById('welcomeGuideBox').style.display='none'; showWelcomeGuide=false;" style="position: absolute; right: 18px; top: 18px; cursor: pointer; color: var(--text-muted); font-size: 16px;">✕</span>
+                    <h4 style="color: #fff; margin: 0 0 8px 0; font-size: 15px;">👋 ${t.accWelcome}, ${username}!</h4>
+                    <p style="color: var(--text-muted); font-size: 13px; margin: 0; line-height: 1.5;">
                         ${t.accWelcomeDesc}
                     </p>
                 </div>
@@ -1638,22 +1586,22 @@ function renderDashboardContent(section) {
 
             <div class="dashboard-card" style="margin-bottom: 16px;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-                    <h3 style="color: #fff; margin: 0; font-size: 15px;">${t.accTitle}</h3>
-                    <button type="button" onclick="topUpBalanceModal()" class="btn-purple-lg" style="width:auto; padding:6px 12px; font-size:12px;">${t.btnTopUp}</button>
+                    <h3 style="color: #fff; margin: 0; font-size: 16px;">${t.accTitle}</h3>
+                    <button type="button" onclick="topUpBalanceModal()" class="btn-purple-lg" style="width:auto; padding:8px 16px; font-size:13px;">${t.btnTopUp}</button>
                 </div>
                 <div style="font-size:24px; font-weight:bold; color:#fff; margin-bottom:4px;" id="userBalanceValue">${t.loading}</div>
-                <div style="font-size:11px; color:var(--text-muted);">${t.accDesc}</div>
+                <div style="font-size:13px; color:var(--text-muted);">${t.accDesc}</div>
             </div>
 
             <div class="dashboard-card" style="margin-bottom: 16px;">
-                <h3 style="color: #fff; margin-top: 0; font-size: 15px;">${t.txTitle}</h3>
-                <div id="transactionsListContainer" style="max-height:160px; overflow-y:auto; margin-top:10px;">${t.loading}</div>
+                <h3 style="color: #fff; margin-top: 0; font-size: 16px;">${t.txTitle}</h3>
+                <div id="transactionsListContainer" style="max-height:180px; overflow-y:auto; margin-top:10px;">${t.loading}</div>
             </div>
 
             <div class="dashboard-card">
-                <h3 style="color: #fff; margin-top: 0; font-size: 15px;">${t.subTitle}</h3>
-                <p style="color: var(--text-muted); font-size: 13px;">${t.subPlan}: <b>${userPlan}</b> | ${t.subActive} (${subscriptionDaysLeft} ${t.days})</p>
-                <button type="button" onclick="openPricingModal()" class="btn-dark-sm" style="margin-top:10px;">${t.btnChangePlan}</button>
+                <h3 style="color: #fff; margin-top: 0; font-size: 16px;">${t.subTitle}</h3>
+                <p style="color: var(--text-muted); font-size: 13px; line-height: 1.5;">${t.subPlan}: <b>${userPlan}</b> | ${t.subActive} (${subscriptionDaysLeft} ${t.days})</p>
+                <button type="button" onclick="openPricingModal()" class="btn-dark-sm" style="margin-top:12px;">${t.btnChangePlan}</button>
             </div>
         `;
 
@@ -1663,7 +1611,7 @@ function renderDashboardContent(section) {
             const txContainer = document.getElementById('transactionsListContainer');
             if (txContainer) {
                 txContainer.innerHTML = `
-                    <div style="color:var(--text-muted); font-size:12px; text-align:center; padding: 24px; border: 1px dashed var(--border-color); border-radius: 10px; background: rgba(255,255,255,0.02);">
+                    <div style="color:var(--text-muted); font-size:13px; text-align:center; padding: 24px; border: 1px dashed var(--border-color); border-radius: 12px; background: rgba(255,255,255,0.02);">
                         ${t.noTx}
                     </div>
                 `;
@@ -1685,10 +1633,10 @@ function renderDashboardContent(section) {
                     if (txContainer) {
                         if (data.transactions && data.transactions.length > 0) {
                             txContainer.innerHTML = data.transactions.map(tx => `
-                                <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-main); padding:8px 12px; border-radius:8px; margin-bottom:6px; font-size:12px; border:1px solid var(--border-color);">
+                                <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-main); padding:10px 14px; border-radius:10px; margin-bottom:8px; font-size:13px; border:1px solid var(--border-color);">
                                     <div>
                                         <span style="color:#fff; font-weight:600;">${tx.type === 'deposit' ? t.txDep : tx.type === 'slot_purchase' ? t.txSlot : t.txGas}</span>
-                                        <span style="color:var(--text-muted); font-size:11px; margin-left:8px;">${tx.date}</span>
+                                        <span style="color:var(--text-muted); font-size:12px; margin-left:8px;">${tx.date}</span>
                                     </div>
                                     <div style="text-align:right;">
                                         <span style="color:${tx.type === 'deposit' ? '#22c55e' : '#fff'}; font-weight:bold;">${tx.amount}</span>
@@ -1714,29 +1662,51 @@ function renderDashboardContent(section) {
         const notifErrorChecked = localStorage.getItem('ax_notify_error') !== 'false' ? 'checked' : '';
         const savedTelegramId = localStorage.getItem('ax_telegram_chat_id') || '';
 
-        centerHtml = `
-            <div id="antiSybilWarningBox" style="background: linear-gradient(135deg, rgba(234, 179, 8, 0.12), rgba(234, 179, 8, 0.03)); border: 1px solid rgba(234, 179, 8, 0.35); border-radius: 16px; padding: 16px 18px; margin-bottom: 18px; display: flex; gap: 14px; align-items: flex-start; position: relative; box-shadow: 0 4px 20px rgba(0,0,0,0.2);">
+        const antiSybilWarningHtml = hideAllBanners ? '' : `
+            <div id="antiSybilWarningBox" style="background: linear-gradient(135deg, rgba(234, 179, 8, 0.12), rgba(234, 179, 8, 0.03)); border: 1px solid rgba(234, 179, 8, 0.35); border-radius: 16px; padding: 18px 20px; margin-bottom: 18px; display: flex; gap: 14px; align-items: flex-start; position: relative; box-shadow: 0 4px 20px rgba(0,0,0,0.2);">
                 <span style="font-size: 20px; margin-top: 1px;">🛡️</span>
                 <div style="flex: 1;">
-                    <div style="color: #eab308; font-weight: bold; font-size: 13px; margin-bottom: 3px; letter-spacing: 0.3px;">${t.setWarnTitle}</div>
-                    <div style="color: var(--text-muted); font-size: 12px; line-height: 1.5;">${t.setWarnDesc}</div>
+                    <div style="color: #eab308; font-weight: bold; font-size: 14px; margin-bottom: 4px; letter-spacing: 0.3px;">${t.setWarnTitle}</div>
+                    <div style="color: var(--text-muted); font-size: 13px; line-height: 1.5;">${t.setWarnDesc}</div>
                 </div>
                 <span onclick="document.getElementById('antiSybilWarningBox').style.display='none'" style="cursor: pointer; color: var(--text-muted); font-size: 16px; padding: 2px 6px; transition: color 0.2s;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--text-muted)'">✕</span>
+            </div>
+        `;
+
+        const telegramTipBoxHtml = hideAllBanners ? '' : `
+            <div style="background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 10px; padding: 10px 12px; margin-top: 8px; font-size: 12px; color: var(--text-muted); line-height: 1.4;">
+                ℹ️ ${t.tgTip} <b style="color:#fff;">AirdropX Bot (@AirdropX_Support_Bot)</b> ${t.tgTip2} <code style="color:#fff; background:#1f1f1f; padding:2px 4px; border-radius:4px;">/start</code> ${t.tgTip3}
+            </div>
+        `;
+
+        centerHtml = `
+            ${antiSybilWarningHtml}
+
+            <div style="background: var(--bg-main); padding: 18px 20px; border-radius: 16px; margin-bottom: 16px; border: 1px solid var(--border-color);">
+                <div style="color: #fff; font-weight: 700; font-size: 16px; margin-bottom: 4px;">${t.setInterfaceTitle}</div>
+                <div style="color: var(--text-muted); font-size: 13px; margin-bottom: 14px;">${t.setInterfaceDesc}</div>
+                <label style="display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
+                    <span style="color: #fff; font-size: 13px; font-weight: 500;">${t.setHideAllBanners}</span>
+                    <label class="switch">
+                        <input type="checkbox" ${hideAllBanners ? 'checked' : ''} onchange="toggleHideBanners(this)">
+                        <span class="slider"></span>
+                    </label>
+                </label>
             </div>
 
             <div class="dashboard-card" style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 18px; padding: 22px; box-shadow: 0 8px 30px rgba(0,0,0,0.4);">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 16px; border-bottom: 1px solid var(--border-color); padding-bottom: 14px;">
                     <div>
-                        <h3 style="color: #fff; margin: 0 0 3px 0; font-size: 16px; font-weight: 600;">${t.setTitle}</h3>
-                        <p style="color: var(--text-muted); font-size: 12px; margin: 0;">${t.setDesc}</p>
+                        <h3 style="color: #fff; margin: 0 0 4px 0; font-size: 16px; font-weight: 600;">${t.setTitle}</h3>
+                        <p style="color: var(--text-muted); font-size: 13px; margin: 0;">${t.setDesc}</p>
                     </div>
-                    <button type="button" onclick="randomizeGlobalSettings()" style="background: linear-gradient(135deg, #2563eb, #1d4ed8); color:#fff; border:none; padding: 8px 14px; border-radius: 10px; font-size: 11px; cursor:pointer; font-weight: 600; box-shadow: 0 4px 12px rgba(37,99,235,0.3);">${t.btnRand}</button>
+                    <button type="button" onclick="randomizeGlobalSettings()" style="background: linear-gradient(135deg, #2563eb, #1d4ed8); color:#fff; border:none; padding: 8px 14px; border-radius: 10px; font-size: 12px; cursor:pointer; font-weight: 600; box-shadow: 0 4px 12px rgba(37,99,235,0.3);">${t.btnRand}</button>
                 </div>
                 
                 <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-main); padding:14px 16px; border-radius:14px; border:1px solid var(--border-color); margin-bottom:18px;">
                     <div>
-                        <div style="color:#fff; font-size:13px; font-weight:600;">${t.setBgTitle}</div>
-                        <div style="color:var(--text-muted); font-size:11px; margin-top:2px;">${t.setBgDesc}</div>
+                        <div style="color:#fff; font-size:14px; font-weight:600;">${t.setBgTitle}</div>
+                        <div style="color:var(--text-muted); font-size:12px; margin-top:2px;">${t.setBgDesc}</div>
                     </div>
                     <label class="toggle-switch">
                         <input type="checkbox" id="bgSchedulerToggle" checked onchange="toggleSchedulerState(this)">
@@ -1745,7 +1715,7 @@ function renderDashboardContent(section) {
                 </div>
 
                 <div id="schedulerSettingsWrapper" style="transition: opacity 0.3s ease;">
-                    <div style="font-size:12px; color:var(--text-muted); margin-bottom:8px; font-weight:600;">${t.setDays}</div>
+                    <div style="font-size:13px; color:var(--text-muted); margin-bottom:8px; font-weight:600;">${t.setDays}</div>
                     
                     <div class="calendar-grid" id="globalCalendarGrid" style="margin-bottom:16px; display: flex; gap: 8px; flex-wrap: wrap;">
                         <div class="calendar-day active" data-raw-day="Пн" onclick="handleCalendarDayClick(this)" style="cursor:pointer; user-select:none; flex: 1; min-width: 45px; padding: 12px 6px; font-size: 13px;">${t.calDays['Пн']}</div>
@@ -1757,27 +1727,25 @@ function renderDashboardContent(section) {
                         <div class="calendar-day" data-raw-day="Вс" onclick="handleCalendarDayClick(this)" style="cursor:pointer; user-select:none; flex: 1; min-width: 45px; padding: 12px 6px; font-size: 13px;">${t.calDays['Вс']}</div>
                     </div>
 
-                    <div style="font-size:12px; color:var(--text-muted); margin-bottom:8px; font-weight:600;">${t.setTimeTitle}</div>
+                    <div style="font-size:13px; color:var(--text-muted); margin-bottom:8px; font-weight:600;">${t.setTimeTitle}</div>
                     <div id="dailyTimeConfigsContainer" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px;"></div>
                 </div>
 
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px;">
                     <div>
-                        <label style="font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 6px;">${t.setGwei}</label>
-                        <input type="number" class="auth-input" value="30" min="5" max="300" id="globalGweiInput" oninput="checkInputLimit(this, 300)" style="padding: 10px 12px; background: var(--bg-main); border-radius: 10px;">
+                        <label style="font-size: 12px; color: var(--text-muted); display: block; margin-bottom: 6px;">${t.setGwei}</label>
+                        <input type="number" class="auth-input" value="30" min="5" max="300" id="globalGweiInput" oninput="checkInputLimit(this, 300)" style="padding: 10px 12px; background: var(--bg-main); border-radius: 10px; font-size: 13px;">
                     </div>
                     <div>
-                        <label style="font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 6px;">${t.setTg}</label>
-                        <input type="text" class="auth-input" placeholder="${t.tgPh}" id="globalTelegramInput" value="${savedTelegramId}" style="padding: 10px 12px; background: var(--bg-main); border-radius: 10px;">
-                        <div style="background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 8px; padding: 8px 10px; margin-top: 6px; font-size: 10px; color: var(--text-muted); line-height: 1.3;">
-                            ℹ️ ${t.tgTip} <b style="color:#fff;">AirdropX Bot (@AirdropX_Support_Bot)</b> ${t.tgTip2} <code style="color:#fff; background:#1f1f1f; padding:1px 3px; border-radius:3px;">/start</code> ${t.tgTip3}
-                        </div>
+                        <label style="font-size: 12px; color: var(--text-muted); display: block; margin-bottom: 6px;">${t.setTg}</label>
+                        <input type="text" class="auth-input" placeholder="${t.tgPh}" id="globalTelegramInput" value="${savedTelegramId}" style="padding: 10px 12px; background: var(--bg-main); border-radius: 10px; font-size: 13px;">
+                        ${telegramTipBoxHtml}
                     </div>
                 </div>
 
-                <div style="background: var(--bg-main); border: 1px solid var(--border-color); border-radius: 12px; padding: 14px; margin-bottom: 16px;">
-                    <div style="font-size: 12px; color: #fff; font-weight: 600; margin-bottom: 10px;">${t.notifTitle}</div>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 11px; color: var(--text-muted);">
+                <div style="background: var(--bg-main); border: 1px solid var(--border-color); border-radius: 12px; padding: 16px; margin-bottom: 18px;">
+                    <div style="font-size: 13px; color: #fff; font-weight: 600; margin-bottom: 12px;">${t.notifTitle}</div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 13px; color: var(--text-muted);">
                         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" id="notifSettingsToggle" ${notifSettingsChecked}> ${t.notif1}</label>
                         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" id="notifStartToggle" ${notifStartChecked}> ${t.notif2}</label>
                         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" id="notifSuccessToggle" ${notifSuccessChecked}> ${t.notif3}</label>
@@ -1785,26 +1753,27 @@ function renderDashboardContent(section) {
                     </div>
                 </div>
 
-                <button type="button" onclick="saveGlobalProfileSettings()" class="btn-modal-primary" style="width:100%; padding: 12px; font-size: 13px; font-weight: 600; border-radius: 12px; cursor: pointer;">${t.btnSaveSet}</button>
+                <button type="button" onclick="saveGlobalProfileSettings()" class="btn-modal-primary" style="width:100%; padding: 12px; font-size: 14px; font-weight: 600; border-radius: 12px; cursor: pointer;">${t.btnSaveSet}</button>
             </div>
         `;
         setTimeout(updateDailyConfigsUI, 50);
+
     } else if (section === 'Looter') {
         centerHtml = `
             <div class="dashboard-card">
-                <h3 style="color: #fff; margin-top: 0; font-size: 15px;">🚀 ${t.lootTitle}</h3>
-                <p style="color: var(--text-muted); font-size: 13px;">${t.lootDesc}</p>
-                <button type="button" onclick="startScanningDrops()" class="btn-purple-lg" style="font-size: 12px; padding: 10px 16px; width:auto;">${t.btnScan}</button>
-                <div id="drop-logs" style="margin-top: 15px; background: var(--bg-main); padding: 12px; border-radius: 10px; font-family: monospace; font-size: 11px; color: var(--text-muted); max-height: 160px; overflow-y: auto; border: 1px solid var(--border-color);">${t.logInitLoot}</div>
+                <h3 style="color: #fff; margin-top: 0; font-size: 16px;">🚀 ${t.lootTitle}</h3>
+                <p style="color: var(--text-muted); font-size: 13px; line-height: 1.5;">${t.lootDesc}</p>
+                <button type="button" onclick="startScanningDrops()" class="btn-purple-lg" style="font-size: 13px; padding: 12px 20px; width:auto; margin-top: 4px;">${t.btnScan}</button>
+                <div id="drop-logs" style="margin-top: 16px; background: var(--bg-main); padding: 16px; border-radius: 12px; font-family: monospace; font-size: 13px; line-height: 1.5; color: var(--text-muted); min-height: 250px; max-height: 380px; overflow-y: auto; border: 1px solid var(--border-color);">${t.logInitLoot}</div>
             </div>
         `;
     } else if (section === 'Farming') {
         centerHtml = `
             <div class="dashboard-card">
-                <h3 style="color: #fff; margin-top: 0; font-size: 15px;">${t.farmTitle}</h3>
-                <p style="color: var(--text-muted); font-size: 13px;">${t.farmDesc} (${t.subPlan}: <b>${userPlan}</b>)</p>
+                <h3 style="color: #fff; margin-top: 0; font-size: 16px;">${t.farmTitle}</h3>
+                <p style="color: var(--text-muted); font-size: 13px; line-height: 1.5; margin-bottom: 12px;">${t.farmDesc} (${t.subPlan}: <b>${userPlan}</b>)</p>
                 <label style="color: var(--text-muted); font-size: 12px; display: block; margin-bottom: 6px;">${t.netSelect}</label>
-                <select class="auth-input" id="farmNetwork" style="margin-bottom: 14px;">
+                <select class="auth-input" id="farmNetwork" style="margin-bottom: 14px; font-size: 13px; padding: 10px 12px;">
                     <option value="" disabled selected>${t.netPh}</option>
                     <option value="Base">Base L2</option>
                     <option value="Ethereum">Ethereum Mainnet</option>
@@ -1816,17 +1785,17 @@ function renderDashboardContent(section) {
                     <option value="Optimism">Optimism</option>
                     <option value="Tron">Tron</option>
                 </select>
-                <button type="button" onclick="startAutoFarming()" class="btn-purple-lg" style="font-size: 12px; padding: 10px 16px; width:auto;">${t.btnFarm}</button>
-                <div id="farm-console-logs" style="margin-top: 15px; background: var(--bg-main); padding: 12px; border-radius: 10px; font-family: monospace; font-size: 11px; color: #22c55e; max-height: 160px; overflow-y: auto; border: 1px solid var(--border-color);">${t.logWait}</div>
+                <button type="button" onclick="startAutoFarming()" class="btn-purple-lg" style="font-size: 13px; padding: 12px 20px; width:auto;">${t.btnFarm}</button>
+                <div id="farm-console-logs" style="margin-top: 16px; background: var(--bg-main); padding: 16px; border-radius: 12px; font-family: monospace; font-size: 13px; line-height: 1.5; color: #22c55e; min-height: 250px; max-height: 380px; overflow-y: auto; border: 1px solid var(--border-color);">${t.logWait}</div>
             </div>
         `;
     } else if (section === 'Wallets') {
-        const isTipHidden = localStorage.getItem('hideProxyTip') === 'true';
+        const isTipHidden = localStorage.getItem('hideProxyTip') === 'true' || hideAllBanners;
         const proxyTipHtml = isTipHidden ? '' : `
-            <div id="proxyTipBox" style="background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.2); padding: 10px 12px; border-radius: 10px; font-size: 11px; color: #93c5fd; display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; box-sizing: border-box;">
+            <div id="proxyTipBox" style="background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.2); padding: 12px 14px; border-radius: 10px; font-size: 12px; color: #93c5fd; display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; box-sizing: border-box; line-height: 1.4;">
                 <div style="display: flex; align-items: flex-start; gap: 8px;">
                     <span style="font-size: 14px; line-height: 1;">💡</span>
-                    <div style="line-height: 1.4;">
+                    <div>
                         <b style="color: #bfdbfe;">${t.proxyTipTitle}</b> ${t.proxyTipDesc}
                     </div>
                 </div>
@@ -1837,49 +1806,74 @@ function renderDashboardContent(section) {
         centerHtml = `
             <div class="dashboard-card" style="margin-bottom: 16px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                    <h3 style="color: #fff; margin: 0; font-size: 15px;">${t.walTitle}</h3>
-                    <span id="slot-info-badge" style="font-size: 11px; background: #1f1f1f; color: #fff; padding: 4px 10px; border-radius: 8px; border: 1px solid var(--border-color);">${t.loading}</span>
+                    <h3 style="color: #fff; margin: 0; font-size: 16px;">${t.walTitle}</h3>
+                    <span id="slot-info-badge" style="font-size: 12px; background: #1f1f1f; color: #fff; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border-color);">${t.loading}</span>
                 </div>
                 <div id="walletsListContainer" style="display: flex; flex-direction: column; gap: 8px;">${t.loading}</div>
-                <button type="button" onclick="buyExtraSlot()" class="auth-input" style="margin-top: 12px; width: auto; font-size: 12px; background:#1f1f1f; cursor:pointer;">${t.btnBuySlot}</button>
-                <div id="buySlotMsg" style="margin-top: 6px; font-size:11px;"></div>
+                <button type="button" onclick="buyExtraSlot()" class="auth-input" style="margin-top: 12px; width: auto; font-size: 13px; background:#1f1f1f; cursor:pointer; padding: 10px 16px;">${t.btnBuySlot}</button>
+                <div id="buySlotMsg" style="margin-top: 6px; font-size:12px;"></div>
             </div>
             <div class="dashboard-card">
-                <h3 style="color: #fff; margin-top: 0; font-size: 15px;">${t.walAddTitle}</h3>
-                <div style="display: flex; flex-direction: column; gap: 8px;">
-                    <input type="text" id="newWalletAddress" placeholder="${t.phAddr}" class="auth-input">
-                    <input type="password" id="newWalletPk" placeholder="${t.phPk}" class="auth-input">
+                <h3 style="color: #fff; margin-top: 0; font-size: 16px;">${t.walAddTitle}</h3>
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+                    <input type="text" id="newWalletAddress" placeholder="${t.phAddr}" class="auth-input" style="font-size: 13px; padding: 10px 12px;">
+                    <input type="password" id="newWalletPk" placeholder="${t.phPk}" class="auth-input" style="font-size: 13px; padding: 10px 12px;">
                     ${proxyTipHtml}
-                    <input type="text" id="newWalletProxy" placeholder="${t.phProxy}" class="auth-input">
-                    <button type="button" onclick="addNewWalletToDB()" class="btn-modal-primary" style="margin-top:4px;">${t.btnAddWal}</button>
+                    <input type="text" id="newWalletProxy" placeholder="${t.phProxy}" class="auth-input" style="font-size: 13px; padding: 10px 12px;">
+                    <button type="button" onclick="addNewWalletToDB()" class="btn-modal-primary" style="margin-top:4px; padding: 12px; font-size: 14px;">${t.btnAddWal}</button>
                 </div>
-                <div id="walletResponseMsg" style="margin-top: 8px; font-size:11px;"></div>
+                <div id="walletResponseMsg" style="margin-top: 8px; font-size:12px;"></div>
             </div>
         `;
         setTimeout(loadWalletsFromDB, 50);
     } else if (section === 'Networks') {
         const networksHtml = NETWORKS_CONFIG.map(net => `
-            <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-main); padding:12px 14px; border-radius:12px; margin-bottom:8px; border:1px solid var(--border-color);">
-                <div style="display:flex; align-items:center; gap:12px;">
-                    <div style="display:flex; align-items:center; justify-content:center; width:24px; height:24px;">${net.icon}</div>
-                    <div>
-                        <div style="color:#fff; font-weight:600; font-size:13px;">${net.name} <span style="font-size: 11px; color: var(--text-muted);">(${net.symbol})</span></div>
-                        <div style="color: #22c55e; font-size:11px;">Status: <b style="color:#fff;">${t.statusOnline}</b> | ${t.gasLabel} <span id="gas-${net.key}" style="color:#eab308; font-weight:bold;">${t.loading}</span></div>
+            <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-main); padding:16px 20px; border-radius:16px; margin-bottom:10px; border:1px solid var(--border-color);">
+                <div style="display:flex; align-items:center; gap:16px;">
+                    <div style="display:flex; align-items:center; justify-content:center; width:32px; height:32px;">${net.icon}</div>
+                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                        <div style="color:#fff; font-weight:700; font-size:15px;">${net.name} <span style="font-size: 12px; color: var(--text-muted); font-weight: normal;">(${net.symbol})</span></div>
+                        <div style="font-size:13px; color: var(--text-muted);">${t.gasLabel} <span id="gas-${net.key}" style="color:#eab308; font-weight:bold;">${t.loading}</span></div>
+                        <div style="color: #38bdf8; font-size: 13px; font-weight: 600; font-family: monospace;" id="timer-${net.key}">${formatCountdown(net.deadline)}</div>
                     </div>
                 </div>
                 <div>
-                    <a href="${net.explorer}" target="_blank" style="text-decoration:none; background:#1f1f1f; color:#fff; padding:6px 10px; border-radius:8px; font-size:12px; border:1px solid var(--border-color); transition: background 0.2s;" onmouseover="this.style.background='#333'" onmouseout="this.style.background='#1f1f1f'">${t.btnExp}</a>
+                    <a href="${net.explorer}" target="_blank" style="text-decoration:none; background:#1f1f1f; color:#fff; padding:8px 14px; border-radius:10px; font-size:13px; border:1px solid var(--border-color); transition: background 0.2s;" onmouseover="this.style.background='#333'" onmouseout="this.style.background='#1f1f1f'">${t.btnExp}</a>
                 </div>
             </div>
         `).join('');
 
+        const networkGuideHtml = hideAllBanners ? '' : `
+            <div id="guide-box" style="position: relative; background: rgba(157,78,221,0.08); border: 1px solid rgba(157,78,221,0.25); border-radius: 14px; padding: 16px 18px; margin-bottom: 18px; font-size: 13px; color: var(--text-muted); line-height: 1.5;">
+                <button onclick="document.getElementById('guide-box').style.display='none'" style="position: absolute; top: 14px; right: 16px; background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 16px; font-weight: bold;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--text-muted)'">✕</button>
+                <b style="color: #fff;">📖 Справочник показателей:</b><br>
+                • <b style="color: #c77dff;">Gwei</b> — единица стоимости газа в сетях EVM (чем ниже, тем дешевле транзакции).<br>
+                • <b style="color: #c77dff;">Sun</b> — минимальная неделимая расчетная единица сети Tron.<br>
+                • <b style="color: #c77dff;">Micro-lamports</b> — микро-ламипорты, комиссия за приоритет транзакций в Solana.<br>
+                • <b style="color: #c77dff;">N/A</b> — узел ноды временно перегружен (автоматически переподключается).
+            </div>
+        `;
+
         centerHtml = `
             <div class="dashboard-card">
-                <h3 style="color: #fff; margin-top: 0; font-size: 15px; margin-bottom: 4px;">${t.netTitle}</h3>
-                <p style="color: var(--text-muted); font-size: 12px; margin-bottom: 16px;">${t.netDesc}</p>
+                <h3 style="color: #fff; margin-top: 0; font-size: 16px; margin-bottom: 6px;">${t.netTitle}</h3>
+                <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 14px; line-height: 1.5;">${t.netDesc}</p>
+                
+                ${networkGuideHtml}
+
                 <div>${networksHtml}</div>
             </div>
         `;
+
+        if (window.networksTimerInterval) clearInterval(window.networksTimerInterval);
+        window.networksTimerInterval = setInterval(() => {
+            NETWORKS_CONFIG.forEach(net => {
+                const timerEl = document.getElementById(`timer-${net.key}`);
+                if (timerEl) {
+                    timerEl.innerText = formatCountdown(net.deadline);
+                }
+            });
+        }, 1000);
 
         setTimeout(async () => {
             for (let net of NETWORKS_CONFIG) {
@@ -1896,16 +1890,17 @@ function renderDashboardContent(section) {
         }, 100);
     }
 
+    // Общий вывод дашборда
     content.innerHTML = `
         <div class="desktop-sidebar" style="height: fit-content; align-self: flex-start;">
             <div style="border-bottom: 1px solid var(--border-color); padding-bottom: 12px; margin-bottom: 8px;">
                 <div style="font-weight: 600; color: #fff; font-size: 14px;">${username}</div>
-                <div style="font-size: 11px; color: var(--text-muted);">${t.subPlan}: ${userPlan}</div>
-                <div style="font-size: 10px; color: #22c55e; margin-top: 4px;">${t.subActive} (${subscriptionDaysLeft} ${t.days})</div>
+                <div style="font-size: 12px; color: var(--text-muted);">${t.subPlan}: ${userPlan}</div>
+                <div style="font-size: 11px; color: #22c55e; margin-top: 4px;">${t.subActive} (${subscriptionDaysLeft} ${t.days})</div>
             </div>
 
             <div style="display: flex; flex-direction: column; gap: 2px;">
-                <div style="font-size: 10px; color: #737373; text-transform: uppercase; padding: 4px 8px; font-weight: bold;">${t.menuMain}</div>
+                <div style="font-size: 11px; color: #737373; text-transform: uppercase; padding: 4px 8px; font-weight: bold;">${t.menuMain}</div>
                 <div class="sidebar-menu-item ${section === 'Account' ? 'active' : ''}" onclick="switchMenu(this, 'Account')">${t.menuAcc}</div>
                 <div class="sidebar-menu-item ${section === 'Looter' ? 'active' : ''}" onclick="switchMenu(this, 'Looter')">${t.menuLooter}</div>
                 <div class="sidebar-menu-item ${section === 'Farming' ? 'active' : ''}" onclick="switchMenu(this, 'Farming')">${t.menuFarm}</div>
