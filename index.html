@@ -233,54 +233,105 @@
         </div>
 
                 <!-- Презентация с плейсхолдерами под гифки -->
+        <!-- Раздел инструкции с гифками и скриншотом -->
         <div class="section-title" id="instr-title">Как работает AIRDROP-X (Инструкция)</div>
         <div class="showcase-section">
+            
+            <!-- Карточка 1: Авто-фарм -->
             <div class="showcase-card">
                 <div class="showcase-content">
                     <h3 id="sc1-t">🌾 1. Авто-фарм и Anti-Sybil Ядро</h3>
-                    <p id="sc1-d1"><b style="color:#fff;">Что это и почему это выгодно:</b> Ручное выполнение сотен транзакций в день отнимает уйму сил и времени. Наш авто-фарминг через встроенное ядро полностью имитирует активность живого пользователя.</p>
-                    <p id="sc1-d2">Софт рандомизирует задержки, порядок кошельков и суммы транзакций, защищая от сибил-банов.</p>
+                    <p id="sc1-d1" style="font-size: 15px; line-height: 1.6;"><b style="color:#fff;">Что это и почему это выгодно:</b> Ручное выполнение сотен транзакций в день отнимает уйму сил и времени. Наш авто-фарминг через встроенное ядро полностью имитирует активность живого пользователя.</p>
+                    <p id="sc1-d2" style="font-size: 15px; line-height: 1.6;">Софт рандомизирует задержки, порядок кошельков и суммы транзакций, защищая от сибил-банов.</p>
+                    
+                    <ul style="list-style: none; padding: 0; margin: 26px 0 0 0; display: flex; flex-direction: column; gap: 14px;">
+                        <li style="display: flex; align-items: center; gap: 10px; font-size: 15px; color: var(--text-muted);"><span style="color: #c77dff; font-size: 18px;">✔</span> Smart Gwei Control (защита от переплат)</li>
+                        <li style="display: flex; align-items: center; gap: 10px; font-size: 15px; color: var(--text-muted);"><span style="color: #c77dff; font-size: 18px;">✔</span> Динамическая маршрутизация транзакций</li>
+                        <li style="display: flex; align-items: center; gap: 10px; font-size: 15px; color: var(--text-muted);"><span style="color: #c77dff; font-size: 18px;">✔</span> Human-like тайминги и имитация пауз</li>
+                    </ul>
+                    
+                    <div style="display: flex; gap: 10px; margin-top: 28px; flex-wrap: wrap;">
+                        <span style="background: rgba(157,78,221,0.15); color: #c77dff; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 600; border: 1px solid rgba(157,78,221,0.3);">LayerZero</span>
+                        <span style="background: rgba(157,78,221,0.15); color: #c77dff; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 600; border: 1px solid rgba(157,78,221,0.3);">ZkSync</span>
+                        <span style="background: rgba(157,78,221,0.15); color: #c77dff; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 600; border: 1px solid rgba(157,78,221,0.3);">Base L2</span>
+                    </div>
                 </div>
-                <div class="media-placeholder">
-                    <span class="media-icon">🎬</span>
-                    <span id="ph1">GIF-анимация процесса авто-фарма</span>
+                <div class="media-placeholder" style="padding: 0; overflow: hidden;">
+                    <img src="autofarm.gif" alt="Auto-farm process" style="width: 100%; height: 100%; object-fit: cover; border-radius: 12px;">
                 </div>
             </div>
 
+            <!-- Карточка 2: Кошельки -->
             <div class="showcase-card">
                 <div class="showcase-content">
                     <h3 id="sc2-t">👥 2. Лимиты и добавление кошельков</h3>
-                    <p id="sc2-d1"><b style="color:#fff;">Удобство и защита тарифов:</b> Тариф Standard позволяет запустить до 5 кошельков (для теста), PRO открывает до 15 слотов, а Premium расширяет лимит до 30 кошельков.</p>
-                    <p id="sc2-d2">Импортируйте ключи и прокси в один клик, управляя всей фермой из единой панели.</p>
+                    <p id="sc2-d1" style="font-size: 15px; line-height: 1.6;"><b style="color:#fff;">Удобство и защита тарифов:</b> Тариф Standard позволяет запустить до 5 кошельков (для теста), PRO открывает до 15 слотов, а Premium расширяет лимит до 30 кошельков.</p>
+                    <p id="sc2-d2" style="font-size: 15px; line-height: 1.6;">Импортируйте ключи и прокси в один клик, управляя всей фермой из единой панели.</p>
+                    
+                    <ul style="list-style: none; padding: 0; margin: 26px 0 0 0; display: flex; flex-direction: column; gap: 14px;">
+                        <li style="display: flex; align-items: center; gap: 10px; font-size: 15px; color: var(--text-muted);"><span style="color: #c77dff; font-size: 18px;">✔</span> Изолированные сессии для каждого слота (No Linkage)</li>
+                        <li style="display: flex; align-items: center; gap: 10px; font-size: 15px; color: var(--text-muted);"><span style="color: #c77dff; font-size: 18px;">✔</span> Поддержка IPv4 / IPv6 и мобильных прокси</li>
+                        <li style="display: flex; align-items: center; gap: 10px; font-size: 15px; color: var(--text-muted);"><span style="color: #c77dff; font-size: 18px;">✔</span> Локальное шифрование приватных ключей</li>
+                    </ul>
+
+                    <div style="display: flex; gap: 10px; margin-top: 28px; flex-wrap: wrap;">
+                        <span style="background: rgba(157,78,221,0.15); color: #c77dff; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 600; border: 1px solid rgba(157,78,221,0.3);">AES-256</span>
+                        <span style="background: rgba(157,78,221,0.15); color: #c77dff; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 600; border: 1px solid rgba(157,78,221,0.3);">Socks5 / HTTP</span>
+                        <span style="background: rgba(157,78,221,0.15); color: #c77dff; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 600; border: 1px solid rgba(157,78,221,0.3);">Bulk Import</span>
+                    </div>
                 </div>
-                <div class="media-placeholder">
-                    <span class="media-icon">🖼️</span>
-                    <span id="ph2">Скриншот импорта кошельков</span>
+                <div class="media-placeholder" style="padding: 0; overflow: hidden;">
+                    <img src="wallets.gif" alt="Wallets import" style="width: 100%; height: 100%; object-fit: cover; border-radius: 12px;">
                 </div>
             </div>
 
+            <!-- Карточка 3: Лут -->
             <div class="showcase-card">
                 <div class="showcase-content">
                     <h3 id="sc3-t">📦 3. Автоматический сбор лута (Claim Looter)</h3>
-                    <p id="sc3-d1"><b style="color:#fff;">Когда и как это происходит:</b> Как только проект объявляет раздачу ретродропа, сканер находит распределенные токены.</p>
-                    <p id="sc3-d2">Поддерживаются Base, Arbitrum, ZkSync, Scroll, Solana и др. Один клик — и награды у вас.</p>
+                    <p id="sc3-d1" style="font-size: 15px; line-height: 1.6;"><b style="color:#fff;">Когда и как это происходит:</b> Как только проект объявляет раздачу ретродропа, сканер находит распределенные токены.</p>
+                    <p id="sc3-d2" style="font-size: 15px; line-height: 1.6;">Поддерживаются Base, Arbitrum, ZkSync, Scroll, Solana и др. Один клик — и награды у вас.</p>
+                    
+                    <ul style="list-style: none; padding: 0; margin: 26px 0 0 0; display: flex; flex-direction: column; gap: 14px;">
+                        <li style="display: flex; align-items: center; gap: 10px; font-size: 15px; color: var(--text-muted);"><span style="color: #c77dff; font-size: 18px;">✔</span> Мгновенный поиск балансов по контрактам</li>
+                        <li style="display: flex; align-items: center; gap: 10px; font-size: 15px; color: var(--text-muted);"><span style="color: #c77dff; font-size: 18px;">✔</span> Обход лагов RPC в момент раздачи</li>
+                        <li style="display: flex; align-items: center; gap: 10px; font-size: 15px; color: var(--text-muted);"><span style="color: #c77dff; font-size: 18px;">✔</span> Авто-агрегация токенов на мастер-счет</li>
+                    </ul>
+
+                    <div style="display: flex; gap: 10px; margin-top: 28px; flex-wrap: wrap;">
+                        <span style="background: rgba(157,78,221,0.15); color: #c77dff; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 600; border: 1px solid rgba(157,78,221,0.3);">Smart Contracts</span>
+                        <span style="background: rgba(157,78,221,0.15); color: #c77dff; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 600; border: 1px solid rgba(157,78,221,0.3);">API Scanner</span>
+                        <span style="background: rgba(157,78,221,0.15); color: #c77dff; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 600; border: 1px solid rgba(157,78,221,0.3);">Auto-Swap</span>
+                    </div>
                 </div>
-                <div class="media-placeholder">
-                    <span class="media-icon">🎬</span>
-                    <span id="ph3">GIF-анимация клейма наград</span>
+                <div class="media-placeholder" style="padding: 0; overflow: hidden;">
+                    <img src="looter.gif" alt="Claim Looter" style="width: 100%; height: 100%; object-fit: cover; border-radius: 12px;">
                 </div>
             </div>
 
+            <!-- Карточка 4: Система уведомлений -->
             <div class="showcase-card">
                 <div class="showcase-content">
-                    <h3 id="sc4-t">💬 4. Профессиональная поддержка 24/7</h3>
-                    <p id="sc4-d1"><b style="color:#fff;">Мы всегда рядом:</b> Наша команда техподдержки поможет вам настроить прокси, газ и мосты для максимального профита.</p>
+                    <h3 id="sc4-t">🔔 4. Система уведомлений и планировщик</h3>
+                    <p id="sc4-d1" style="font-size: 15px; line-height: 1.6;"><b style="color:#fff;">Контроль и отчеты в реальном времени:</b> Получайте детальные отчеты о каждой сессии фарма, расходе газа, статусе прокси и найденном луте прямо в Telegram-бот.</p>
+                    
+                    <ul style="list-style: none; padding: 0; margin: 26px 0 0 0; display: flex; flex-direction: column; gap: 14px;">
+                        <li style="display: flex; align-items: center; gap: 10px; font-size: 15px; color: var(--text-muted);"><span style="color: #c77dff; font-size: 18px;">✔</span> Детализированные логи прямо в Telegram</li>
+                        <li style="display: flex; align-items: center; gap: 10px; font-size: 15px; color: var(--text-muted);"><span style="color: #c77dff; font-size: 18px;">✔</span> Настройка расписания для каждого дня недели</li>
+                        <li style="display: flex; align-items: center; gap: 10px; font-size: 15px; color: var(--text-muted);"><span style="color: #c77dff; font-size: 18px;">✔</span> Авто-остановка при нехватке газа или ошибках</li>
+                    </ul>
+
+                    <div style="display: flex; gap: 10px; margin-top: 28px; flex-wrap: wrap;">
+                        <span style="background: rgba(157,78,221,0.15); color: #c77dff; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 600; border: 1px solid rgba(157,78,221,0.3);">Telegram API</span>
+                        <span style="background: rgba(157,78,221,0.15); color: #c77dff; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 600; border: 1px solid rgba(157,78,221,0.3);">Cron Scheduler</span>
+                        <span style="background: rgba(157,78,221,0.15); color: #c77dff; padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 600; border: 1px solid rgba(157,78,221,0.3);">WebHooks</span>
+                    </div>
                 </div>
-                <div class="media-placeholder">
-                    <span class="media-icon">🖼️</span>
-                    <span id="ph4">Скриншот чата поддержки</span>
+                <div class="media-placeholder" style="padding: 0; overflow: hidden;">
+                    <img src="support.gif" alt="Support Bot Report" style="width: 100%; height: 100%; object-fit: cover; border-radius: 12px;">
                 </div>
             </div>
+
         </div>
 
         <div id="faq-heading" class="section-title">Часто задаваемые вопросы</div>

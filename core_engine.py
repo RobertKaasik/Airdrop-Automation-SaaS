@@ -79,6 +79,17 @@ class RealFarmWorker:
         if clean_proxy.startswith("[") and clean_proxy.endswith("]"):
             clean_proxy = clean_proxy[1:-1].strip()
             
+        # ⬇️ УНИВЕРСАЛЬНЫЙ ПАРСЕР ДЛЯ IPv4 И IPv6
+        if "://" not in clean_proxy:
+            parts = clean_proxy.rsplit(':', 3)
+            if len(parts) == 4:
+                ip, port, user, pwd = parts
+                # Если это IPv6 и он без квадратных скобок — оборачиваем для корректного URL
+                if ":" in ip and not ip.startswith("["):
+                    ip = f"[{ip}]"
+                clean_proxy = f"http://{user}:{pwd}@{ip}:{port}"
+        # ⬆️ КОНЕЦ БЛОКА
+            
         self.proxy = clean_proxy
         self.target_network = target_network
         self.rpc_router = MultiRouteRpcRouter(self.target_network)

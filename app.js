@@ -16,6 +16,7 @@ let confirmedRegistrationEmail = "";
 let currentEditingWallet = null;
 let lastSaveTimestamp = 0; 
 let lastRandomizeTimestamp = 0; 
+let cachedStatsData = { current_slots: 1, max_slots: 300, is_sold_out: false };
 
 const PLAN_PRICES = { Standard: 95, Pro: 150, Premium: 280 };
 const PLAN_LABELS = { Standard: 'Standard', Pro: 'PRO Фермер', Premium: 'Premium VIP' };
@@ -24,35 +25,6 @@ let paymentAccessToken = sessionStorage.getItem('ax_payment_token') || '';
 let paymentUnlocked = sessionStorage.getItem('ax_paid_session_id') === clientSessionId && !!paymentAccessToken;
 
 const MASTER_WALLET = "0x5e5316Dea1c44d220d4c60A5fcC2949E5A06Fc66";
-
-window.addEventListener('DOMContentLoaded', () => {
-    updateStaticText(currentLang);
-    loadPlatformStats();
-    const line = document.getElementById('preloader-line');
-    if(line) {
-        // Рамка сама пробегает периметр за 0.8 сек, затем плавно гаснет
-        setTimeout(() => { 
-            line.style.opacity = '0'; 
-        }, 800);
-    }
-
-    const savedUsername = localStorage.getItem('airdrop_username');
-    if (savedUsername) {
-        isLoggedIn = true;
-        userPlan = localStorage.getItem('selected_plan') || 'Standard';
-        
-        const loginBtn = document.getElementById('login-btn');
-        if (loginBtn) loginBtn.style.display = 'none';
-
-        document.getElementById('main-content').style.display = 'none';
-        document.getElementById('dashboard-content').style.display = 'flex';
-        const mobileNav = document.getElementById('mobileNavBar');
-        if(mobileNav) mobileNav.style.display = ''; 
-        
-        currentSection = localStorage.getItem('airdrop_current_section') || 'Account';
-        renderDashboardContent(currentSection);
-    }
-});
 
 const NETWORKS_CONFIG = [
     { name: "Ethereum", symbol: "ETH", key: "Ethereum", icon: '<img src="https://cryptologos.cc/logos/ethereum-eth-logo.svg?v=032" style="width:24px; height:24px;">', explorer: "https://etherscan.io" },
@@ -66,7 +38,7 @@ const NETWORKS_CONFIG = [
     { name: "Tron", symbol: "TRX", key: "Tron", icon: '<img src="https://cryptologos.cc/logos/tron-trx-logo.svg?v=032" style="width:24px; height:24px;">', explorer: "https://tronscan.org" }
 ];
 
-// --- Полный словарь переводов для лендинга, дашборда, инструкции, FAQ и модалок ---
+// --- Полный словарь переводов (Лендинг, Дашборд, Модалки, Тарифы, Оплата) ---
 const translations = {
     ru: {
         langCode: "RU", login: "Войти", logout: "Выйти", loading: "Загрузка...", days: "дн.",
@@ -103,10 +75,10 @@ const translations = {
         inst3DescText2: "Поддерживаются Base, Arbitrum, ZkSync, Scroll, Solana и др. Один клик — и награды у вас.",
         ph3: "GIF-анимация клейма наград",
         
-        inst4Title: "💬 4. Профессиональная поддержка 24/7",
-        inst4DescBold: "Мы всегда рядом:",
-        inst4DescText: "Наша команда техподдержки поможет вам настроить прокси, газ и мосты для максимального профита.",
-        ph4: "Скриншот чата поддержки",
+        inst4Title: "🔔 4. Система уведомлений и планировщик",
+        inst4DescBold: "Контроль и отчеты в реальном времени:",
+        inst4DescText: "Получайте детальные отчеты о каждой сессии фарма, расходе газа, статусе прокси и найденном луте прямо в Telegram-бот.",
+        ph4: "Скриншот Telegram-отчета от бота",
 
         faqHeading: "Часто задаваемые вопросы",
         faq1Q: "Как работает авто-клейм аирдропов?",
@@ -121,7 +93,46 @@ const translations = {
         footerPrivacy: "Privacy Policy",
         footerTerms: "Terms of Use",
 
-        menuMain: "Меню", menuAcc: "👤 Аккаунт & Баланс", menuLooter: "📦 Looter", menuFarm: "🌾 Фарминг",
+        // Модалка тарифов
+        pTitleModal: "⚡ Выберите тарифный план AIRDROP-X",
+        pDescModal: "Закрытый доступ: оплата активации за первый месяц, далее ежемесячное продление.",
+        subTop: "ВХОД + ПОДПИСКА",
+        
+        stdName: "Стандарт",
+        stdPer: "/ 1-й месяц, далее $30/мес",
+        stdF1: "Лимит: до 5 кошельков (воркеров)",
+        stdF2: "Только сеть Base L2",
+        stdF3: "Базовый Claim Looter и Anti-Sybil",
+        stdBtn: "Активировать за $95",
+        
+        proBadge: "Рекомендуемый",
+        proName: "PRO Фермер",
+        proPer: "/ 1-й месяц, далее $50/мес",
+        proF1: "Лимит до 15 кошельков (воркеров)",
+        proF2: "Все сети кроме Solana (Arbitrum, ZkSync, Scroll...)",
+        proF3: "Автоматический фоновый планировщик",
+        proF4: "Приоритетная поддержка 24/7",
+        proBtn: "Активировать за $150",
+        
+        premName: "Premium VIP",
+        premPer: "/ 1-й месяц, далее $90/мес",
+        premF1: "Лимит до 30 слотов кошельков",
+        premF2: "Все текущие и будущие блокчейны",
+        premF3: "Telegram Webhook пуш-уведомления",
+        premF4: "Личный менеджер и ранний доступ",
+        premBtn: "Активировать за $280",
+
+        // Модалка оплаты
+        payTitle: "Оплата",
+        payNetwork: "Сеть:",
+        payAmount: "Сумма:",
+        payWallet: "Кошелек",
+        payCopy: "📋 Копировать",
+        payTxid: "TXID транзакции",
+        payConfirm: "Подтвердить",
+
+        // Меню и Дашборд
+        menuMain: "Меню", menuAcc: "👤 Аккаунт & Баланс", menuLooter: "📦 Looter", menuFarm: "🌾 Фарминг", 
         menuWallets: "👥 Кошельки & Балансы", menuNet: "🌐 Сети & Прокси", menuSet: "🔒 Настройки профиля", menuExit: "🚪 Выйти из аккаунта",
         
         accWelcome: "Добро пожаловать",
@@ -198,10 +209,10 @@ const translations = {
         inst3DescText2: "Supported networks include Base, Arbitrum, ZkSync, Scroll, Solana, and more. One click and the rewards are yours.",
         ph3: "Claim rewards GIF animation",
         
-        inst4Title: "💬 4. Professional 24/7 Support",
-        inst4DescBold: "We are always here:",
-        inst4DescText: "Our tech support team will help you set up proxies, gas, and bridges for maximum profit.",
-        ph4: "Support chat screenshot",
+        inst4Title: "🔔 4. Telegram Notifications & Scheduler",
+        inst4DescBold: "Real-time control and reports:",
+        inst4DescText: "Get detailed reports on every farming session, gas consumption, proxy status, and found loot directly in your Telegram bot.",
+        ph4: "Telegram bot report screenshot",
 
         faqHeading: "Frequently Asked Questions",
         faq1Q: "How does auto-claim for airdrops work?",
@@ -216,7 +227,46 @@ const translations = {
         footerPrivacy: "Privacy Policy",
         footerTerms: "Terms of Use",
 
-        menuMain: "Menu", menuAcc: "👤 Account & Balance", menuLooter: "📦 Looter", menuFarm: "🌾 Farming",
+        // Pricing Modal
+        pTitleModal: "⚡ Select AIRDROP-X Pricing Plan",
+        pDescModal: "Private access: activation payment for the first month, then monthly renewal.",
+        subTop: "LOGIN + SUBSCRIPTION",
+        
+        stdName: "Standard",
+        stdPer: "/ 1st month, then $30/mo",
+        stdF1: "Limit: up to 5 wallets (workers)",
+        stdF2: "Base L2 network only",
+        stdF3: "Basic Claim Looter and Anti-Sybil",
+        stdBtn: "Activate for $95",
+        
+        proBadge: "RECOMMENDED",
+        proName: "PRO Farmer",
+        proPer: "/ 1st month, then $50/mo",
+        proF1: "Limit up to 15 wallets (workers)",
+        proF2: "All networks except Solana (Arbitrum, ZkSync, Scroll...)",
+        proF3: "Automatic background scheduler",
+        proF4: "Priority 24/7 support",
+        proBtn: "Activate for $150",
+        
+        premName: "Premium VIP",
+        premPer: "/ 1st month, then $90/mo",
+        premF1: "Limit up to 30 wallet slots",
+        premF2: "All current and future blockchains",
+        premF3: "Telegram Webhook push notifications",
+        premF4: "Personal manager and early access",
+        premBtn: "Activate for $280",
+
+        // Payment Modal
+        payTitle: "Payment",
+        payNetwork: "Network:",
+        payAmount: "Amount:",
+        payWallet: "Wallet",
+        payCopy: "📋 Copy",
+        payTxid: "TXID",
+        payConfirm: "Confirm",
+
+        // Menu and Dashboard
+        menuMain: "Menu", menuAcc: "👤 Account & Balance", menuLooter: "📦 Looter", menuFarm: "🌾 Farming", 
         menuWallets: "👥 Wallets & Balances", menuNet: "🌐 Networks & Proxies", menuSet: "🔒 Profile Settings", menuExit: "🚪 Logout",
         
         accWelcome: "Welcome",
@@ -293,10 +343,10 @@ const translations = {
         inst3DescText2: "支持 Base、Arbitrum、ZkSync、Scroll、Solana 等网络。一键点击，奖励即归您所有。",
         ph3: "领取奖励 GIF 动画",
         
-        inst4Title: "💬 4. 专业 24/7 客服支持",
-        inst4DescBold: "我们随时为您服务：",
-        inst4DescText: "我们的技术支持团队将协助您设置代理、Gas 和跨链桥，以实现最高利润。",
-        ph4: "支持聊天截图",
+        inst4Title: "🔔 4. Telegram 通知系统与调度程序",
+        inst4DescBold: "实时控制与报告：",
+        inst4DescText: "直接在 Telegram 机器人中接收有关每次挂机交互、Gas 消耗、代理状态和找到的空投的详细报告。",
+        ph4: "Telegram 机器人报告截图",
 
         faqHeading: "常见问题",
         faq1Q: "空投自动领取是如何工作的？",
@@ -311,7 +361,46 @@ const translations = {
         footerPrivacy: "隐私政策",
         footerTerms: "使用条款",
 
-        menuMain: "菜单", menuAcc: "👤 账户与余额", menuLooter: "📦 空投收集", menuFarm: "🌾 自动交互",
+        // Pricing Modal
+        pTitleModal: "⚡ 选择 AIRDROP-X 套餐方案",
+        pDescModal: "私人访问权限：首月激活费，之后按月续费。",
+        subTop: "登录 + 订阅",
+        
+        stdName: "标准版 (Standard)",
+        stdPer: "/ 首月，之后 $30/月",
+        stdF1: "限制：最多 5 个钱包（工作节点）",
+        stdF2: "仅限 Base L2 网络",
+        stdF3: "基础 Claim Looter 和防女巫",
+        stdBtn: "以 $95 激活",
+        
+        proBadge: "推荐",
+        proName: "PRO 农场主",
+        proPer: "/ 首月，之后 $50/月",
+        proF1: "限制最多 15 个钱包（工作节点）",
+        proF2: "除 Solana 外的所有网络 (Arbitrum, ZkSync, Scroll...)",
+        proF3: "自动后台任务调度程序",
+        proF4: "7x24 小时优先客服支持",
+        proBtn: "以 $150 激活",
+        
+        premName: "高级 VIP (Premium)",
+        premPer: "/ 首月，之后 $90/月",
+        premF1: "最多 30 个钱包槽位限制",
+        premF2: "所有当前及未来的区块链",
+        premF3: "Telegram Webhook 推送通知",
+        premF4: "专属客户经理与抢先体验",
+        premBtn: "以 $280 激活",
+
+        // Payment Modal
+        payTitle: "付款",
+        payNetwork: "网络：",
+        payAmount: "金额：",
+        payWallet: "钱包",
+        payCopy: "📋 复制",
+        payTxid: "交易哈希 (TXID)",
+        payConfirm: "确认付款",
+
+        // Menu and Dashboard
+        menuMain: "菜单", menuAcc: "👤 账户与余额", menuLooter: "📦 空投收集", menuFarm: "🌾 自动交互", 
         menuWallets: "👥 钱包与余额", menuNet: "🌐 网络与代理", menuSet: "🔒 个人资料设置", menuExit: "🚪 退出账号",
         
         accWelcome: "欢迎",
@@ -337,8 +426,8 @@ const translations = {
         btnAddWal: "添加到农场", btnTest: "🔍 测试", btnDel: "删除", noWal: "暂无添加的钱包。",
         balLabel: "余额:", proxyLabel: "代理:", proxyNone: "未设置",
 
-        netTitle: "🌐 网络、代理和 Gas 检查", netDesc: "监控区块链连接、延迟和实时 Gas 成本。",
-        statusOnline: "在线", gasLabel: "实时 Gas:", btnExp: "🔍 区块浏览器",
+        netTitle: "🌐 网络、代理和 Gas 检查", netDesc: "监控区块链连接, 延迟和实时 Gas 成本。",
+        statusOnline: "Online", gasLabel: "实时 Gas:", btnExp: "🔍 区块浏览器",
 
         setWarnTitle: "防女巫保护已激活", setWarnDesc: "为一周中的每一天（1-4 个活跃日）设置独特的时间和延迟。这确保了交互的最大随机性。",
         setTitle: "🔒 计划任务与防女巫设置", setDesc: "时间表、单日时间和限制。", btnRand: "🎲 最大随机 (1-4天)",
@@ -359,6 +448,34 @@ const translations = {
 document.getElementById('main-logo-btn').addEventListener('click', function(e) {
     e.preventDefault();
     returnToMainSite();
+});
+
+window.addEventListener('DOMContentLoaded', () => {
+    updateStaticText(currentLang);
+    loadPlatformStats();
+    const line = document.getElementById('preloader-line');
+    if(line) {
+        setTimeout(() => { 
+            line.style.opacity = '0'; 
+        }, 800);
+    }
+
+    const savedUsername = localStorage.getItem('airdrop_username');
+    if (savedUsername) {
+        isLoggedIn = true;
+        userPlan = localStorage.getItem('selected_plan') || 'Standard';
+        
+        const loginBtn = document.getElementById('login-btn');
+        if (loginBtn) loginBtn.style.display = 'none';
+
+        document.getElementById('main-content').style.display = 'none';
+        document.getElementById('dashboard-content').style.display = 'flex';
+        const mobileNav = document.getElementById('mobileNavBar');
+        if(mobileNav) mobileNav.style.display = ''; 
+        
+        currentSection = localStorage.getItem('airdrop_current_section') || 'Account';
+        renderDashboardContent(currentSection);
+    }
 });
 
 // --- Вспомогательные функции ---
@@ -437,8 +554,7 @@ function checkInputLimit(input, maxLimit) {
     }
 }
 
-// 🌍 Тотальное обновление всего лендинга, инструкции, FAQ
-// Функция обновления текста инструкции в updateStaticText
+// 🌍 Обновление всего статического текста, инструкции, FAQ, тарифов и оплаты
 function updateStaticText(lang) {
     const t = translations[lang];
     if (!t) return;
@@ -451,7 +567,6 @@ function updateStaticText(lang) {
     if (badge) badge.innerText = t.langCode;
     if (text) text.innerText = t.langCode;
 
-    // Слот-контейнер и Private Software
     const counterEl = document.getElementById('slots-counter-text');
     if (counterEl && window.cachedStatsData) {
         counterEl.innerHTML = `${t.privateSoftware}. <b style="color:#fff; margin-left:8px;">${window.cachedStatsData.current_slots} / ${window.cachedStatsData.max_slots} SLOTS</b>`;
@@ -472,18 +587,15 @@ function updateStaticText(lang) {
         const statusSpan = mainContent.querySelector('span[style*="color: #22c55e"], span[style*="color:#22c55e"]');
         if (statusSpan) statusSpan.innerText = t.coreStatus;
 
-        // Заголовки
+        const featuresHeadingEl = document.getElementById('features-heading');
+        if (featuresHeadingEl) featuresHeadingEl.innerText = t.featuresHeading;
+
         const instrTitleEl = document.getElementById('instr-title');
         if (instrTitleEl) instrTitleEl.innerText = t.instructionHeading;
 
-        const h2s = mainContent.querySelectorAll('h2, .section-title');
-        h2s.forEach(h2 => {
-            const txt = h2.innerText.toLowerCase();
-            if (txt.includes('возможности') || txt.includes('features')) h2.innerText = t.featuresHeading;
-            if (txt.includes('вопросы') || txt.includes('questions') || txt.includes('常见问题')) h2.innerText = t.faqHeading;
-        });
+        const faqHeadingEl = document.getElementById('faq-heading');
+        if (faqHeadingEl) faqHeadingEl.innerText = t.faqHeading;
 
-        // Карточки возможностей
         const featTitles = mainContent.querySelectorAll('.features-grid h3');
         if (featTitles.length >= 3) {
             featTitles[0].innerText = t.feat1Title;
@@ -498,7 +610,6 @@ function updateStaticText(lang) {
             featDescs[2].innerText = t.feat3Desc;
         }
 
-        // Обновление инструкции по ID
         const sc1t = document.getElementById('sc1-t');
         const sc1d1 = document.getElementById('sc1-d1');
         const sc1d2 = document.getElementById('sc1-d2');
@@ -533,7 +644,6 @@ function updateStaticText(lang) {
         if (sc4d1) sc4d1.innerHTML = `<b style="color:#fff;">${t.inst4DescBold}</b> ${t.inst4DescText}`;
         if (ph4) ph4.innerText = t.ph4;
 
-        // FAQ вопросы
         const faqQuestions = mainContent.querySelectorAll('.faq-question span:first-child');
         if (faqQuestions.length >= 4) {
             faqQuestions[0].innerText = t.faq1Q;
@@ -549,6 +659,53 @@ function updateStaticText(lang) {
             faqAnswers[2].innerText = t.faq3A;
             faqAnswers[3].innerText = t.faq4A;
         }
+
+        const footerLinks = mainContent.querySelectorAll('footer a, div[style*="display:flex"] span[onclick*="openLegalModal"]');
+        footerLinks.forEach(link => {
+            const attr = link.getAttribute('onclick') || '';
+            if (attr.includes('privacy') || link.innerText.toLowerCase().includes('privacy')) {
+                link.innerText = t.footerPrivacy;
+            } else if (attr.includes('terms') || link.innerText.toLowerCase().includes('terms')) {
+                link.innerText = t.footerTerms;
+            }
+        });
+    }
+
+    // Обновление модального окна тарифов
+    const pTitleModal = document.getElementById('p-title-modal');
+    if (pTitleModal) pTitleModal.innerText = t.pTitleModal;
+
+    const pDescModal = document.getElementById('p-desc-modal');
+    if (pDescModal) pDescModal.innerText = t.pDescModal;
+
+    const stdTop = document.getElementById('p-std-top');
+    if (stdTop) {
+        stdTop.innerText = t.subTop;
+        document.getElementById('p-std-name').innerText = t.stdName;
+        document.getElementById('p-std-per').innerText = t.stdPer;
+        document.getElementById('p-std-f1').innerText = t.stdF1;
+        document.getElementById('p-std-f2').innerText = t.stdF2;
+        document.getElementById('p-std-f3').innerText = t.stdF3;
+        document.getElementById('p-std-btn').innerText = t.stdBtn;
+
+        document.getElementById('p-pro-badge').innerText = t.proBadge;
+        document.getElementById('p-pro-top').innerText = t.subTop;
+        document.getElementById('p-pro-name').innerText = t.proName;
+        document.getElementById('p-pro-per').innerText = t.proPer;
+        document.getElementById('p-pro-f1').innerText = t.proF1;
+        document.getElementById('p-pro-f2').innerText = t.proF2;
+        document.getElementById('p-pro-f3').innerText = t.proF3;
+        document.getElementById('p-pro-f4').innerText = t.proF4;
+        document.getElementById('p-pro-btn').innerText = t.proBtn;
+
+        document.getElementById('p-prem-top').innerText = t.subTop;
+        document.getElementById('p-prem-name').innerText = t.premName;
+        document.getElementById('p-prem-per').innerText = t.premPer;
+        document.getElementById('p-prem-f1').innerText = t.premF1;
+        document.getElementById('p-prem-f2').innerText = t.premF2;
+        document.getElementById('p-prem-f3').innerText = t.premF3;
+        document.getElementById('p-prem-f4').innerText = t.premF4;
+        document.getElementById('p-prem-btn').innerText = t.premBtn;
     }
 }
 
@@ -631,6 +788,7 @@ function togglePasswordVisibility(fieldId, iconEl) {
 function openModal(type) {
     const modal = document.getElementById('authModal');
     const container = document.getElementById('modalContainer');
+    const t = translations[currentLang];
 
     if (type === 'register' && (!paymentUnlocked || !paymentAccessToken)) {
         closeAuthModal();
@@ -639,7 +797,6 @@ function openModal(type) {
     }
 
     modal.classList.add('show');
-    const t = translations[currentLang];
 
     if (type === 'login') {
         container.innerHTML = `
@@ -667,15 +824,16 @@ function openModal(type) {
         const chosenPlan = localStorage.getItem('selected_plan') || 'Standard';
         const basePrice = Number(localStorage.getItem('selected_price') || PLAN_PRICES[chosenPlan] || 95);
         const displayAmount = (basePrice + 0.47).toFixed(2);
+        const planDisplayLabel = chosenPlan === 'Standard' ? t.stdName : chosenPlan === 'Pro' ? t.proName : t.premName;
 
         container.innerHTML = `
             <div class="modal-logo" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                <span style="font-weight:bold; font-size:16px;">Payment: ${PLAN_LABELS[chosenPlan]}</span>
+                <span style="font-weight:bold; font-size:16px;">${t.payTitle}: ${planDisplayLabel}</span>
                 <span onclick="closeAuthModal()" style="cursor: pointer; color: #a3a3a3; font-size: 18px;">✕</span>
             </div>
             
             <div style="margin-bottom: 12px;">
-                <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">Network:</label>
+                <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">${t.payNetwork}</label>
                 <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;">
                     <button type="button" class="btn-dark-sm auth-input" id="net-base" onclick="setPayNetwork('Base', '${MASTER_WALLET}', '${displayAmount}')" style="background:#1f1f1f; border-color:#fff; cursor:pointer;">Base L2</button>
                     <button type="button" class="btn-dark-sm auth-input" id="net-arb" onclick="setPayNetwork('Arbitrum', '${MASTER_WALLET}', '${displayAmount}')" style="cursor:pointer;">Arbitrum</button>
@@ -684,28 +842,29 @@ function openModal(type) {
             </div>
 
             <div style="background:#0a0a0a; border:1px solid var(--border-color); border-radius:12px; padding:12px; margin-bottom:12px; text-align:center;">
-                <div style="font-size:11px; color:#a3a3a3; margin-bottom:2px;">Amount:</div>
+                <div style="font-size:11px; color:#a3a3a3; margin-bottom:2px;">${t.payAmount}</div>
                 <div style="font-size:20px; color:#fff; font-weight:700; margin-bottom:8px;">$${displayAmount}</div>
                 
-                <div style="font-size:11px; color:#a3a3a3; margin-bottom:2px;">Wallet (<span id="activePayNet">Base L2</span>):</div>
+                <div style="font-size:11px; color:#a3a3a3; margin-bottom:2px;">${t.payWallet} (<span id="activePayNet">Base L2</span>):</div>
                 <div style="background:#181818; padding:6px 8px; border-radius:8px; font-family:monospace; font-size:11px; color:#fff; word-break:break-all; margin-bottom:6px;">${MASTER_WALLET}</div>
                 
-                <button type="button" id="copyWalletBtn" class="auth-input" style="margin: 0 auto; font-size: 11px; padding: 6px 12px; width:auto; cursor:pointer;" onclick="copyWalletAddress('${MASTER_WALLET}', this)">📋 Copy</button>
+                <button type="button" id="copyWalletBtn" class="auth-input" style="margin: 0 auto; font-size: 11px; padding: 6px 12px; width:auto; cursor:pointer;" onclick="copyWalletAddress('${MASTER_WALLET}', this)">${t.payCopy}</button>
                 <div id="qrcodeContainer" style="display:flex; justify-content:center; align-items:center; margin:10px auto 0 auto; background:#fff; padding:8px; border-radius:8px; width:110px; height:110px; box-sizing:border-box; overflow:hidden;"></div>
             </div>
 
             <div class="input-group" style="margin-bottom:12px;">
-                <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">TXID</label>
+                <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">${t.payTxid}</label>
                 <input type="text" class="auth-input" placeholder="0x..." id="txidInput">
             </div>
 
-            <button type="button" id="paymentActionBtn" class="btn-modal-primary" onclick="startPlanPayment()" style="width:100%; padding:10px;">Confirm ($${displayAmount})</button>
+            <button type="button" id="paymentActionBtn" class="btn-modal-primary" onclick="startPlanPayment()" style="width:100%; padding:10px;">${t.payConfirm} ($${displayAmount})</button>
             <div id="paymentStatusContainer"></div>
         `;
         setTimeout(() => renderPaymentQR(MASTER_WALLET, displayAmount), 100);
     } else if (type === 'register') {
         const chosenPlan = localStorage.getItem('selected_plan') || 'Standard';
         const chosenPrice = Number(localStorage.getItem('selected_price') || PLAN_PRICES[chosenPlan] || 95);
+        const planDisplayLabel = chosenPlan === 'Standard' ? t.stdName : chosenPlan === 'Pro' ? t.proName : t.premName;
         const btnText = codeCooldownSeconds > 0 ? `${codeCooldownSeconds}s` : 'Send';
         const btnDisabled = codeCooldownSeconds > 0 ? 'disabled' : '';
         const emailState = codeCooldownSeconds > 0 ? `readonly style="opacity: 0.7;" value="${confirmedRegistrationEmail}"` : '';
@@ -713,7 +872,7 @@ function openModal(type) {
         container.innerHTML = `
             <form onsubmit="event.preventDefault(); validateRegister();">
                 <div class="modal-logo" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                    <span style="font-weight:bold; font-size:16px;">Register: ${PLAN_LABELS[chosenPlan]} ($${chosenPrice})</span>
+                    <span style="font-weight:bold; font-size:16px;">Register: ${planDisplayLabel} ($${chosenPrice})</span>
                     <span onclick="closeAuthModal()" style="cursor: pointer; color: #a3a3a3; font-size: 18px;">✕</span>
                 </div>
                 
@@ -1337,7 +1496,7 @@ async function topUpBalanceModal() {
         </div>
 
         <div style="margin-bottom: 12px;">
-            <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">Network:</label>
+            <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">${t.payNetwork}</label>
             <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;">
                 <button type="button" class="btn-dark-sm auth-input" id="net-base" onclick="setTopupNetwork('Base', '${MASTER_WALLET}')" style="background:#1f1f1f; border-color:#fff; cursor:pointer;">Base L2</button>
                 <button type="button" class="btn-dark-sm auth-input" id="net-arb" onclick="setTopupNetwork('Arbitrum', '${MASTER_WALLET}')" style="cursor:pointer;">Arbitrum</button>
@@ -1346,14 +1505,14 @@ async function topUpBalanceModal() {
         </div>
 
         <div style="background:#0a0a0a; border:1px solid var(--border-color); border-radius:12px; padding:12px; margin-bottom:12px; text-align:center;">
-            <div style="font-size:11px; color:#a3a3a3; margin-bottom:2px;">Wallet (<span id="activeTopupNet">Base L2</span>):</div>
+            <div style="font-size:11px; color:#a3a3a3; margin-bottom:2px;">${t.payWallet} (<span id="activeTopupNet">Base L2</span>):</div>
             <div style="background:#181818; padding:6px 8px; border-radius:8px; font-family:monospace; font-size:11px; color:#fff; word-break:break-all; margin-bottom:6px;">${MASTER_WALLET}</div>
-            <button type="button" class="auth-input" style="margin: 0 auto; font-size: 11px; padding: 6px 12px; width:auto; cursor:pointer;" onclick="copyWalletAddress('${MASTER_WALLET}', this)">📋 Copy</button>
+            <button type="button" class="auth-input" style="margin: 0 auto; font-size: 11px; padding: 6px 12px; width:auto; cursor:pointer;" onclick="copyWalletAddress('${MASTER_WALLET}', this)">${t.payCopy}</button>
             <div id="qrcodeTopupContainer" style="display:flex; justify-content:center; align-items:center; margin:10px auto 0 auto; background:#fff; padding:8px; border-radius:8px; width:110px; height:110px; box-sizing:border-box; overflow:hidden;"></div>
         </div>
 
         <div class="input-group" style="margin-bottom:12px;">
-            <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">TXID (0xtest)</label>
+            <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">${t.payTxid}</label>
             <input type="text" class="auth-input" placeholder="0x..." id="topupTxidInput">
         </div>
 
@@ -1424,10 +1583,12 @@ async function loadPlatformStats() {
     try {
         const res = await fetch('/api/stats');
         const data = await res.json();
+        window.cachedStatsData = data;
         const counterEl = document.getElementById('slots-counter-text');
+        const t = translations[currentLang];
         
         if (counterEl) {
-            counterEl.innerHTML = `Private Software. <b style="color:#fff; margin-left:8px;">${data.current_slots} / ${data.max_slots} SLOTS</b>`;
+            counterEl.innerHTML = `${t.privateSoftware}. <b style="color:#fff; margin-left:8px;">${data.current_slots} / ${data.max_slots} SLOTS</b>`;
         }
 
         if (data.is_sold_out) {
@@ -1462,7 +1623,7 @@ function renderDashboardContent(section) {
         let guideHtml = '';
         if (showWelcomeGuide) {
             guideHtml = `
-                <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; padding: 16px; margin-bottom: 16px; position: relative;">
+                <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; padding: 16px; margin-bottom: 16px; position: relative;" id="welcomeGuideBox">
                     <span onclick="document.getElementById('welcomeGuideBox').style.display='none'; showWelcomeGuide=false;" style="position: absolute; right: 16px; top: 16px; cursor: pointer; color: var(--text-muted); font-size: 16px;">✕</span>
                     <h4 style="color: #fff; margin: 0 0 8px 0; font-size: 14px;">👋 ${t.accWelcome}, ${username}!</h4>
                     <p style="color: var(--text-muted); font-size: 12px; margin: 0; line-height: 1.4;">
@@ -1473,7 +1634,7 @@ function renderDashboardContent(section) {
         }
 
         centerHtml = `
-            <div id="welcomeGuideBox">${guideHtml}</div>
+            ${guideHtml}
 
             <div class="dashboard-card" style="margin-bottom: 16px;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">

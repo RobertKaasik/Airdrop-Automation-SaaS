@@ -39,7 +39,7 @@ SMTP_PORT = 465
 SENDER_EMAIL = "airdrop.x.support@gmail.com"
 SENDER_PASSWORD = "salucffjamydmmgf"
 
-TELEGRAM_BOT_TOKEN = "8906415240:AAE0EnAtPz-IzUyfsDtUAMRfUeaZFH24l4c"
+TELEGRAM_BOT_TOKEN = "8615804174:AAEpbK_sUProWJIDNBye_pv36DxdXjQOQ_Y"
 MASTER_WALLET_ADDRESS = "0x5e5316Dea1c44d220d4c60A5fcC2949E5A06Fc66"
 BASE_RPC_URL = "https://mainnet.base.org"
 
@@ -675,10 +675,17 @@ async def test_wallet_proxy(wallet_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Кошелек или прокси не найден")
     
     proxy_raw = wallet.proxy.strip()
-    parts = proxy_raw.split(':')
-    if len(parts) == 4 and "://" not in proxy_raw:
-        ip, port, user, pwd = parts
-        proxy_url = f"socks5://{user}:{pwd}@{ip}:{port}"
+    
+    if "://" not in proxy_raw:
+        parts = proxy_raw.rsplit(':', 3)
+        if len(parts) == 4:
+            ip, port, user, pwd = parts
+            if ":" in ip and not ip.startswith("["):
+                ip = f"[{ip}]"
+            # Выбери протокол: socks5:// или http:// в зависимости от твоих прокси
+            proxy_url = f"socks5://{user}:{pwd}@{ip}:{port}" 
+        else:
+            proxy_url = proxy_raw
     else:
         proxy_url = proxy_raw
         
