@@ -1,7 +1,13 @@
-﻿
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="ru">
 <head>
+    <script>
+    // Мгновенно применяем класс с языком к телу или скрываем контент до загрузки app.js
+    (function() {
+        const savedLang = localStorage.getItem('ax_lang') || 'ru';
+        document.documentElement.setAttribute('data-lang', savedLang);
+    })();
+    </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title id="page-title">AIRDROP-X — Cyberpunk SaaS Panel</title>
@@ -39,7 +45,7 @@
                 </button>
                 <div class="lang-menu" id="langMenu">
                     <button class="lang-option" onclick="changeLanguage('en')"><span style="color: #c77dff; font-size: 11px; font-weight: bold; background: rgba(157,78,221,0.2); padding: 2px 5px; border-radius: 6px;">US</span> English</button>
-                    <button class="lang-option" onclick="changeLanguage('zh')"><span style="color: #c77dff; font-size: 11px; font-weight: bold; background: rgba(157,78,221,0.2); padding: 2px 5px; border-radius: 6px;">CN</span> 中文</button>
+                    <button class="lang-option" onclick="changeLanguage('cn')"><span style="color: #c77dff; font-size: 11px; font-weight: bold; background: rgba(157,78,221,0.2); padding: 2px 5px; border-radius: 6px;">CN</span> 中文</button>
                     <button class="lang-option" onclick="changeLanguage('ru')"><span style="color: #c77dff; font-size: 11px; font-weight: bold; background: rgba(157,78,221,0.2); padding: 2px 5px; border-radius: 6px;">RU</span> Русский</button>
                 </div>
             </div>
@@ -200,14 +206,14 @@
         <div style="width: 100%; max-width: 900px; margin: 0 auto; padding: 0 16px;">
             <div class="status-banner">
             <div class="status-left">
-                <span>🛡️ Статус ядра:</span>
+                <span id="core-status-label">🛡️ Статус ядра:</span>
                 <span style="color: #22c55e; font-weight: bold;">Защищено / Онлайн</span>
             </div>
             <div class="status-right" id="slots-counter-text">Приватное ПО с ограниченным количеством слотов. Загрузка...</div>
         </div>
         </div>
 
-        <div id="features-section" class="section-title">Возможности платформы</div>
+        <div class="section-title" id="features-heading">Возможности платформы</div>
         <div class="features-grid">
             <div class="feature-card">
                 <div class="card-icon">🔍</div>
@@ -226,13 +232,13 @@
             </div>
         </div>
 
-        <!-- Презентация с плейсхолдерами под гифки -->
+                <!-- Презентация с плейсхолдерами под гифки -->
         <div class="section-title" id="instr-title">Как работает AIRDROP-X (Инструкция)</div>
         <div class="showcase-section">
             <div class="showcase-card">
                 <div class="showcase-content">
                     <h3 id="sc1-t">🌾 1. Авто-фарм и Anti-Sybil Ядро</h3>
-                    <p id="sc1-d1"><b>Что это и почему это выгодно:</b> Ручное выполнение сотен транзакций в день отнимает уйму сил и времени. Наш авто-фарминг через встроенное ядро полностью имитирует активность живого пользователя.</p>
+                    <p id="sc1-d1"><b style="color:#fff;">Что это и почему это выгодно:</b> Ручное выполнение сотен транзакций в день отнимает уйму сил и времени. Наш авто-фарминг через встроенное ядро полностью имитирует активность живого пользователя.</p>
                     <p id="sc1-d2">Софт рандомизирует задержки, порядок кошельков и суммы транзакций, защищая от сибил-банов.</p>
                 </div>
                 <div class="media-placeholder">
@@ -244,7 +250,7 @@
             <div class="showcase-card">
                 <div class="showcase-content">
                     <h3 id="sc2-t">👥 2. Лимиты и добавление кошельков</h3>
-                    <p id="sc2-d1"><b>Удобство и защита тарифов:</b> Тариф Standard позволяет запустить до 5 кошельков (для теста), PRO открывает до 15 слотов, а Premium расширяет лимит до 30 кошельков.</p>
+                    <p id="sc2-d1"><b style="color:#fff;">Удобство и защита тарифов:</b> Тариф Standard позволяет запустить до 5 кошельков (для теста), PRO открывает до 15 слотов, а Premium расширяет лимит до 30 кошельков.</p>
                     <p id="sc2-d2">Импортируйте ключи и прокси в один клик, управляя всей фермой из единой панели.</p>
                 </div>
                 <div class="media-placeholder">
@@ -256,7 +262,7 @@
             <div class="showcase-card">
                 <div class="showcase-content">
                     <h3 id="sc3-t">📦 3. Автоматический сбор лута (Claim Looter)</h3>
-                    <p id="sc3-d1"><b>Когда и как это происходит:</b> Как только проект объявляет раздачу ретродропа, сканер находит распределенные токены.</p>
+                    <p id="sc3-d1"><b style="color:#fff;">Когда и как это происходит:</b> Как только проект объявляет раздачу ретродропа, сканер находит распределенные токены.</p>
                     <p id="sc3-d2">Поддерживаются Base, Arbitrum, ZkSync, Scroll, Solana и др. Один клик — и награды у вас.</p>
                 </div>
                 <div class="media-placeholder">
@@ -268,7 +274,7 @@
             <div class="showcase-card">
                 <div class="showcase-content">
                     <h3 id="sc4-t">💬 4. Профессиональная поддержка 24/7</h3>
-                    <p id="sc4-d1"><b>Мы всегда рядом:</b> Наша команда техподдержки поможет вам настроить прокси, газ и мосты для максимального профита.</p>
+                    <p id="sc4-d1"><b style="color:#fff;">Мы всегда рядом:</b> Наша команда техподдержки поможет вам настроить прокси, газ и мосты для максимального профита.</p>
                 </div>
                 <div class="media-placeholder">
                     <span class="media-icon">🖼️</span>
@@ -332,14 +338,11 @@
 </div>
 
 <script>
-    function openLegalModal(type) {
-        const modal = document.getElementById('legalModal');
-        const title = document.getElementById('legalModalTitle');
-        const content = document.getElementById('legalModalContent');
-        
-        if (type === 'terms') {
-            title.innerText = 'Terms of Use (Условия использования)';
-            content.innerHTML = `
+    // Полные мультиязычные тексты Terms of Use и Privacy Policy без сокращений
+    const modalLegalTexts = {
+        ru: {
+            termsTitle: "Terms of Use (Условия использования)",
+            termsContent: `
                 <p style="color:#fff; font-weight:bold; margin-bottom:4px;">1. Общие положения и акцепт</p>
                 <p style="margin-bottom:12px;">Настоящие Условия использования (далее — «Соглашение») регулируют правоотношения между программным обеспечением Airdrop-X (далее — «Сервис», «Мы») и физическим или юридическим лицом («Пользователь», «Вы»), использующим сайт, программный интерфейс или приобретшим подписку. Начиная использовать Сервис, вы подтверждаете, что ознакомились с настоящим Соглашением и принимаете его в полном объеме.</p>
                 
@@ -375,10 +378,9 @@
 
                 <p style="color:#fff; font-weight:bold; margin-bottom:4px;">12. Контактная информация</p>
                 <p style="margin-bottom:4px;">По всем вопросам, связанным с работой Сервиса или условиями использования, вы можете обратиться через официальные каналы связи или службу поддержки проекта.</p>
-            `;
-        } else {
-            title.innerText = 'Privacy Policy (Политика конфиденциальности)';
-            content.innerHTML = `
+            `,
+            privacyTitle: "Privacy Policy (Политика конфиденциальности)",
+            privacyContent: `
                 <p style="color:#fff; font-weight:bold; margin-bottom:4px;">1. Введение и область применения</p>
                 <p style="margin-bottom:12px;">Настоящая Политика конфиденциальности описывает, как Airdrop-X собирает, использует, хранит и защищает персональные данные пользователей при взаимодействии с нашей платформой.</p>
                 
@@ -411,7 +413,173 @@
 
                 <p style="color:#fff; font-weight:bold; margin-bottom:4px;">11. Контакты по вопросам конфиденциальности</p>
                 <p style="margin-bottom:4px;">Если у вас возникли вопросы относительно защиты персональных данных, вы можете связаться с нами через службу поддержки проекта.</p>
-            `;
+            `
+        },
+        en: {
+            termsTitle: "Terms of Use",
+            termsContent: `
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">1. General Provisions and Acceptance</p>
+                <p style="margin-bottom:12px;">These Terms of Use (hereinafter referred to as the "Agreement") govern the legal relationship between Airdrop-X software (hereinafter referred to as the "Service", "We") and an individual or legal entity ("User", "You") using the site, API, or purchasing a subscription. By using the Service, you confirm that you have read and fully accept this Agreement.</p>
+                
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">2. Subject and Description of Services</p>
+                <p style="margin-bottom:12px;">The Service provides software for automating routine operations in decentralized networks (distribution scanning, token claiming, multi-account management). Functionality is available within selected tariff subscriptions (Standard, PRO, Premium).</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">3. User Requirements and Registration</p>
+                <p style="margin-bottom:12px;">To use the Service, the user must complete registration by providing a valid email address. You are fully responsible for maintaining the security of your credentials, password, and account access.</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">4. Financial Terms and Payment</p>
+                <p style="margin-bottom:12px;">Payment for tariff plans and additional slots is made in cryptocurrency through supported blockchain networks to the specified master address. Upon transaction confirmation and TXID verification, access to functionality is activated automatically.</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">5. Refund Policy</p>
+                <p style="margin-bottom:12px;">Due to the specifics of digital software products and the blockchain industry, all payments for subscriptions and digital licenses are final and non-refundable after access activation and successful transaction completion.</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">6. Wallet Security and Private Keys Usage</p>
+                <p style="margin-bottom:12px;">The user is solely responsible for adding worker private keys. The Administration strongly recommends using empty or auxiliary wallets (burner wallets) for automation without storing critical savings on them.</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">7. Prohibited Activities</p>
+                <p style="margin-bottom:12px;">It is strictly forbidden to use the Service for hacking attacks, smart contract exploits, money laundering, or attempting reverse engineering and server infrastructure breaches.</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">8. Disclaimer</p>
+                <p style="margin-bottom:12px;">The Service is provided "as is". Developers do not guarantee profit, successful airdrop claims, and are not responsible for wallet bans by third-party projects or security protocols (Anti-Sybil).</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">9. Intellectual Property</p>
+                <p style="margin-bottom:12px;">All interface elements, software source code, design, logos, and text materials are the exclusive property of Airdrop-X and protected by copyright laws.</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">10. Limitation of Liability</p>
+                <p style="margin-bottom:12px;">The Administration under no circumstances shall be liable for any direct or indirect losses arising from the use or inability to use the Service.</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">11. Modification of Terms</p>
+                <p style="margin-bottom:12px;">We reserve the right to update or modify this Agreement at any time. Changes take effect immediately upon publication on the official website.</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">12. Contact Information</p>
+                <p style="margin-bottom:4px;">For any questions related to the Service or Terms of Use, you can contact us via official communication channels or support.</p>
+            `,
+            privacyTitle: "Privacy Policy",
+            privacyContent: `
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">1. Introduction and Scope</p>
+                <p style="margin-bottom:12px;">This Privacy Policy describes how Airdrop-X collects, uses, stores, and protects user personal data when interacting with our platform.</p>
+                
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">2. Categories of Information Collected</p>
+                <p style="margin-bottom:12px;">We collect the minimum necessary data: email address (for authorization), chosen nickname, transaction data (subscription TXIDs), as well as device and browser characteristics (fingerprint).</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">3. Private Keys and Proxy Processing</p>
+                <p style="margin-bottom:12px;">All uploaded worker private keys and proxy server data are encrypted on the server using modern cryptographic standards. The project team does not have direct access to your funds.</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">4. Purposes of Data Collection and Processing</p>
+                <p style="margin-bottom:12px;">The collected information is used solely to ensure account functionality, verify subscription status, authorize in the system, and prevent fraudulent activities.</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">5. Use of Cookies and LocalStorage</p>
+                <p style="margin-bottom:12px;">We use browser local storage and cookies to maintain your user session, selected interface language, and security tokens.</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">6. Information Security and Protection</p>
+                <p style="margin-bottom:12px;">We apply comprehensive technical and organizational security measures (including SSL encryption and DDoS protection) to prevent unauthorized access to your data.</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">7. Transfer of Data to Third Parties</p>
+                <p style="margin-bottom:12px;">Your personal data is never sold, transferred, or leased to third-party commercial companies or advertising brokers.</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">8. Law Enforcement Requests Exceptions</p>
+                <p style="margin-bottom:12px;">We may disclose user information in exceptional cases if required by applicable law or an official request from authorized bodies as part of cybercrime investigations.</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">9. User Rights Regarding Data</p>
+                <p style="margin-bottom:12px;">You have the right to request information about your data held by us, request its modification or complete deletion by contacting support.</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">10. Changes to Privacy Policy</p>
+                <p style="margin-bottom:12px;">We reserve the right to periodically update this Privacy Policy. The new version becomes effective upon publication on the website.</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">11. Privacy Contacts</p>
+                <p style="margin-bottom:4px;">If you have any questions regarding personal data protection, you can contact us via the project support service.</p>
+            `
+        },
+        cn: {
+            termsTitle: "使用条款 (Terms of Use)",
+            termsContent: `
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">1. 一般条款与接受</p>
+                <p style="margin-bottom:12px;">本使用条款（以下简称“协议”）规范了 Airdrop-X 软件（以下简称“服务”、“我们”）与使用网站、API 或购买订阅的个人或法人实体（“用户”、“您”）之间的法律关系。通过使用本服务，您确认您已阅读并完全接受本协议。</p>
+                
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">2. 服务标的与说明</p>
+                <p style="margin-bottom:12px;">本服务提供用于在去中心化网络中自动化常规操作的软件（分布扫描、代币领取、多账户管理）。功能可在所选套餐订阅（Standard、PRO、Premium）范围内使用。</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">3. 用户要求与注册</p>
+                <p style="margin-bottom:12px;">要使用本服务，用户必须通过提供有效的电子邮件地址来完成注册。您全权负责维护您的凭据、密码和账户访问权限的安全。</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">4. 财务条款与支付</p>
+                <p style="margin-bottom:12px;">套餐计划和额外槽位的支付是通过支持的区块链网络以加密货币支付到指定的Master地址。在确认交易并验证 TXID 后，功能权限将自动激活。</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">5. 退款政策 (Refund Policy)</p>
+                <p style="margin-bottom:12px;">鉴于数字软件产品和区块链行业的特殊性，所有订阅和数字许可证的付款在激活访问权限且交易成功完成后均为最终付款，概不退款。</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">6. 钱包安全与私钥使用</p>
+                <p style="margin-bottom:12px;">用户须自行负责添加工作节点私钥。管理层强烈建议使用空钱包或辅助钱包（Burner wallets）进行自动化操作，切勿在其上存放核心资产。</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">7. 禁止行为</p>
+                <p style="margin-bottom:12px;">严禁将本服务用于黑客攻击、智能合约漏洞利用、洗钱，或尝试进行反向工程和破坏服务器基础设施。</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">8. 免责声明 (Disclaimer)</p>
+                <p style="margin-bottom:12px;">本服务按“原样”提供。开发者不保证获利、不保证空投成功领取，也不对第三方项目或安全协议（Anti-Sybil）导致的钱包封禁承担责任。</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">9. 知识产权</p>
+                <p style="margin-bottom:12px;">所有界面元素、软件源代码、设计、徽标和文案材料均为 Airdrop-X 的专有财产，受版权法保护。</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">10. 责任限制</p>
+                <p style="margin-bottom:12px;">在任何情况下，管理层均不对因使用或无法使用本服务而产生的任何直接或间接损失承担责任。</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">11. 条款修改</p>
+                <p style="margin-bottom:12px;">我们保留随时更新或修改本协议的权利。修改后的条款一经在官网上发布即立即生效。</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">12. 联系方式</p>
+                <p style="margin-bottom:4px;">有关本服务或使用条款的任何问题，您可以通过官方联系渠道或项目支持服务与我们联系。</p>
+            `,
+            privacyTitle: "隐私政策 (Privacy Policy)",
+            privacyContent: `
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">1. 简介与适用范围</p>
+                <p style="margin-bottom:12px;">本隐私政策描述了 Airdrop-X 在您使用我们的平台时如何收集、使用、存储和保护用户的个人数据。</p>
+                
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">2. 收集的信息类别</p>
+                <p style="margin-bottom:12px;">我们仅收集必要的最少数据：电子邮件地址（用于授权）、所选昵称、交易数据（订阅 TXID）以及设备和浏览器特征（指纹）。</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">3. 私钥和代理处理</p>
+                <p style="margin-bottom:12px;">您上传的所有工作节点私钥和代理服务器数据均使用现代密码学标准在服务器上加密。项目团队无法直接访问您的资金。</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">4. 数据收集和处理的目的</p>
+                <p style="margin-bottom:12px;">收集的信息仅用于确保账户功能正常运行、验证订阅状态、系统授权以及防止欺诈活动。</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">5. Cookie 和 LocalStorage 的使用</p>
+                <p style="margin-bottom:12px;">我们使用浏览器本地存储和 Cookie 来维护您的用户会话、所选界面语言和安全令牌。</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">6. 信息安全与保护</p>
+                <p style="margin-bottom:12px;">我们采用全面的技术和组织安全措施（包括 SSL 加密和 DDoS 防护），以防止未经授权访问您的数据。</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">7. 向第三方传输数据</p>
+                <p style="margin-bottom:12px;">您的个人数据绝不会出售、转让或出租给第三方商业公司或广告经纪商。</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">8. 执法请求例外情况</p>
+                <p style="margin-bottom:12px;">在适用法律要求或授权机构作为网络犯罪调查的一部分发出官方请求的特殊情况下，我们可能会披露用户信息。</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">9. 用户数据权利</p>
+                <p style="margin-bottom:12px;">您有权通过联系客服索取我们所持有的关于您的数据信息，并要求修改或完全删除这些数据。</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">10. 隐私政策的修改</p>
+                <p style="margin-bottom:12px;">我们有权定期更新本隐私政策。新版本自发布在网站上之日起生效。</p>
+
+                <p style="color:#fff; font-weight:bold; margin-bottom:4px;">11. 隐私联系方式</p>
+                <p style="margin-bottom:4px;">如果您对个人数据保护有任何疑问，可以通过项目支持服务与项目团队联系。</p>
+            `
+        }
+    };
+
+    function openLegalModal(type) {
+        const modal = document.getElementById('legalModal');
+        const title = document.getElementById('legalModalTitle');
+        const content = document.getElementById('legalModalContent');
+        const currentLang = localStorage.getItem('ax_lang') || 'ru';
+        const texts = modalLegalTexts[currentLang] || modalLegalTexts['ru'];
+        
+        if (type === 'terms') {
+            title.innerText = texts.termsTitle;
+            content.innerHTML = texts.termsContent;
+        } else {
+            title.innerText = texts.privacyTitle;
+            content.innerHTML = texts.privacyContent;
         }
         modal.classList.add('show');
     }
@@ -421,8 +589,34 @@
             document.getElementById('legalModal').classList.remove('show');
         }
     }
-    
 </script>
 <script src="app.js"></script>
+<script>
+    const coreStatusLabels = {
+        ru: "🛡️ Статус ядра:",
+        en: "🛡️ Core Status:",
+        cn: "🛡️ 核心状态:"
+    };
+
+    function updateCoreStatusLabel(lang) {
+        const labelEl = document.getElementById('core-status-label');
+        if (labelEl) {
+            labelEl.innerText = coreStatusLabels[lang] || coreStatusLabels['ru'];
+        }
+    }
+
+    const _origChangeLang = window.changeLanguage;
+    if (_origChangeLang) {
+        window.changeLanguage = function(lang) {
+            _origChangeLang(lang);
+            updateCoreStatusLabel(lang);
+        };
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+        const currentLang = localStorage.getItem('ax_lang') || 'ru';
+        updateCoreStatusLabel(currentLang);
+    });
+</script>
 </body>
 </html>
