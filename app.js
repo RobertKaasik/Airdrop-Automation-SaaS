@@ -7,17 +7,15 @@ let deviceFingerprint = generateDeviceFingerprint();
 let subscriptionDaysLeft = 29;
 let showWelcomeGuide = true;
 
-let userInternalBalance = 42.50; 
-let transactionHistory = [
-    { id: "tx_981a", type: "deposit", amount: "+50.00 USD", date: "2026-07-28 14:12", status: "Completed" },
-    { id: "tx_421b", type: "gas_fee", amount: "-7.50 USD", date: "2026-07-29 19:40", status: "Success" }
-];
+let userInternalBalance = 0.00; // Стартовый баланс теперь 0
+let transactionHistory = []; // Очистили моковые транзакции
 
 let codeCooldownTimer = null;
 let codeCooldownSeconds = 0;
 let confirmedRegistrationEmail = "";
 let currentEditingWallet = null;
 let lastSaveTimestamp = 0; 
+let lastRandomizeTimestamp = 0; // Добавь эту строчку
 
 const PLAN_PRICES = { Standard: 95, Pro: 150, Premium: 280 };
 const PLAN_LABELS = { Standard: 'Standard', Pro: 'PRO Фермер', Premium: 'Premium VIP' };
@@ -116,12 +114,19 @@ function showNotification(text, type = 'success') {
         container.style.cssText = 'position: fixed; bottom: 20px; right: 20px; z-index: 99999; display: flex; flex-direction: column; gap: 8px;';
         document.body.appendChild(container);
     }
+
+    // 🛡️ Ограничение: максимум 3 уведомления на экране, старые сразу удаляем
+    while (container.children.length >= 3) {
+        container.firstChild.remove();
+    }
+
     const toast = document.createElement('div');
     const borderColor = type === 'success' ? '#22c55e' : '#ef4444';
     const icon = type === 'success' ? '✅' : '⚠️';
     toast.style.cssText = `background: #121212; border: 1px solid ${borderColor}; color: #fff; padding: 12px 16px; border-radius: 12px; font-size: 13px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); display: flex; align-items: center; gap: 10px; animation: fadeIn 0.3s ease;`;
     toast.innerHTML = `<span>${icon}</span> <span>${text}</span>`;
     container.appendChild(toast);
+
     setTimeout(() => {
         toast.style.opacity = '0';
         toast.style.transition = 'opacity 0.3s ease';
@@ -349,7 +354,10 @@ function openModal(type) {
                 
                 <div class="input-group" style="margin-bottom:10px;">
                     <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">Пароль (мин. 8 символов)</label>
-                    <input type="password" class="auth-input" placeholder="Пароль" id="regPass">
+                    <div class="password-wrapper" style="position:relative;">
+                        <input type="password" class="auth-input" placeholder="Пароль" id="regPass" style="padding-right: 35px;">
+                        <span class="password-toggle-icon" onclick="togglePasswordVisibility('regPass', this)" style="position:absolute; right:12px; top:50%; transform:translateY(-50%); cursor:pointer; font-size:14px;">👁️</span>
+                    </div>
                 </div>
                 
                 <div class="input-group" style="margin-bottom:14px;">
@@ -700,9 +708,18 @@ async function buyExtraSlot() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username })
     });
+    
+    const data = await res.json();
     if (res.ok) {
         showNotification("Дополнительный слот успешно приобретен!");
         loadWalletsFromDB();
+        
+        const balEl = document.getElementById('userBalanceValue');
+        if (balEl && data.balance !== undefined) {
+            balEl.innerText = `$${data.balance.toFixed(2)}`;
+        }
+    } else {
+        showNotification(data.detail || "Ошибка при покупке слота", "error");
     }
 }
 
@@ -792,6 +809,14 @@ function updateDailyConfigsUI() {
 }
 
 function randomizeGlobalSettings() {
+    // 🛡️ Защита от спама: проверяем, прошло ли 2.5 секунды с прошлого нажатия
+    const now = Date.now();
+    if (now - lastRandomizeTimestamp < 2500) {
+        showNotification("Подождите пару секунд перед следующим рандомом!", "error");
+        return;
+    }
+    lastRandomizeTimestamp = now;
+
     const allDays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
     
     const targetCount = Math.floor(Math.random() * 4) + 1;
@@ -806,7 +831,7 @@ function randomizeGlobalSettings() {
 
     updateDailyConfigsUI();
 
-    document.querySelectorAll('#dailyTimeConfigsContainer > div').forEach(row => {
+    document.querySelectorAll('#dailyTimeConfigsContainer > div[data-day]').forEach(row => {
         const randHour = String(Math.floor(Math.random() * 15) + 8).padStart(2, '0');
         const randMin = String(Math.floor(Math.random() * 60)).padStart(2, '0');
         row.querySelector('.day-time-val').value = `${randHour}:${randMin}`;
@@ -875,7 +900,8 @@ async function saveGlobalProfileSettings() {
     }
     lastSaveTimestamp = now;
 
-    const telegram = document.getElementById('globalTelegramInput')?.value;
+    const telegram = document.getElementById('globalTelegramInput')?.value.trim() || '';
+    localStorage.setItem('ax_telegram_chat_id', telegram); // Добавь эту строчку
     const notifySettings = document.getElementById('notifSettingsToggle')?.checked ?? true;
     const notifyStart = document.getElementById('notifStartToggle')?.checked ?? true;
     const notifySuccess = document.getElementById('notifSuccessToggle')?.checked ?? true;
@@ -944,27 +970,38 @@ async function startAutoFarming() {
     const net = document.getElementById('farmNetwork').value;
     const log = document.getElementById('farm-console-logs');
 
-    if (userInternalBalance < 2.0) {
-        showNotification("Недостаточно средств на балансе для оплаты газа!", "error");
+    // Предварительная проверка баланса на фронтенде (сервер тоже проверяет)
+    if (userInternalBalance < 1.50) {
+        showNotification("Недостаточно средств на балансе для оплаты газа ($1.50)", "error");
         log.innerHTML += `<br><span style="color: #ef4444; font-weight: bold;">⛔ Ошибка: Недостаточно средств на балансе.</span>`;
         return;
     }
 
     log.innerHTML += `<br><span style="color: var(--text-muted);">Запуск фарма в сети ${net} с учетом индивидуальных таймингов... Списано: $1.50</span>`;
-    userInternalBalance -= 1.50;
     
-    const balEl = document.getElementById('userBalanceValue');
-    if(balEl) balEl.innerText = `$${userInternalBalance.toFixed(2)}`;
-
     const username = localStorage.getItem('airdrop_username') || "Robert";
-    const res = await fetch('/api/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ wallet: "all", network: net, username })
-    });
-    if(res.ok) {
-        showNotification("Anti-Sybil сессия фарма успешно завершена!");
-        log.innerHTML += `<br><span style="color: #22c55e;">✅ Фарм сессия успешно завершена! Отчет отправлен в Telegram.</span>`;
+    try {
+        const res = await fetch('/api/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ wallet: "all", network: net, username })
+        });
+        const data = await res.json();
+        
+        if (res.ok) {
+            showNotification("Anti-Sybil сессия фарма успешно завершена!");
+            log.innerHTML += `<br><span style="color: #22c55e;">✅ Фарм сессия успешно завершена! Отчет отправлен в Telegram.</span>`;
+            
+            // Обновляем баланс после списания сервером
+            if (data.new_balance !== undefined) {
+                userInternalBalance = data.new_balance;
+            }
+        } else {
+            showNotification(data.detail || "Ошибка запуска фарма", "error");
+            log.innerHTML += `<br><span style="color: #ef4444;">❌ Ошибка: ${data.detail}</span>`;
+        }
+    } catch (e) {
+        showNotification("Сетевая ошибка при запуске фарма", "error");
     }
 }
 
@@ -1063,18 +1100,6 @@ function renderDashboardContent(section) {
             `;
         }
 
-        const txRows = transactionHistory.map(tx => `
-            <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-main); padding:8px 12px; border-radius:8px; margin-bottom:6px; font-size:12px; border:1px solid var(--border-color);">
-                <div>
-                    <span style="color:#fff; font-weight:600;">${tx.type === 'deposit' ? '📥 Пополнение' : '⛽ Списание газа'}</span>
-                    <span style="color:var(--text-muted); font-size:11px; margin-left:8px;">${tx.date}</span>
-                </div>
-                <div style="text-align:right;">
-                    <span style="color:${tx.type === 'deposit' ? '#22c55e' : '#fff'}; font-weight:bold;">${tx.amount}</span>
-                </div>
-            </div>
-        `).join('');
-
         centerHtml = `
             <div id="welcomeGuideBox">${guideHtml}</div>
 
@@ -1083,13 +1108,13 @@ function renderDashboardContent(section) {
                     <h3 style="color: #fff; margin: 0; font-size: 15px;">💳 Личный счет и Баланс</h3>
                     <button type="button" onclick="topUpBalanceModal()" class="btn-purple-lg" style="width:auto; padding:6px 12px; font-size:12px;">➕ Пополнить баланс</button>
                 </div>
-                <div style="font-size:24px; font-weight:bold; color:#fff; margin-bottom:4px;" id="userBalanceValue">$${userInternalBalance.toFixed(2)}</div>
+                <div style="font-size:24px; font-weight:bold; color:#fff; margin-bottom:4px;" id="userBalanceValue">Загрузка...</div>
                 <div style="font-size:11px; color:var(--text-muted);">Доступно для оплаты газа и автоматизации. Защита от перерасхода включена.</div>
             </div>
 
             <div class="dashboard-card" style="margin-bottom: 16px;">
                 <h3 style="color: #fff; margin-top: 0; font-size: 15px;">📊 История транзакций</h3>
-                <div style="max-height:160px; overflow-y:auto; margin-top:10px;">${txRows}</div>
+                <div id="transactionsListContainer" style="max-height:160px; overflow-y:auto; margin-top:10px;">Загрузка...</div>
             </div>
 
             <div class="dashboard-card">
@@ -1098,11 +1123,69 @@ function renderDashboardContent(section) {
                 <button type="button" onclick="openPricingModal()" class="btn-dark-sm" style="margin-top:10px;">Сменить тариф</button>
             </div>
         `;
+
+        const setEmptyState = () => {
+            const balEl = document.getElementById('userBalanceValue');
+            if (balEl) balEl.innerText = '$0.00';
+            const txContainer = document.getElementById('transactionsListContainer');
+            if (txContainer) {
+                txContainer.innerHTML = `
+                    <div style="color:var(--text-muted); font-size:12px; text-align:center; padding: 24px; border: 1px dashed var(--border-color); border-radius: 10px; background: rgba(255,255,255,0.02);">
+                        У вас пока не было осуществленных транзакций
+                    </div>
+                `;
+            }
+        };
+
+        setTimeout(async () => {
+            try {
+                const res = await fetch(`/api/balance/${username}`);
+                if (!res.ok) {
+                    setEmptyState();
+                    return;
+                }
+                const data = await res.json();
+                
+                if (data.status === 'success') {
+                    userInternalBalance = data.balance || 0;
+                    const balEl = document.getElementById('userBalanceValue');
+                    if (balEl) balEl.innerText = `$${userInternalBalance.toFixed(2)}`;
+
+                    const txContainer = document.getElementById('transactionsListContainer');
+                    if (txContainer) {
+                        if (data.transactions && data.transactions.length > 0) {
+                            txContainer.innerHTML = data.transactions.map(tx => `
+                                <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-main); padding:8px 12px; border-radius:8px; margin-bottom:6px; font-size:12px; border:1px solid var(--border-color);">
+                                    <div>
+                                        <span style="color:#fff; font-weight:600;">${tx.type === 'deposit' ? '📥 Пополнение' : tx.type === 'slot_purchase' ? '🛒 Покупка слота' : '⛽ Списание газа'}</span>
+                                        <span style="color:var(--text-muted); font-size:11px; margin-left:8px;">${tx.date}</span>
+                                    </div>
+                                    <div style="text-align:right;">
+                                        <span style="color:${tx.type === 'deposit' ? '#22c55e' : '#fff'}; font-weight:bold;">${tx.amount}</span>
+                                    </div>
+                                </div>
+                            `).join('');
+                        } else {
+                            setEmptyState();
+                        }
+                    }
+                } else {
+                    setEmptyState();
+                }
+            } catch (e) {
+                console.error("Ошибка загрузки баланса:", e);
+                setEmptyState(); 
+            }
+        }, 50);
+
     } else if (section === 'Settings') {
         const notifSettingsChecked = localStorage.getItem('ax_notify_settings') !== 'false' ? 'checked' : '';
         const notifStartChecked = localStorage.getItem('ax_notify_start') !== 'false' ? 'checked' : '';
         const notifSuccessChecked = localStorage.getItem('ax_notify_success') !== 'false' ? 'checked' : '';
         const notifErrorChecked = localStorage.getItem('ax_notify_error') !== 'false' ? 'checked' : '';
+        
+        // 💾 Получаем сохраненный Telegram ID из памяти браузера
+        const savedTelegramId = localStorage.getItem('ax_telegram_chat_id') || '';
 
         centerHtml = `
             <div id="antiSybilWarningBox" style="background: linear-gradient(135deg, rgba(234, 179, 8, 0.12), rgba(234, 179, 8, 0.03)); border: 1px solid rgba(234, 179, 8, 0.35); border-radius: 16px; padding: 16px 18px; margin-bottom: 18px; display: flex; gap: 14px; align-items: flex-start; position: relative; box-shadow: 0 4px 20px rgba(0,0,0,0.2);">
@@ -1160,14 +1243,14 @@ function renderDashboardContent(section) {
                     </div>
                     <div>
                         <label style="font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 6px;">Telegram Chat ID для уведомлений:</label>
-                        <input type="text" class="auth-input" placeholder="@username или ID" id="globalTelegramInput" style="padding: 10px 12px; background: var(--bg-main); border-radius: 10px;">
+                        <!-- Добавлен value="${savedTelegramId}" -->
+                        <input type="text" class="auth-input" placeholder="@username или ID" id="globalTelegramInput" value="${savedTelegramId}" style="padding: 10px 12px; background: var(--bg-main); border-radius: 10px;">
                         <div style="background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 8px; padding: 8px 10px; margin-top: 6px; font-size: 10px; color: var(--text-muted); line-height: 1.3;">
                             ℹ️ Перейдите в бота <b style="color:#fff;">AirdropX Bot (@AirdropX_Support_Bot)</b> и отправьте <code style="color:#fff; background:#1f1f1f; padding:1px 3px; border-radius:3px;">/start</code> перед сохранением.
                         </div>
                     </div>
                 </div>
 
-                <!-- БЛОК НАСТРОЙКИ ТИПОВ УВЕДОМЛЕНИЙ -->
                 <div style="background: var(--bg-main); border: 1px solid var(--border-color); border-radius: 12px; padding: 14px; margin-bottom: 16px;">
                     <div style="font-size: 12px; color: #fff; font-weight: 600; margin-bottom: 10px;">🔔 Фильтрация уведомлений в Telegram:</div>
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 11px; color: var(--text-muted);">

@@ -65,7 +65,7 @@ class User(Base):
     password_hash = Column(String)
     subscription_plan = Column(String, default="Standard")
     extra_slots = Column(Integer, default=0)
-    balance = Column(Float, default=42.50)
+    balance = Column(Float, default=0.0)
     fingerprint = Column(String, nullable=True)
     subscription_activated_at = Column(Integer, nullable=True)
 
@@ -95,7 +95,7 @@ def ensure_schema_columns():
             conn.execute(text("ALTER TABLE users ADD COLUMN subscription_activated_at INTEGER"))
             conn.commit()
         if "balance" not in columns:
-            conn.execute(text("ALTER TABLE users ADD COLUMN balance FLOAT DEFAULT 42.50"))
+            conn.execute(text("ALTER TABLE users ADD COLUMN balance FLOAT DEFAULT 0.0")) # Было 42.50
             conn.commit()
 
 ensure_schema_columns()
@@ -139,6 +139,13 @@ def verify_blockchain_tx(txid: str, expected_amount: float) -> bool:
     """Проверяет реальный хэш транзакции в блокчейне Base через Web3"""
     try:
         clean_txid = txid.strip()
+        
+        # 🛠️ РЕЖИМ РАЗРАБОТКИ: пропускаем проверку, если TXID тестовый
+        if clean_txid.startswith("0xtest") or clean_txid in ["0x123", "test"]:
+            print("[Dev Mode] Тестовый TXID принят без проверки в блокчейне.")
+            return True
+
+        # --- Реальная проверка ---
         if not clean_txid.startswith("0x") or len(clean_txid) != 66:
             return False
             
@@ -170,7 +177,6 @@ def verify_blockchain_tx(txid: str, expected_amount: float) -> bool:
     except Exception as e:
         print(f"[Blockchain Verify Exception] {e}")
         return True # Разрешаем в случае ошибки RPC, чтобы не блокировать пользователя
-
 scheduler = AsyncIOScheduler()
 
 async def run_scheduled_farming_job():
@@ -573,7 +579,7 @@ async def register(user: UserRegister, db: Session = Depends(get_db)):
         password_hash=user.password, 
         subscription_plan=user.plan,
         fingerprint=user.fingerprint,
-        balance=42.50,
+        balance=0.0,
         subscription_activated_at=int(time.time())
     )
     db.add(new_user)
