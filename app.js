@@ -1655,7 +1655,7 @@ function renderDashboardContent(section) {
             }
         }, 50);
 
-    } else if (section === 'Settings') {
+} else if (section === 'Settings') {
         const notifSettingsChecked = localStorage.getItem('ax_notify_settings') !== 'false' ? 'checked' : '';
         const notifStartChecked = localStorage.getItem('ax_notify_start') !== 'false' ? 'checked' : '';
         const notifSuccessChecked = localStorage.getItem('ax_notify_success') !== 'false' ? 'checked' : '';
@@ -1682,19 +1682,7 @@ function renderDashboardContent(section) {
         centerHtml = `
             ${antiSybilWarningHtml}
 
-            <div style="background: var(--bg-main); padding: 18px 20px; border-radius: 16px; margin-bottom: 16px; border: 1px solid var(--border-color);">
-                <div style="color: #fff; font-weight: 700; font-size: 16px; margin-bottom: 4px;">${t.setInterfaceTitle}</div>
-                <div style="color: var(--text-muted); font-size: 13px; margin-bottom: 14px;">${t.setInterfaceDesc}</div>
-                <label style="display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
-                    <span style="color: #fff; font-size: 13px; font-weight: 500;">${t.setHideAllBanners}</span>
-                    <label class="switch">
-                        <input type="checkbox" ${hideAllBanners ? 'checked' : ''} onchange="toggleHideBanners(this)">
-                        <span class="slider"></span>
-                    </label>
-                </label>
-            </div>
-
-            <div class="dashboard-card" style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 18px; padding: 22px; box-shadow: 0 8px 30px rgba(0,0,0,0.4);">
+            <div class="dashboard-card" style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 18px; padding: 22px; box-shadow: 0 8px 30px rgba(0,0,0,0.4); margin-bottom: 16px;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 16px; border-bottom: 1px solid var(--border-color); padding-bottom: 14px;">
                     <div>
                         <h3 style="color: #fff; margin: 0 0 4px 0; font-size: 16px; font-weight: 600;">${t.setTitle}</h3>
@@ -1754,6 +1742,19 @@ function renderDashboardContent(section) {
                 </div>
 
                 <button type="button" onclick="saveGlobalProfileSettings()" class="btn-modal-primary" style="width:100%; padding: 12px; font-size: 14px; font-weight: 600; border-radius: 12px; cursor: pointer;">${t.btnSaveSet}</button>
+            </div>
+
+            <!-- Блок интерфейса и подсказок перемещен вниз и оформлен как карточка дашборда -->
+            <div class="dashboard-card" style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 18px; padding: 22px; box-shadow: 0 8px 30px rgba(0,0,0,0.4);">
+                <div style="color: #fff; font-weight: 700; font-size: 16px; margin-bottom: 4px;">${t.setInterfaceTitle}</div>
+                <div style="color: var(--text-muted); font-size: 13px; margin-bottom: 14px;">${t.setInterfaceDesc}</div>
+                <label style="display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
+                    <span style="color: #fff; font-size: 13px; font-weight: 500;">${t.setHideAllBanners}</span>
+                    <label class="switch">
+                        <input type="checkbox" ${hideAllBanners ? 'checked' : ''} onchange="toggleHideBanners(this)">
+                        <span class="slider"></span>
+                    </label>
+                </label>
             </div>
         `;
         setTimeout(updateDailyConfigsUI, 50);

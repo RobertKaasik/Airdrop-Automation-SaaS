@@ -1,0 +1,57 @@
+[33m434459a[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m HEAD@{0}: commit: 70%
+[33m97f2e86[m HEAD@{1}: commit: custom and engine repair
+[33mdc8bc30[m HEAD@{2}: commit: site view
+[33ma113c2c[m HEAD@{3}: commit: Engine 2
+[33m61068e4[m HEAD@{4}: commit: Engine
+[33mc5741ea[m HEAD@{5}: commit: WalletProxy
+[33m248bb53[m HEAD@{6}: commit: WalletProxy
+[33mca7418e[m HEAD@{7}: commit: schedule
+[33m29a2ed3[m HEAD@{8}: commit: Good web
+[33m59e3db7[m HEAD@{9}: commit: rapair AI problem3
+[33mbb532a1[m HEAD@{10}: commit: rapair AI problem2
+[33m1faaf9c[m HEAD@{11}: commit: rapair AI problem1
+[33m9dea4e2[m HEAD@{12}: commit: rapair AI problem1
+[33me215b30[m HEAD@{13}: commit: rapair AI problem
+[33mc6ca952[m HEAD@{14}: commit: Add new things
+[33mb933b20[m HEAD@{15}: commit: Smart-Contrct
+[33m15a2226[m HEAD@{16}: commit: Add fuctions
+[33md66d96e[m HEAD@{17}: commit: Add wallet 1
+[33m6dbbb55[m HEAD@{18}: commit: Add waller functsion
+[33maabea66[m HEAD@{19}: commit: Add wallet BS
+[33m5059583[m HEAD@{20}: commit: Add database, user auth, and fix engine mock tests
+[33ma78337f[m HEAD@{21}: commit: Add universal proxy manager with SOCKS5 and HTTP support and Web3 integration
+[33m74cd492[m HEAD@{22}: commit: Add core backend engine with worker pool, rpc fallback, local vault and json exporter
+[33mb6e1923[m HEAD@{23}: commit: Fix html half final2
+[33m3aac171[m HEAD@{24}: commit: Fix html half final1
+[33m59d78dd[m HEAD@{25}: commit: Fix html half final
+[33m93da8c1[m HEAD@{26}: commit: Fix html full 10
+[33md5b4569[m HEAD@{27}: commit: Fix html full 9
+[33m581c0bd[m HEAD@{28}: commit: Fix html full 8
+[33m2360040[m HEAD@{29}: commit: Fix html full7
+[33m76e6b7f[m HEAD@{30}: commit: Fix html full6
+[33m514f32c[m HEAD@{31}: commit: Fix html full5
+[33m5925b1a[m HEAD@{32}: commit: Fix html full4
+[33m7d70fb2[m HEAD@{33}: commit: Fix html full3
+[33m42c1e57[m HEAD@{34}: commit: Fix html full2
+[33me26311b[m HEAD@{35}: commit: Fix html full
+[33med93922[m HEAD@{36}: commit: Fix html lenguage 4
+[33mb4d689b[m HEAD@{37}: commit: Fix html lenguage 3
+[33m7576b44[m HEAD@{38}: commit: Fix html lenguage 2
+[33mb29503c[m HEAD@{39}: commit: Fix html lenguage 1
+[33m098def8[m HEAD@{40}: commit: Fix html lenguage
+[33m3f5d151[m HEAD@{41}: commit: Fix html all site better
+[33me30a325[m HEAD@{42}: commit: Fix html all site
+[33mc43f45f[m HEAD@{43}: commit: Fix html hat
+[33m82afb0c[m HEAD@{44}: commit: Fix html
+[33m201e2c8[m HEAD@{45}: commit: fix telegram warning
+[33m4ec31d5[m HEAD@{46}: commit: fix html
+[33m948f5d4[m HEAD@{47}: commit: fix rpc
+[33ma54e9f8[m HEAD@{48}: commit: fix warning alert
+[33ma82735f[m HEAD@{49}: commit: fix rpc provider
+[33mddc06df[m HEAD@{50}: commit: add anti-sybil balance check
+[33mfe8784f[m HEAD@{51}: commit: force metamask popup
+[33m217ba85[m HEAD@{52}: commit: add metamask deep link and fix farm alert
+[33m36f197c[m HEAD@{53}: commit: fix farm button 1
+[33m2ccd577[m HEAD@{54}: commit: обновил код index.html
+[33mb99d4a4[m HEAD@{55}: Branch: renamed refs/heads/master to refs/heads/main
+[33mb99d4a4[m HEAD@{57}: commit (initial): first commit
