@@ -10,17 +10,23 @@ import requests
 import logging
 from email.message import EmailMessage
 
-from zoneinfo import ZoneInfo
+from dotenv import load_dotenv
+from passlib.context import CryptContext
 from fastapi.staticfiles import StaticFiles
-from fastapi import FastAPI, Depends, HTTPException, Response
+from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from typing import Dict, List, Optional
 from sqlalchemy import create_engine, Column, Integer, String, Float, text
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from web3 import Web3
+
+# Загрузка переменных окружения из .env
+load_dotenv()
+
+# Настройка безопасного хэширования паролей (bcrypt)
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # --- ОТКЛЮЧЕНИЕ СПАМА APSCHEDULER В ТЕРМИНАЛЕ ---
 logging.getLogger('apscheduler.executors.default').setLevel(logging.WARNING)
@@ -34,12 +40,13 @@ except ImportError:
     def get_live_gas_price(network):
         return "N/A"
     
+# Безопасное чтение ключей
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 465
 SENDER_EMAIL = "airdrop.x.support@gmail.com"
-SENDER_PASSWORD = "salucffjamydmmgf"
+SENDER_PASSWORD = os.getenv("SMTP_PASSWORD")
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
-TELEGRAM_BOT_TOKEN = "8615804174:AAEpbK_sUProWJIDNBye_pv36DxdXjQOQ_Y"
 MASTER_WALLET_ADDRESS = "0x5e5316Dea1c44d220d4c60A5fcC2949E5A06Fc66"
 BASE_RPC_URL = "https://mainnet.base.org"
 
@@ -139,11 +146,6 @@ def verify_blockchain_tx(txid: str, expected_amount: float) -> bool:
     """Проверяет реальный хэш транзакции в блокчейне Base через Web3"""
     try:
         clean_txid = txid.strip()
-        
-        # 🛠️ РЕЖИМ РАЗРАБОТКИ: пропускаем проверку, если TXID тестовый
-        if clean_txid.startswith("0xtest") or clean_txid in ["0x123", "test"]:
-            print("[Dev Mode] Тестовый TXID принят без проверки в блокчейне.")
-            return True
 
         # --- Реальная проверка ---
         if not clean_txid.startswith("0x") or len(clean_txid) != 66:
@@ -152,7 +154,7 @@ def verify_blockchain_tx(txid: str, expected_amount: float) -> bool:
         w3 = Web3(Web3.HTTPProvider(BASE_RPC_URL, request_kwargs={"timeout": 10}))
         if not w3.is_connected():
             print("[Web3 Error] Нет соединения с нодой Base для проверки TXID")
-            return True # Фолбек на случай недоступности RPC при плохом интернет-соединении
+            return False # Фолбек на случай недоступности RPC при плохом интернет-соединении
             
         receipt = w3.eth.get_transaction_receipt(clean_txid)
         if not receipt or receipt.get("status") != 1:
@@ -573,10 +575,13 @@ async def register(user: UserRegister, db: Session = Depends(get_db)):
     if db_user:
         raise HTTPException(status_code=400, detail="Пользователь с таким ником или email уже существует")
     
+    # 🔒 Безопасное хэширование пароля
+    hashed_password = pwd_context.hash(user.password)
+
     new_user = User(
         username=user.username, 
         email=user.email,
-        password_hash=user.password, 
+        password_hash=hashed_password, 
         subscription_plan=user.plan,
         fingerprint=user.fingerprint,
         balance=0.0,
@@ -596,7 +601,8 @@ async def register(user: UserRegister, db: Session = Depends(get_db)):
 async def login(user: UserLogin, db: Session = Depends(get_db)):
     db_user = db.query(User).filter((User.username == user.username) | (User.email == user.username)).first()
     
-    if not db_user or db_user.password_hash != user.password:
+    # 🔒 Безопасная сверка пароля с хэшем из базы
+    if not db_user or not pwd_context.verify(user.password, db_user.password_hash):
         raise HTTPException(status_code=401, detail="Неверный логин или пароль")
 
     now_ts = int(time.time())
@@ -617,7 +623,7 @@ async def login(user: UserLogin, db: Session = Depends(get_db)):
         "days_left": days_left,
         "renewal_price": SUBSCRIPTION_RENEWAL_PRICE,
     }
-
+    
 @app.post("/api/wallets/add")
 async def add_wallet(wallet: WalletAdd, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == wallet.username).first()
