@@ -2,6 +2,92 @@
 let currentLang = localStorage.getItem('ax_lang') || 'ru';
 let isLoggedIn = false;
 let currentSection = 'Account';
+const localeStore = window.AIRDROP_LOCALES || {};
+const translations = localeStore;
+
+function getActiveLang() {
+    const savedLang = (currentLang || localStorage.getItem('ax_lang') || 'ru').toLowerCase();
+    if (savedLang === 'cn') return 'zh';
+    return translations[savedLang] ? savedLang : 'ru';
+}
+
+function t(key, fallback = '') {
+    const lang = getActiveLang();
+    const locale = translations[lang] || {};
+    const value = key.split('.').reduce((current, part) => current?.[part], locale);
+    if (value === undefined || value === null) {
+        return fallback || key;
+    }
+    return value;
+}
+
+function setLanguage(lang) {
+    const normalizedLang = lang === 'cn' ? 'zh' : lang;
+    currentLang = translations[normalizedLang] ? normalizedLang : 'ru';
+    localStorage.setItem('ax_lang', currentLang);
+    document.documentElement.setAttribute('data-lang', currentLang);
+    document.body.setAttribute('data-lang', currentLang);
+    return currentLang;
+}
+
+function setFormError(containerId, message, type = 'error', fieldId = '') {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    const cls = type === 'success' ? 'form-feedback success' : 'form-feedback error';
+    container.innerHTML = `<div class="${cls}">${message}</div>`;
+    if (fieldId) {
+        setFieldValidationState(fieldId, false, message);
+    }
+}
+
+function clearFormError(containerId, fieldId = '') {
+    const container = document.getElementById(containerId);
+    if (container) container.innerHTML = '';
+    if (fieldId) {
+        clearFieldValidationState(fieldId);
+    }
+}
+
+function setFieldValidationState(fieldId, isValid, message = '') {
+    const field = document.getElementById(fieldId);
+    if (!field) return;
+    field.classList.toggle('field-error', !isValid);
+    field.dataset.validationMessage = message;
+    if (!isValid) {
+        field.style.borderColor = '#ef4444';
+        field.style.boxShadow = '0 0 0 1px rgba(239, 68, 68, 0.35)';
+        field.style.background = 'rgba(239, 68, 68, 0.08)';
+    } else {
+        field.style.borderColor = '';
+        field.style.boxShadow = '';
+        field.style.background = '';
+    }
+}
+
+function clearFieldValidationState(fieldId) {
+    const field = document.getElementById(fieldId);
+    if (!field) return;
+    field.classList.remove('field-error');
+    field.dataset.validationMessage = '';
+    field.style.borderColor = '';
+    field.style.boxShadow = '';
+    field.style.background = '';
+}
+
+function setButtonLoading(button, isLoading, text = '') {
+    if (!button) return;
+    if (isLoading) {
+        button.classList.add('btn-loading');
+        button.disabled = true;
+        if (text) button.dataset.defaultText = button.innerText;
+        button.innerText = text || t('loading', 'Loading...');
+    } else {
+        button.classList.remove('btn-loading');
+        button.disabled = false;
+        const defaultText = button.dataset.defaultText || '';
+        if (defaultText) button.innerText = defaultText;
+    }
+}
 let userPlan = 'Standard';
 let deviceFingerprint = generateDeviceFingerprint();
 let subscriptionDaysLeft = 29;
@@ -39,7 +125,7 @@ const NETWORKS_CONFIG = [
 ];
 
 // --- Полный словарь переводов (Лендинг, Дашборд, Модалки, Тарифы, Оплата) ---
-const translations = {
+const legacyTranslations = {
     ru: {
         langCode: "RU", login: "Войти", logout: "Выйти", loading: "Загрузка...", days: "дн.",
         privateSoftware: "Приватное ПО",
@@ -580,6 +666,22 @@ function showNotification(text, type = 'success') {
     }, 3500);
 }
 
+function renderLanguageAwareText() {
+    const lang = setLanguage(currentLang);
+    const loginBtn = document.getElementById('login-btn');
+    if (loginBtn) loginBtn.innerText = t('login', 'Login');
+
+    const badge = document.getElementById('current-lang-badge');
+    const text = document.getElementById('current-lang-text');
+    if (badge) badge.innerText = translations[lang].langCode || lang.toUpperCase();
+    if (text) text.innerText = translations[lang].langCode || lang.toUpperCase();
+
+    const counterEl = document.getElementById('slots-counter-text');
+    if (counterEl && window.cachedStatsData) {
+        counterEl.innerHTML = `${t('privateSoftware', 'Private Software')}. <b style="color:#fff; margin-left:8px;">${window.cachedStatsData.current_slots} / ${window.cachedStatsData.max_slots} SLOTS</b>`;
+    }
+}
+
 function checkInputLimit(input, maxLimit) {
     const val = parseFloat(input.value);
     if (val > maxLimit) {
@@ -595,45 +697,159 @@ function checkInputLimit(input, maxLimit) {
 
 // 🌍 Обновление всего статического текста
 function updateStaticText(lang) {
-    const t = translations[lang];
-    if (!t) return;
-    
-    const loginBtn = document.getElementById('login-btn');
-    if (loginBtn) loginBtn.innerText = t.login;
+    const normalizedLang = setLanguage(lang);
+    const locale = translations[normalizedLang] || translations.ru || {};
+    if (!locale) return;
+
+    const setText = (id, value, useHtml = false) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (useHtml) {
+            el.innerHTML = value;
+        } else {
+            el.innerText = value;
+        }
+    };
+
+    setText('login-btn', locale.login || 'Login');
 
     const badge = document.getElementById('current-lang-badge');
     const text = document.getElementById('current-lang-text');
-    if (badge) badge.innerText = t.langCode;
-    if (text) text.innerText = t.langCode;
+    if (badge) badge.innerText = locale.langCode || normalizedLang.toUpperCase();
+    if (text) text.innerText = locale.langCode || normalizedLang.toUpperCase();
 
     const counterEl = document.getElementById('slots-counter-text');
     if (counterEl && window.cachedStatsData) {
-        counterEl.innerHTML = `${t.privateSoftware}. <b style="color:#fff; margin-left:8px;">${window.cachedStatsData.current_slots} / ${window.cachedStatsData.max_slots} SLOTS</b>`;
+        counterEl.innerHTML = `${locale.privateSoftware || 'Private Software'}. <b style="color:#fff; margin-left:8px;">${window.cachedStatsData.current_slots} / ${window.cachedStatsData.max_slots} SLOTS</b>`;
     }
 
     const mainContent = document.getElementById('main-content');
     if (mainContent) {
-        const h1 = mainContent.querySelector('h1');
-        if (h1) h1.innerHTML = t.heroTitle;
+        setText('hero-title', locale.heroTitle || 'Universal tool', true);
+        setText('hero-desc', locale.heroDesc || '');
 
-        const heroDesc = mainContent.querySelector('h1 + p, .hero-desc');
-        if (heroDesc) heroDesc.innerText = t.heroDesc;
+        const farmBtn = document.getElementById('farm-btn');
+        const settingsBtn = document.getElementById('settings-btn');
+        if (farmBtn) farmBtn.innerText = locale.farmBtn || 'Get Access';
+        if (settingsBtn) settingsBtn.innerText = locale.settingsBtn || 'Learn More';
 
-        const buttons = mainContent.querySelectorAll('button, a.btn, .btn-primary, .btn-secondary');
-        if (buttons.length >= 1) buttons[0].innerText = t.farmBtn;
-        if (buttons.length >= 2) buttons[1].innerText = t.settingsBtn;
+        setText('core-status-label', locale.coreStatusLabel || '🛡️ Core status:');
+        setText('core-status-val', locale.coreStatus || 'Protected / Online');
+        setText('features-heading', locale.featuresHeading || 'Platform Features');
+        setText('instr-title', locale.instructionHeading || 'How AIRDROP-X Works');
+        setText('faq-heading', locale.faqHeading || 'FAQ');
 
-        const statusSpan = mainContent.querySelector('span[style*="color: #22c55e"], span[style*="color:#22c55e"]');
-        if (statusSpan) statusSpan.innerText = t.coreStatus;
+        setText('c1-t', locale.c1t || 'Drop Scanner & Looter');
+        setText('c1-d', locale.c1d || 'Automatic search for claimable airdrops and retro-drops across all connected wallets.');
+        setText('c2-t', locale.c2t || 'Multi-Chain Swaps & Bridges');
+        setText('c2-d', locale.c2d || 'Randomized cross-chain swaps and transactions in LayerZero, Base, Arbitrum, and ZkSync networks to build volume.');
+        setText('c3-t', locale.c3t || 'Sybil Shield');
+        setText('c3-d', locale.c3d || 'Real user pattern simulation and intelligent gas distribution without wallet linkages.');
 
-        const featuresHeadingEl = document.getElementById('features-heading');
-        if (featuresHeadingEl) featuresHeadingEl.innerText = t.featuresHeading;
+        setText('sc1-t', locale.sc1t || '🌾 1. Auto-Farm & Anti-Sybil Core');
+        setText('sc1-b1', locale.sc1b1 || 'What it is and why it is profitable:');
+        setText('sc1-d1', locale.sc1d1 || 'Executing hundreds of transactions manually every day takes a lot of time and effort.');
+        setText('sc1-d2', locale.sc1d2 || 'The software randomizes delays, wallet order, and transaction amounts.');
+        setText('sc1-l1', locale.sc1l1 || 'Smart Gwei Control');
+        setText('sc1-l2', locale.sc1l2 || 'Dynamic transaction routing');
+        setText('sc1-l3', locale.sc1l3 || 'Human-like timings and pause simulation');
 
-        const instrTitleEl = document.getElementById('instr-title');
-        if (instrTitleEl) instrTitleEl.innerText = t.instructionHeading;
+        setText('sc2-t', locale.sc2t || '👥 2. Limits & Adding Wallets');
+        setText('sc2-b1', locale.sc2b1 || 'Convenience and tariff security:');
+        setText('sc2-d1', locale.sc2d1 || 'The Standard plan allows running up to 5 wallets (for testing).');
+        setText('sc2-d2', locale.sc2d2 || 'Import keys and proxies in one click and manage your entire farm.');
+        setText('sc2-l1', locale.sc2l1 || 'Isolated sessions for each slot');
+        setText('sc2-l2', locale.sc2l2 || 'Support for IPv4 / IPv6 and mobile proxies');
+        setText('sc2-l3', locale.sc2l3 || 'Local encryption of private keys');
 
-        const faqHeadingEl = document.getElementById('faq-heading');
-        if (faqHeadingEl) faqHeadingEl.innerText = t.faqHeading;
+        setText('sc3-t', locale.sc3t || '📦 3. Claim Looter (Auto-Collect)');
+        setText('sc3-b1', locale.sc3b1 || 'When and how it happens:');
+        setText('sc3-d1', locale.sc3d1 || 'As soon as a project announces a retro-drop, the scanner finds distributed tokens.');
+        setText('sc3-d2', locale.sc3d2 || 'Supported networks include Base, Arbitrum, ZkSync, Scroll, Solana, and more.');
+        setText('sc3-l1', locale.sc3l1 || 'Instant search across contracts');
+        setText('sc3-l2', locale.sc3l2 || 'Bypass RPC lag during drops');
+        setText('sc3-l3', locale.sc3l3 || 'Auto-aggregation to the master account');
+
+        setText('sc4-t', locale.sc4t || '🔔 4. Telegram Notifications & Scheduler');
+        setText('sc4-b1', locale.sc4b1 || 'Real-time control and reports:');
+        setText('sc4-d1', locale.sc4d1 || 'Get detailed reports on every farming session, gas consumption, proxy status, and found loot directly in your Telegram bot.');
+        setText('sc4-l1', locale.sc4l1 || 'Detailed logs directly in Telegram');
+        setText('sc4-l2', locale.sc4l2 || 'Flexible scheduling for each day of the week');
+        setText('sc4-l3', locale.sc4l3 || 'Automatic stop on low gas or errors');
+
+        setText('q1', locale.q1 || 'How does auto-claim for airdrops work?');
+        setText('a1', locale.a1 || 'The software automatically scans all connected wallets via API and smart contracts for available distributions.');
+        setText('q2', locale.q2 || 'What is the difference between Standard and PRO?');
+        setText('a2', locale.a2 || 'Standard is suitable for beginners and supports up to 5 workers. PRO unlocks advanced strategies and more slots.');
+        setText('q3', locale.q3 || 'Do I need to configure a proxy for each wallet?');
+        setText('a3', locale.a3 || 'It is recommended to bind an individual proxy to each worker for better security.');
+        setText('q4', locale.q4 || 'How do I get access to the software?');
+        setText('a4', locale.a4 || 'Select a plan, pay, and register using the received payment token.');
+
+        setText('mn-looter', locale.mnLooter || 'Looter');
+        setText('mn-farm', locale.mnFarm || 'Farming');
+        setText('mn-proxy', locale.mnProxy || 'Proxy');
+        setText('mn-stats', locale.mnStats || 'Statistics');
+        setText('mn-more', locale.mnMore || 'More');
+    }
+
+    const pricingTitle = document.getElementById('p-title-modal');
+    if (pricingTitle) pricingTitle.innerText = locale.pTitleModal || 'Select plan';
+    const pricingDesc = document.getElementById('p-desc-modal');
+    if (pricingDesc) pricingDesc.innerText = locale.pDescModal || '';
+    const pricingTop = document.getElementById('p-std-top');
+    if (pricingTop) pricingTop.innerText = locale.subTop || 'LOGIN + SUBSCRIPTION';
+    const stdName = document.getElementById('p-std-name');
+    if (stdName) stdName.innerText = locale.stdName || 'Standard';
+    const stdPer = document.getElementById('p-std-per');
+    if (stdPer) stdPer.innerText = locale.stdPer || '/ 1st month, then $30/mo';
+    const stdF1 = document.getElementById('p-std-f1');
+    if (stdF1) stdF1.innerText = locale.stdF1 || 'Limit: up to 5 wallets';
+    const stdF2 = document.getElementById('p-std-f2');
+    if (stdF2) stdF2.innerText = locale.stdF2 || 'Base L2 network only';
+    const stdF3 = document.getElementById('p-std-f3');
+    if (stdF3) stdF3.innerText = locale.stdF3 || 'Basic Claim Looter';
+    const stdBtn = document.getElementById('p-std-btn');
+    if (stdBtn) stdBtn.innerText = locale.stdBtn || 'Activate for $95';
+    const proBadge = document.getElementById('p-pro-badge');
+    if (proBadge) proBadge.innerText = locale.proBadge || 'Recommended';
+    const proName = document.getElementById('p-pro-name');
+    if (proName) proName.innerText = locale.proName || 'PRO Farmer';
+    const proPer = document.getElementById('p-pro-per');
+    if (proPer) proPer.innerText = locale.proPer || '/ 1st month, then $50/mo';
+    const proF1 = document.getElementById('p-pro-f1');
+    if (proF1) proF1.innerText = locale.proF1 || 'Limit up to 15 wallets';
+    const proF2 = document.getElementById('p-pro-f2');
+    if (proF2) proF2.innerText = locale.proF2 || 'All networks except Solana';
+    const proF3 = document.getElementById('p-pro-f3');
+    if (proF3) proF3.innerText = locale.proF3 || 'Automatic background scheduler';
+    const proF4 = document.getElementById('p-pro-f4');
+    if (proF4) proF4.innerText = locale.proF4 || 'Priority 24/7 support';
+    const proBtn = document.getElementById('p-pro-btn');
+    if (proBtn) proBtn.innerText = locale.proBtn || 'Activate for $150';
+    const premName = document.getElementById('p-prem-name');
+    if (premName) premName.innerText = locale.premName || 'Premium VIP';
+    const premPer = document.getElementById('p-prem-per');
+    if (premPer) premPer.innerText = locale.premPer || '/ 1st month, then $90/mo';
+    const premF1 = document.getElementById('p-prem-f1');
+    if (premF1) premF1.innerText = locale.premF1 || 'Limit up to 30 wallet slots';
+    const premF2 = document.getElementById('p-prem-f2');
+    if (premF2) premF2.innerText = locale.premF2 || 'All current and future blockchains';
+    const premF3 = document.getElementById('p-prem-f3');
+    if (premF3) premF3.innerText = locale.premF3 || 'Telegram Webhook notifications';
+    const premF4 = document.getElementById('p-prem-f4');
+    if (premF4) premF4.innerText = locale.premF4 || 'Personal manager and early access';
+    const premBtn = document.getElementById('p-prem-btn');
+    if (premBtn) premBtn.innerText = locale.premBtn || 'Activate for $280';
+
+    const footerPrivacy = document.getElementById('footer-privacy');
+    if (footerPrivacy) footerPrivacy.innerText = locale.footerPrivacy || 'Privacy Policy';
+    const footerTerms = document.getElementById('footer-terms');
+    if (footerTerms) footerTerms.innerText = locale.footerTerms || 'Terms of Use';
+
+    const pageTitle = document.getElementById('page-title');
+    if (pageTitle) {
+        pageTitle.innerText = locale.heroTitle ? `AIRDROP-X — ${locale.faqHeading || 'AIRDROP-X'}` : 'AIRDROP-X — Cyberpunk SaaS Panel';
     }
 }
 
@@ -665,10 +881,9 @@ window.addEventListener('click', function(event) {
 });
 
 function changeLanguage(lang) {
-    currentLang = lang;
-    localStorage.setItem('ax_lang', lang);
+    const normalizedLang = setLanguage(lang);
     document.getElementById('langMenu').classList.remove('show');
-    updateStaticText(lang);
+    updateStaticText(normalizedLang);
     if (isLoggedIn) {
         renderDashboardContent(currentSection);
     }
@@ -716,7 +931,7 @@ function togglePasswordVisibility(fieldId, iconEl) {
 function openModal(type) {
     const modal = document.getElementById('authModal');
     const container = document.getElementById('modalContainer');
-    const t = translations[currentLang];
+    const locale = translations[getActiveLang()] || {};
 
     if (type === 'register' && (!paymentUnlocked || !paymentAccessToken)) {
         closeAuthModal();
@@ -730,21 +945,21 @@ function openModal(type) {
         container.innerHTML = `
             <form onsubmit="event.preventDefault(); validateLogin();">
                 <div class="modal-logo" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-                    <span style="font-weight:bold; font-size:16px;">${t.login}</span>
+                    <span style="font-weight:bold; font-size:16px;">${locale.login || 'Login'}</span>
                     <span onclick="closeAuthModal()" style="cursor: pointer; color: #a3a3a3; font-size: 18px;">✕</span>
                 </div>
                 <div class="input-group" style="margin-bottom:12px;">
-                    <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">Email / Nickname</label>
-                    <input type="text" class="auth-input" placeholder="..." id="loginUsername">
+                    <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">${t('auth.usernameLabel', 'Email / Nickname')}</label>
+                    <input type="text" class="auth-input" placeholder="${t('auth.usernamePlaceholder', 'Enter login')}" id="loginUsername" oninput="clearFormError('loginErrorContainer', 'loginUsername'); clearFieldValidationState('loginUsername')">
                 </div>
                 <div class="input-group" style="margin-bottom:16px;">
-                    <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">Password</label>
+                    <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">${t('auth.password', 'Password')}</label>
                     <div class="password-wrapper" style="position:relative;">
-                        <input type="password" class="auth-input" placeholder="..." id="loginPass" style="padding-right: 35px;">
+                        <input type="password" class="auth-input" placeholder="${t('auth.passwordPlaceholder', 'Enter password')}" id="loginPass" style="padding-right: 35px;" oninput="clearFormError('loginErrorContainer', 'loginPass'); clearFieldValidationState('loginPass')">
                         <span class="password-toggle-icon" onclick="togglePasswordVisibility('loginPass', this)" style="position:absolute; right:12px; top:50%; transform:translateY(-50%); cursor:pointer; font-size:14px;">👁️</span>
                     </div>
                 </div>
-                <button type="submit" class="btn-modal-primary" style="width:100%; padding:12px;">${t.login}</button>
+                <button type="submit" class="btn-modal-primary" style="width:100%; padding:12px;">${locale.login || 'Login'}</button>
                 <div id="loginErrorContainer" style="margin-top:10px;"></div>
             </form>
         `;
@@ -756,12 +971,12 @@ function openModal(type) {
 
         container.innerHTML = `
             <div class="modal-logo" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                <span style="font-weight:bold; font-size:16px;">${t.payTitle}: ${planDisplayLabel}</span>
+                <span style="font-weight:bold; font-size:16px;">${locale.payTitle || 'Payment'}: ${planDisplayLabel}</span>
                 <span onclick="closeAuthModal()" style="cursor: pointer; color: #a3a3a3; font-size: 18px;">✕</span>
             </div>
             
             <div style="margin-bottom: 12px;">
-                <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">${t.payNetwork}</label>
+                <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">${locale.payNetwork || 'Network:'}</label>
                 <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;">
                     <button type="button" class="btn-dark-sm auth-input" id="net-base" onclick="setPayNetwork('Base', '${MASTER_WALLET}', '${displayAmount}')" style="background:#1f1f1f; border-color:#fff; cursor:pointer;">Base L2</button>
                     <button type="button" class="btn-dark-sm auth-input" id="net-arb" onclick="setPayNetwork('Arbitrum', '${MASTER_WALLET}', '${displayAmount}')" style="cursor:pointer;">Arbitrum</button>
@@ -770,22 +985,22 @@ function openModal(type) {
             </div>
 
             <div style="background:#0a0a0a; border:1px solid var(--border-color); border-radius:12px; padding:12px; margin-bottom:12px; text-align:center;">
-                <div style="font-size:11px; color:#a3a3a3; margin-bottom:2px;">${t.payAmount}</div>
+                <div style="font-size:11px; color:#a3a3a3; margin-bottom:2px;">${locale.payAmount || 'Amount:'}</div>
                 <div style="font-size:20px; color:#fff; font-weight:700; margin-bottom:8px;">$${displayAmount}</div>
                 
-                <div style="font-size:11px; color:#a3a3a3; margin-bottom:2px;">${t.payWallet} (<span id="activePayNet">Base L2</span>):</div>
+                <div style="font-size:11px; color:#a3a3a3; margin-bottom:2px;">${locale.payWallet || 'Wallet'} (<span id="activePayNet">Base L2</span>):</div>
                 <div style="background:#181818; padding:6px 8px; border-radius:8px; font-family:monospace; font-size:11px; color:#fff; word-break:break-all; margin-bottom:6px;">${MASTER_WALLET}</div>
                 
-                <button type="button" id="copyWalletBtn" class="auth-input" style="margin: 0 auto; font-size: 11px; padding: 6px 12px; width:auto; cursor:pointer;" onclick="copyWalletAddress('${MASTER_WALLET}', this)">${t.payCopy}</button>
+                <button type="button" id="copyWalletBtn" class="auth-input" style="margin: 0 auto; font-size: 11px; padding: 6px 12px; width:auto; cursor:pointer;" onclick="copyWalletAddress('${MASTER_WALLET}', this)">${locale.payCopy || 'Copy'}</button>
                 <div id="qrcodeContainer" style="display:flex; justify-content:center; align-items:center; margin:10px auto 0 auto; background:#fff; padding:8px; border-radius:8px; width:110px; height:110px; box-sizing:border-box; overflow:hidden;"></div>
             </div>
 
             <div class="input-group" style="margin-bottom:12px;">
-                <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">${t.payTxid}</label>
+                <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">${locale.payTxid || 'TXID'}</label>
                 <input type="text" class="auth-input" placeholder="0x..." id="txidInput">
             </div>
 
-            <button type="button" id="paymentActionBtn" class="btn-modal-primary" onclick="startPlanPayment()" style="width:100%; padding:10px;">${t.payConfirm} ($${displayAmount})</button>
+            <button type="button" id="paymentActionBtn" class="btn-modal-primary" onclick="startPlanPayment()" style="width:100%; padding:10px;">${locale.payConfirm || 'Confirm'} ($${displayAmount})</button>
             <div id="paymentStatusContainer"></div>
         `;
         setTimeout(() => renderPaymentQR(MASTER_WALLET, displayAmount), 100);
@@ -793,44 +1008,44 @@ function openModal(type) {
         const chosenPlan = localStorage.getItem('selected_plan') || 'Standard';
         const chosenPrice = Number(localStorage.getItem('selected_price') || PLAN_PRICES[chosenPlan] || 95);
         const planDisplayLabel = chosenPlan === 'Standard' ? t.stdName : chosenPlan === 'Pro' ? t.proName : t.premName;
-        const btnText = codeCooldownSeconds > 0 ? `${codeCooldownSeconds}s` : 'Send';
+        const btnText = codeCooldownSeconds > 0 ? `${codeCooldownSeconds}s` : t('auth.sendCode', 'Send code');
         const btnDisabled = codeCooldownSeconds > 0 ? 'disabled' : '';
         const emailState = codeCooldownSeconds > 0 ? `readonly style="opacity: 0.7;" value="${confirmedRegistrationEmail}"` : '';
 
         container.innerHTML = `
             <form onsubmit="event.preventDefault(); validateRegister();">
                 <div class="modal-logo" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                    <span style="font-weight:bold; font-size:16px;">Register: ${planDisplayLabel} ($${chosenPrice})</span>
+                    <span style="font-weight:bold; font-size:16px;">${locale.auth?.register || 'Register'}: ${planDisplayLabel} ($${chosenPrice})</span>
                     <span onclick="closeAuthModal()" style="cursor: pointer; color: #a3a3a3; font-size: 18px;">✕</span>
                 </div>
                 
                 <div class="input-group" style="margin-bottom:10px;">
-                    <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">Nickname</label>
-                    <input type="text" class="auth-input" placeholder="..." id="regUsername">
+                    <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">${t('auth.nickname', 'Nickname')}</label>
+                    <input type="text" class="auth-input" placeholder="${t('auth.usernamePlaceholder', 'Enter login')}" id="regUsername" oninput="clearFormError('errorContainer', 'regUsername'); clearFieldValidationState('regUsername')">
                 </div>
                 
                 <div class="input-group" style="margin-bottom:10px;">
-                    <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">Email</label>
-                    <input type="email" class="auth-input" placeholder="Email" id="regEmail" ${emailState}>
+                    <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">${t('auth.email', 'Email')}</label>
+                    <input type="email" class="auth-input" placeholder="${t('auth.emailPlaceholder', 'Email')}" id="regEmail" ${emailState} oninput="clearFormError('errorContainer', 'regEmail'); clearFieldValidationState('regEmail')">
                 </div>
                 
                 <div class="input-group" style="margin-bottom:10px;">
-                    <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">Password</label>
+                    <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">${t('auth.password', 'Password')}</label>
                     <div class="password-wrapper" style="position:relative;">
-                        <input type="password" class="auth-input" placeholder="..." id="regPass" style="padding-right: 35px;">
+                        <input type="password" class="auth-input" placeholder="${t('auth.passwordPlaceholder', 'Enter password')}" id="regPass" style="padding-right: 35px;" oninput="clearFormError('errorContainer', 'regPass'); clearFieldValidationState('regPass')">
                         <span class="password-toggle-icon" onclick="togglePasswordVisibility('regPass', this)" style="position:absolute; right:12px; top:50%; transform:translateY(-50%); cursor:pointer; font-size:14px;">👁️</span>
                     </div>
                 </div>
                 
                 <div class="input-group" style="margin-bottom:14px;">
-                    <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">Code</label>
+                    <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">${t('auth.code', 'Code')}</label>
                     <div style="display: flex; gap: 8px;">
-                        <input type="text" class="auth-input" placeholder="..." id="regCode" style="flex: 1; margin: 0;">
+                        <input type="text" class="auth-input" placeholder="${t('auth.codePlaceholder', 'Enter code')}" id="regCode" style="flex: 1; margin: 0;" oninput="clearFormError('errorContainer', 'regCode'); clearFieldValidationState('regCode')">
                         <button type="button" id="sendCodeBtn" onclick="sendVerificationEmailCode()" ${btnDisabled} class="auth-input" style="width: auto; background:#1f1f1f; color:#fff; cursor:pointer; font-weight:600;">${btnText}</button>
                     </div>
                 </div>
                 
-                <button type="submit" class="btn-modal-primary" style="width:100%; padding:10px;">Register</button>
+                <button type="submit" class="btn-modal-primary" style="width:100%; padding:10px;">${locale.auth?.register || 'Register'}</button>
                 <div id="errorContainer" style="margin-top:10px;"></div>
             </form>
         `;
@@ -843,41 +1058,54 @@ async function sendVerificationEmailCode() {
     const email = emailInput.value.trim();
     const err = document.getElementById('errorContainer');
     const btn = document.getElementById('sendCodeBtn');
-    
-    if(!email || !email.includes('@')) { 
-        err.innerHTML = `<div style="color:#ef4444; font-size:12px;">Invalid email!</div>`; 
-        return; 
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email || !emailRegex.test(email)) {
+        setFormError('errorContainer', t('errors.invalidEmail', 'Please check the email address'), 'error', 'regEmail');
+        return;
     }
-    
+
     emailInput.readOnly = true;
-    emailInput.style.opacity = "0.7";
+    emailInput.style.opacity = '0.7';
     confirmedRegistrationEmail = email;
-    btn.disabled = true;
+    setButtonLoading(btn, true, t('auth.sendCode', 'Send code'));
 
     try {
-        await fetch('/api/send-code', { 
-            method: 'POST', 
-            headers: { 'Content-Type': 'application/json' }, 
-            body: JSON.stringify({ email }) 
+        const response = await fetch('/api/send-code', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email })
         });
-        showNotification("OK!");
+        if (!response.ok) {
+            throw new Error('request failed');
+        }
+        setFormError('errorContainer', t('auth.codeSent', 'Code sent'), 'success');
+        showNotification(t('auth.codeSent', 'Code sent'));
     } catch (e) {
-        showNotification("OK!");
+        setFormError('errorContainer', t('errors.networkError', 'Server connection error'));
+        showNotification(t('errors.networkError', 'Server connection error'), 'error');
     }
-    
+
     codeCooldownSeconds = 60;
     btn.innerText = `${codeCooldownSeconds}s`;
-    
+
     codeCooldownTimer = setInterval(() => {
         codeCooldownSeconds--;
-        const currentBtn = document.getElementById('sendCodeBtn'); 
+        const currentBtn = document.getElementById('sendCodeBtn');
         if (codeCooldownSeconds <= 0) {
             clearInterval(codeCooldownTimer);
-            if(currentBtn) { currentBtn.innerText = "Send"; currentBtn.disabled = false; }
+            if (currentBtn) {
+                currentBtn.innerText = t('auth.sendCode', 'Send code');
+                currentBtn.disabled = false;
+                currentBtn.classList.remove('btn-loading');
+            }
             const currentEmailInput = document.getElementById('regEmail');
-            if(currentEmailInput) { currentEmailInput.readOnly = false; currentEmailInput.style.opacity = "1"; }
-        } else {
-            if(currentBtn) currentBtn.innerText = `${codeCooldownSeconds}s`;
+            if (currentEmailInput) {
+                currentEmailInput.readOnly = false;
+                currentEmailInput.style.opacity = '1';
+            }
+        } else if (currentBtn) {
+            currentBtn.innerText = `${codeCooldownSeconds}s`;
         }
     }, 1000);
 }
@@ -885,6 +1113,13 @@ async function sendVerificationEmailCode() {
 function setPayNetwork(netName, address, amount) {
     document.getElementById('activePayNet').innerText = netName;
     renderPaymentQR(address, amount);
+}
+
+function scrollToFeatures() {
+    const heading = document.getElementById('features-heading');
+    if (heading) {
+        heading.scrollIntoView({ behavior: 'smooth' });
+    }
 }
 
 function renderPaymentQR(walletAddress, displayAmount) {
@@ -916,7 +1151,7 @@ async function startPlanPayment() {
     const txid = document.getElementById('txidInput').value.trim();
 
     if (!txid) {
-        status.innerHTML = `<div style="color:#ef4444; font-size:12px; margin-top:8px;">Enter TXID!</div>`;
+        status.innerHTML = `<div style="color:#ef4444; font-size:12px; margin-top:8px;">${t('errors.txidRequired', 'Enter TXID')}</div>`;
         return;
     }
 
@@ -936,7 +1171,7 @@ async function startPlanPayment() {
         const confirmData = await confirmRes.json();
 
         if (!confirmRes.ok) {
-            status.innerHTML = `<div style="color:#ef4444; font-size:12px; margin-top:8px;">${confirmData.detail || 'Error'}</div>`;
+            status.innerHTML = `<div style="color:#ef4444; font-size:12px; margin-top:8px;">${confirmData.detail || t('errors.paymentFailed', 'Payment confirmation failed')}</div>`;
             return;
         }
 
@@ -948,7 +1183,7 @@ async function startPlanPayment() {
         showNotification("OK!");
         setTimeout(() => openModal('register'), 800);
     } catch (e) {
-        status.innerHTML = `<div style="color:#ef4444; font-size:12px; margin-top:8px;">Network error.</div>`;
+        status.innerHTML = `<div style="color:#ef4444; font-size:12px; margin-top:8px;">${t('errors.networkError', 'Server connection error')}</div>`;
     }
 }
 
@@ -958,32 +1193,84 @@ async function validateRegister() {
     const pass = document.getElementById('regPass').value.trim();
     const code = document.getElementById('regCode').value.trim();
     const chosenPlan = localStorage.getItem('selected_plan') || 'Standard';
-    const err = document.getElementById('errorContainer');
+    const submitBtn = document.querySelector('#modalContainer .btn-modal-primary');
 
-    if(!username || !email || !pass || !code) { 
-        err.innerHTML = `<div style="color:#ef4444; font-size:12px;">Fill all fields!</div>`; 
-        return; 
+    if (!username) {
+        setFormError('errorContainer', t('errors.fillAllFields', 'Please fill in all fields'), 'error', 'regUsername');
+        document.getElementById('regUsername')?.focus();
+        return;
     }
-    
-    const res = await fetch('/api/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            username, email, password: pass, code, plan: chosenPlan,
-            activation_price: PLAN_PRICES[chosenPlan], client_session_id: clientSessionId,
-            payment_token: paymentAccessToken, fingerprint: deviceFingerprint
-        })
-    });
-    
-    if(res.ok) {
-        clearPaymentAccess();
-        showNotification("OK!");
+    if (!email) {
+        setFormError('errorContainer', t('errors.fillAllFields', 'Please fill in all fields'), 'error', 'regEmail');
+        document.getElementById('regEmail')?.focus();
+        return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        setFormError('errorContainer', t('errors.invalidEmail', 'Please check the email address'), 'error', 'regEmail');
+        document.getElementById('regEmail')?.focus();
+        return;
+    }
+    if (!pass) {
+        setFormError('errorContainer', t('errors.fillAllFields', 'Please fill in all fields'), 'error', 'regPass');
+        document.getElementById('regPass')?.focus();
+        return;
+    }
+    if (pass.length < 6) {
+        setFormError('errorContainer', t('errors.passwordTooShort', 'Password must be at least 6 characters'), 'error', 'regPass');
+        document.getElementById('regPass')?.focus();
+        return;
+    }
+    if (!code) {
+        setFormError('errorContainer', t('errors.fillAllFields', 'Please fill in all fields'), 'error', 'regCode');
+        document.getElementById('regCode')?.focus();
+        return;
+    }
+
+    setButtonLoading(submitBtn, true, t('auth.register', 'Register'));
+
+    const requestData = {
+        username,
+        email,
+        password: pass,
+        code,
+        plan: chosenPlan,
+        payment_token: localStorage.getItem('payment_token') || '',
+        client_session_id: localStorage.getItem('client_session_id') || '',
+        fingerprint: localStorage.getItem('fingerprint') || 'web_client'
+    };
+
+    try {
+        const response = await fetch('/api/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestData)
+        });
+
+        const result = await response.json();
+
+        if (!response.ok) {
+            let errMsg = t('errors.genericRequestFailed', 'Request failed');
+            if (result.detail) {
+                if (Array.isArray(result.detail)) {
+                    errMsg = result.detail.map(e => e.msg === 'Field required' ? t('errors.fillAllFields', 'Please fill in all fields') : e.msg).join(', ');
+                } else {
+                    errMsg = result.detail;
+                }
+            }
+            setFormError('errorContainer', errMsg);
+            return;
+        }
+
+        if (typeof clearPaymentAccess === 'function') {
+            clearPaymentAccess();
+        }
+        setFormError('errorContainer', t('auth.registerSuccess', 'Registration completed'), 'success');
+        showNotification(t('auth.registerSuccess', 'Registration completed'));
         setTimeout(() => openModal('login'), 1200);
-    } else {
-        const r = await res.json();
-        let errMsg = "Registration error";
-        if (r.detail) errMsg = Array.isArray(r.detail) ? r.detail.map(e => e.msg).join(', ') : r.detail;
-        err.innerHTML = `<div style="color:#ef4444; font-size:12px;">${errMsg}</div>`;
+    } catch (error) {
+        setFormError('errorContainer', t('errors.networkError', 'Server connection error'));
+    } finally {
+        setButtonLoading(submitBtn, false, t('auth.register', 'Register'));
     }
 }
 
@@ -991,28 +1278,48 @@ async function validateLogin() {
     const username = document.getElementById('loginUsername').value.trim();
     const pass = document.getElementById('loginPass').value.trim();
     const err = document.getElementById('loginErrorContainer');
-    
-    if(!username || !pass) {
-        err.innerHTML = `<div style="color:#ef4444; font-size:12px;">Enter login & password!</div>`;
+    const submitBtn = document.querySelector('#modalContainer .btn-modal-primary');
+
+    if (!username) {
+        setFormError('loginErrorContainer', t('errors.fillAllFields', 'Please fill in all fields'), 'error', 'loginUsername');
+        document.getElementById('loginUsername')?.focus();
+        return;
+    }
+    if (!pass) {
+        setFormError('loginErrorContainer', t('errors.fillAllFields', 'Please fill in all fields'), 'error', 'loginPass');
+        document.getElementById('loginPass')?.focus();
+        return;
+    }
+    if (pass.length < 6) {
+        setFormError('loginErrorContainer', t('errors.passwordTooShort', 'Password must be at least 6 characters'), 'error', 'loginPass');
+        document.getElementById('loginPass')?.focus();
         return;
     }
 
-    const res = await fetch('/api/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password: pass, fingerprint: deviceFingerprint })
-    });
-    const data = await res.json();
-    
-    if(res.ok) {
-        localStorage.setItem('airdrop_username', data.username);
-        userPlan = data.plan || 'Standard';
-        subscriptionDaysLeft = data.days_left ?? 29;
-        handleLoginSuccess();
-    } else {
-        let errMsg = "Login error";
-        if (data.detail) errMsg = Array.isArray(data.detail) ? data.detail.map(e => e.msg).join(', ') : data.detail;
-        err.innerHTML = `<div style="color:#ef4444; font-size:12px;">${errMsg}</div>`;
+    setButtonLoading(submitBtn, true, t('auth.login', 'Login'));
+
+    try {
+        const res = await fetch('/api/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password: pass, fingerprint: deviceFingerprint })
+        });
+        const data = await res.json();
+
+        if (res.ok) {
+            localStorage.setItem('airdrop_username', data.username);
+            userPlan = data.plan || 'Standard';
+            subscriptionDaysLeft = data.days_left ?? 29;
+            handleLoginSuccess();
+        } else {
+            let errMsg = t('errors.loginFailed', 'Incorrect login or password');
+            if (data.detail) errMsg = Array.isArray(data.detail) ? data.detail.map(e => e.msg).join(', ') : data.detail;
+            setFormError('loginErrorContainer', errMsg);
+        }
+    } catch (error) {
+        setFormError('loginErrorContainer', t('errors.networkError', 'Server connection error'));
+    } finally {
+        setButtonLoading(submitBtn, false, t('auth.login', 'Login'));
     }
 }
 
@@ -1033,8 +1340,6 @@ function handleLoginSuccess() {
 function switchMenu(element, sectionName) {
     currentSection = sectionName;
     localStorage.setItem('airdrop_current_section', sectionName);
-    document.querySelectorAll('.sidebar-menu-item').forEach(i => i.classList.remove('active'));
-    if(element) element.classList.add('active');
     renderDashboardContent(sectionName);
 }
 
