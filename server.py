@@ -25,6 +25,7 @@ SENDER_EMAIL = "airdrop.x.support@gmail.com"
 SENDER_PASSWORD = os.getenv("SMTP_PASSWORD")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_BOT_USERNAME = os.getenv("TELEGRAM_BOT_USERNAME", "").strip().lstrip("@")
+WALLETCONNECT_PROJECT_ID = os.getenv("WALLETCONNECT_PROJECT_ID", "").strip()
 
 MASTER_WALLET_ADDRESS = "0x5e5316Dea1c44d220d4c60A5fcC2949E5A06Fc66"
 BASE_RPC_URL = "https://mainnet.base.org"
@@ -631,6 +632,12 @@ def telegram_status(current_user: User = Depends(get_current_user), db: Session 
         "linked": bool(subscription),
         "bot_configured": bool(TELEGRAM_BOT_TOKEN and TELEGRAM_BOT_USERNAME),
     }
+
+@app.get("/api/walletconnect/config")
+def walletconnect_config(current_user: User = Depends(get_current_user)):
+    if not WALLETCONNECT_PROJECT_ID:
+        raise HTTPException(status_code=503, detail="WalletConnect is not configured")
+    return {"project_id": WALLETCONNECT_PROJECT_ID, "chain_id": 8453}
 
 @app.post("/api/telegram/link-code")
 def create_telegram_link_code(

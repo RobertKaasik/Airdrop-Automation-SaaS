@@ -190,6 +190,18 @@
         </div>
     </div>
 
+    <div class="modal-overlay" id="walletConnectModal" onclick="handleWalletConnectOverlayClick(event)">
+        <div class="auth-modal" style="max-width: 380px; text-align:center;">
+            <div class="modal-logo" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                <span id="walletConnectModalTitle"></span>
+                <span onclick="closeWalletConnectModal()" style="cursor:pointer; color:#b19cd9; font-size:18px;">✕</span>
+            </div>
+            <p id="walletConnectModalDesc" style="color:var(--text-muted); font-size:13px; line-height:1.5; margin:0 0 14px;"></p>
+            <div id="walletConnectQrCode" style="display:flex; justify-content:center; background:#fff; border-radius:12px; padding:12px; margin:0 auto 14px; width:230px; height:230px; box-sizing:border-box;"></div>
+            <button type="button" onclick="closeWalletConnectModal()" class="btn-dark-sm" style="padding:9px 14px;"><span id="walletConnectModalClose"></span></button>
+        </div>
+    </div>
+
     <!-- Мобильное нижнее меню -->
     <div class="bottom-sheet-overlay" id="bottomSheetOverlay" onclick="handleSheetOverlayClick(event)">
         <div class="bottom-sheet" id="bottomSheetContent">

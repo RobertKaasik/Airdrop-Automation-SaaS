@@ -133,6 +133,9 @@ const BASE_MAINNET_CONFIG = {
     rpcUrls: ['https://mainnet.base.org'],
     blockExplorerUrls: ['https://base.blockscout.com'],
 };
+const WALLETCONNECT_PROVIDER_MODULE_URL = 'https://esm.sh/@walletconnect/ethereum-provider@2.23.10?bundle&target=es2022';
+let walletConnectProvider = null;
+let walletConnectModulePromise = null;
 
 const NETWORKS_CONFIG = [
     { name: "Ethereum", symbol: "ETH", key: "Ethereum", icon: '<img src="https://cryptologos.cc/logos/ethereum-eth-logo.svg?v=032" style="width:32px; height:32px;">', explorer: "https://etherscan.io", deadline: "2026-10-15T00:00:00" },
@@ -855,6 +858,38 @@ function handleLoginSuccess() {
     showNotification("OK!");
 }
 
+function closeWalletConnectModal() {
+    document.getElementById('walletConnectModal')?.classList.remove('show');
+}
+
+function handleWalletConnectOverlayClick(event) {
+    if (event.target.id === 'walletConnectModal' && mousedownOverlayTarget.id === 'walletConnectModal') {
+        closeWalletConnectModal();
+    }
+}
+
+function openWalletConnectQr(uri) {
+    const locale = translations[getActiveLang()];
+    const modal = document.getElementById('walletConnectModal');
+    const title = document.getElementById('walletConnectModalTitle');
+    const desc = document.getElementById('walletConnectModalDesc');
+    const close = document.getElementById('walletConnectModalClose');
+    const qrContainer = document.getElementById('walletConnectQrCode');
+    if (!modal || !qrContainer || !window.qrcode) {
+        showNotification(locale.walletConnectQrUnavailable, 'error');
+        return;
+    }
+    title.textContent = locale.walletConnectQrTitle;
+    desc.textContent = locale.walletConnectQrDesc;
+    close.textContent = locale.walletConnectClose;
+    qrContainer.innerHTML = '';
+    const qr = qrcode(0, 'M');
+    qr.addData(uri);
+    qr.make();
+    qrContainer.innerHTML = qr.createSvgTag({ cellSize: 5, margin: 1 });
+    modal.classList.add('show');
+}
+
 function switchMenu(element, sectionName) {
     currentSection = sectionName;
     localStorage.setItem('airdrop_current_section', sectionName);
@@ -901,6 +936,72 @@ async function connectBaseWallet() {
         updateBaseWalletConnectionState(address);
     } catch (error) {
         showNotification(t.walletConnectRejected, 'error');
+    }
+}
+
+async function getWalletConnectProvider() {
+    if (walletConnectProvider) return walletConnectProvider;
+    const configResponse = await fetch('/api/walletconnect/config');
+    const config = await configResponse.json();
+    if (!configResponse.ok || !config.project_id) throw new Error('walletconnect_config_missing');
+
+    if (!walletConnectModulePromise) {
+        walletConnectModulePromise = import(WALLETCONNECT_PROVIDER_MODULE_URL);
+    }
+    const walletConnectModule = await walletConnectModulePromise;
+    const EthereumProvider = walletConnectModule.EthereumProvider || walletConnectModule.default?.EthereumProvider || walletConnectModule.default;
+    if (!EthereumProvider?.init) throw new Error('walletconnect_provider_unavailable');
+
+    walletConnectProvider = await EthereumProvider.init({
+        projectId: config.project_id,
+        optionalChains: [config.chain_id],
+        optionalMethods: ['eth_requestAccounts', 'eth_accounts', 'eth_chainId', 'wallet_switchEthereumChain'],
+        optionalEvents: ['accountsChanged', 'chainChanged'],
+        rpcMap: { [config.chain_id]: BASE_MAINNET_CONFIG.rpcUrls[0] },
+        metadata: {
+            name: 'AIRDROP-X',
+            description: 'Non-custodial Base wallet connection',
+            url: window.location.origin,
+            icons: []
+        }
+    });
+    walletConnectProvider.on('accountsChanged', (accounts) => {
+        const address = Array.isArray(accounts) ? accounts[0] : '';
+        if (address) {
+            sessionStorage.setItem('ax_base_wallet_address', address);
+            updateBaseWalletConnectionState(address);
+        }
+    });
+    walletConnectProvider.on('display_uri', openWalletConnectQr);
+    walletConnectProvider.on('connect', closeWalletConnectModal);
+    walletConnectProvider.on('disconnect', () => {
+        walletConnectProvider = null;
+        sessionStorage.removeItem('ax_base_wallet_address');
+        updateBaseWalletConnectionState('');
+    });
+    return walletConnectProvider;
+}
+
+async function connectWalletConnectBase() {
+    const locale = translations[getActiveLang()];
+    try {
+        showNotification(locale.walletConnectLoading);
+        const provider = await getWalletConnectProvider();
+        const accounts = await provider.request({ method: 'eth_requestAccounts' });
+        const chainId = await provider.request({ method: 'eth_chainId' });
+        if (chainId !== BASE_MAINNET_CHAIN_ID) {
+            await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: BASE_MAINNET_CHAIN_ID }] });
+        }
+        const address = Array.isArray(accounts) ? accounts[0] : '';
+        if (!address) throw new Error('walletconnect_no_address');
+        sessionStorage.setItem('ax_base_wallet_address', address);
+        updateBaseWalletConnectionState(address);
+    } catch (error) {
+        closeWalletConnectModal();
+        const message = error?.message === 'walletconnect_config_missing'
+            ? locale.walletConnectConfigMissing
+            : locale.walletConnectRejected;
+        showNotification(message, 'error');
     }
 }
 
@@ -1816,7 +1917,10 @@ function renderDashboardContent(section) {
             <div class="dashboard-card">
                 <h3 style="color: #fff; margin-top: 0; font-size: 16px;">${t.walletConnectTitle}</h3>
                 <p style="color: var(--text-muted); font-size: 13px; line-height: 1.5; margin-bottom: 10px;">${t.walletConnectDesc}</p>
-                <button type="button" onclick="connectBaseWallet()" class="btn-dark-sm" style="width:auto; padding:10px 14px;">${t.btnConnectBase}</button>
+                <div style="display:flex; flex-wrap:wrap; gap:8px;">
+                    <button type="button" onclick="connectBaseWallet()" class="btn-dark-sm" style="width:auto; padding:10px 14px;">${t.btnConnectBase}</button>
+                    <button type="button" onclick="connectWalletConnectBase()" class="btn-dark-sm" style="width:auto; padding:10px 14px; border-color:#7c3aed;">${t.btnConnectWalletConnect}</button>
+                </div>
                 <div id="baseWalletConnectionStatus" style="display:none; color:#86efac; font-size:12px; margin-top:8px;"></div>
             </div>
             <div class="dashboard-card">
