@@ -915,7 +915,7 @@ async function connectBaseWallet() {
         return;
     }
     try {
-        const accounts = await provider.enable();
+        const accounts = await provider.request({ method: 'eth_requestAccounts' });
         if (!Array.isArray(accounts) || !accounts[0]) throw new Error('No account returned');
         let chainId = await provider.request({ method: 'eth_chainId' });
         if (chainId !== BASE_MAINNET_CHAIN_ID) {
@@ -988,7 +988,7 @@ async function connectWalletConnectBase() {
     try {
         showNotification(locale.walletConnectLoading);
         const provider = await getWalletConnectProvider();
-        const accounts = await provider.request({ method: 'eth_requestAccounts' });
+        const accounts = await provider.enable();
         const chainId = await provider.request({ method: 'eth_chainId' });
         if (chainId !== BASE_MAINNET_CHAIN_ID) {
             await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: BASE_MAINNET_CHAIN_ID }] });
