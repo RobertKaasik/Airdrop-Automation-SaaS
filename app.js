@@ -11,12 +11,12 @@ function getActiveLang() {
     return translations[savedLang] ? savedLang : 'ru';
 }
 
-function t(key, fallback = '') {
+function t(key) {
     const lang = getActiveLang();
     const locale = translations[lang] || {};
     const value = key.split('.').reduce((current, part) => current?.[part], locale);
     if (value === undefined || value === null) {
-        return fallback || key;
+        return key;
     }
     return value;
 }
@@ -80,7 +80,7 @@ function setButtonLoading(button, isLoading, text = '') {
         button.classList.add('btn-loading');
         button.disabled = true;
         if (text) button.dataset.defaultText = button.innerText;
-        button.innerText = text || t('loading', 'Loading...');
+        button.innerText = text || t('loading');
     } else {
         button.classList.remove('btn-loading');
         button.disabled = false;
@@ -105,7 +105,6 @@ let lastRandomizeTimestamp = 0;
 let cachedStatsData = { current_slots: 1, max_slots: 300, is_sold_out: false };
 
 const PLAN_PRICES = { Standard: 95, Pro: 150, Premium: 280 };
-const PLAN_LABELS = { Standard: 'Standard', Pro: 'PRO Фермер', Premium: 'Premium VIP' };
 const clientSessionId = getOrCreateClientSessionId();
 let paymentAccessToken = sessionStorage.getItem('ax_payment_token') || '';
 let paymentUnlocked = sessionStorage.getItem('ax_paid_session_id') === clientSessionId && !!paymentAccessToken;
@@ -123,430 +122,6 @@ const NETWORKS_CONFIG = [
     { name: "Optimism", symbol: "OP", key: "Optimism", icon: '<img src="https://cryptologos.cc/logos/optimism-ethereum-op-logo.svg?v=032" style="width:32px; height:32px;">', explorer: "https://optimistic.etherscan.io", deadline: "2026-09-15T23:59:59" },
     { name: "Tron", symbol: "TRX", key: "Tron", icon: '<img src="https://cryptologos.cc/logos/tron-trx-logo.svg?v=032" style="width:32px; height:32px;">', explorer: "https://tronscan.org", deadline: "2026-11-10T23:59:59" }
 ];
-
-// --- Полный словарь переводов (Лендинг, Дашборд, Модалки, Тарифы, Оплата) ---
-const legacyTranslations = {
-    ru: {
-        langCode: "RU", login: "Войти", logout: "Выйти", loading: "Загрузка...", days: "дн.",
-        privateSoftware: "Приватное ПО",
-        
-        heroTitle: "Универсальный инструмент<br>для автоматизации и сбора Airdrop.",
-        heroDesc: "Фармите поинты, сканируйте кошельки на наличие распределений и клеймите аирдропы в один клик с защитой Anti-Sybil.",
-        farmBtn: "Получить доступ", settingsBtn: "Подробнее",
-        coreStatus: "Защищено / Онлайн",
-        featuresHeading: "Возможности платформы",
-        feat1Title: "Drop Scanner & Looter",
-        feat1Desc: "Автоматический поиск доступных для клейма аирдропов и ретродропов по всем подключенным кошелькам.",
-        feat2Title: "Multi-Chain Swaps & Bridges",
-        feat2Desc: "Рандомизированные кроссчейн свапы и транзакции в сетях LayerZero, Base, Arbitrum и ZkSync для набива объемов.",
-        feat3Title: "Sybil Shield",
-        feat3Desc: "Имитация паттернов реального пользователя и интеллектуальное распределение газа без связей между кошельками.",
-        
-        instructionHeading: "Как работает AIRDROP-X (Инструкция)",
-        inst1Title: "🌾 1. Авто-фарм и Anti-Sybil Ядро",
-        inst1DescBold: "Что это и почему это выгодно:",
-        inst1DescText: "Ручное выполнение сотен транзакций в день отнимает уйму сил и времени. Наш авто-фарминг через встроенное ядро полностью имитирует активность живого пользователя.",
-        inst1DescText2: "Софт рандомизирует задержки, порядок кошельков и суммы транзакций, защищая от сибил-банов.",
-        ph1: "GIF-анимация процесса авто-фарма",
-        
-        inst2Title: "👥 2. Лимиты и добавление кошельков",
-        inst2DescBold: "Удобство и защита тарифов:",
-        inst2DescText: "Тариф Standard позволяет запустить до 5 кошельков (для теста), PRO открывает до 15 слотов, а Premium расширяет лимит до 30 кошельков.",
-        inst2DescText2: "Импортируйте ключи и прокси в один клик, управляя всей фермой из единой панели.",
-        ph2: "Скриншот импорта кошельков",
-        
-        inst3Title: "📦 3. Автоматический сбор лута (Claim Looter)",
-        inst3DescBold: "Когда и как это происходит:",
-        inst3DescText: "Как только проект объявляет раздачу ретродропа, сканер находит распределенные токены.",
-        inst3DescText2: "Поддерживаются Base, Arbitrum, ZkSync, Scroll, Solana и др. Один клик — и награды у вас.",
-        ph3: "GIF-анимация клейма наград",
-        
-        inst4Title: "🔔 4. Система уведомлений и планировщик",
-        inst4DescBold: "Контроль и отчеты в реальном времени:",
-        inst4DescText: "Получайте детальные отчеты о каждой сессии фарма, расходе газа, статусе прокси и найденном луте прямо в Telegram-бот.",
-        ph4: "Скриншот Telegram-отчета от бота",
-
-        faqHeading: "Часто задаваемые вопросы",
-        faq1Q: "Как работает авто-клейм аирдропов?",
-        faq1A: "Софт автоматически сканирует все подключенные кошельки по API и смарт-контрактам на наличие доступных распределений, собирая их в мастер-кошелек с рандомизацией.",
-        faq2Q: "В чем разница между Standard и PRO?",
-        faq2A: "Standard подходит для новичков и поддерживает до 5 воркеров. PRO открывает продвинутые стратегии, до 15 слотов и приоритетное исполнение транзакций.",
-        faq3Q: "Нужно ли настраивать прокси для каждого кошелька?",
-        faq3A: "Рекомендуется привязывать индивидуальный прокси (особенно резидентный или мобильный) к каждому воркеру для абсолютной безопасности от Anti-Sybil систем.",
-        faq4Q: "Как получить доступ к софту?",
-        faq4A: "Выберите подходящий тариф на сайте, совершите оплату криптовалютой в поддерживаемой сети и зарегистрируйтесь, используя полученный токен оплаты.",
-
-        footerPrivacy: "Privacy Policy",
-        footerTerms: "Terms of Use",
-
-        // Модалка тарифов
-        pTitleModal: "⚡ Выберите тарифный план AIRDROP-X",
-        pDescModal: "Закрытый доступ: оплата активации за первый месяц, далее ежемесячное продление.",
-        subTop: "ВХОД + ПОДПИСКА",
-        
-        stdName: "Стандарт",
-        stdPer: "/ 1-й месяц, далее $30/мес",
-        stdF1: "Лимит: до 5 кошельков (воркеров)",
-        stdF2: "Только сеть Base L2",
-        stdF3: "Базовый Claim Looter и Anti-Sybil",
-        stdBtn: "Активировать за $95",
-        
-        proBadge: "Рекомендуемый",
-        proName: "PRO Фермер",
-        proPer: "/ 1-й месяц, далее $50/мес",
-        proF1: "Лимит до 15 кошельков (воркеров)",
-        proF2: "Все сети кроме Solana (Arbitrum, ZkSync, Scroll...)",
-        proF3: "Автоматический фоновый планировщик",
-        proF4: "Приоритетная поддержка 24/7",
-        proBtn: "Активировать за $150",
-        
-        premName: "Premium VIP",
-        premPer: "/ 1-й месяц, далее $90/мес",
-        premF1: "Лимит до 30 слотов кошельков",
-        premF2: "Все текущие и будущие блокчейны",
-        premF3: "Telegram Webhook пуш-уведомления",
-        premF4: "Личный менеджер и ранний доступ",
-        premBtn: "Активировать за $280",
-
-        // Модалка оплаты
-        payTitle: "Оплата",
-        payNetwork: "Сеть:",
-        payAmount: "Сумма:",
-        payWallet: "Кошелек",
-        payCopy: "📋 Копировать",
-        payTxid: "TXID транзакции",
-        payConfirm: "Подтвердить",
-
-        // Меню и Дашборд
-        menuMain: "Меню", menuAcc: "👤 Аккаунт", menuLooter: "📦 Looter", menuFarm: "🌾 Фарминг", 
-        menuWallets: "👥 Кошельки", menuNet: "🌐 Сети", menuSet: "🔒 Настройки профиля", menuExit: "🚪 Выйти из аккаунта",
-        
-        accWelcome: "Добро пожаловать",
-        accWelcomeDesc: "Система защиты мастер-кошелька активна. Средства для фарма списываются с вашего личного баланса. Пополняйте баланс для бесперебойной работы воркеров.",
-        accTitle: "💳 Личный счет и Баланс", btnTopUp: "➕ Пополнить баланс",
-        accDesc: "Доступно для оплаты газа и автоматизации. Защита от перерасхода включена.",
-        txTitle: "📊 История транзакций", noTx: "У вас пока не было осуществленных транзакций",
-        txDep: "📥 Пополнение", txSlot: "🛒 Покупка слота", txGas: "⛽ Списание газа",
-        subTitle: "✏️ Управление подпиской", subPlan: "Тариф", subActive: "Подписка активна", btnChangePlan: "Сменить тариф",
-
-        lootTitle: "Панель поиска и авто-сбора лута",
-        lootDesc: "Сканируйте свои кошельки на наличие незабранных наград и запускайте авто-фарминг объема.",
-        btnScan: "🔍 Запустить авто-сбор (Claim Looter)", logInitLoot: "[System] Антифрод-ядро инициализировано. Ожидание сканирования...",
-        
-        farmTitle: "Anti-Sybil Swaps & Bridges (Фарм объемов)",
-        farmDesc: "Запуск боевого ядра с рандомизацией пауз и порядка воркеров.",
-        netSelect: "Целевая сеть для фарма:", netPh: "Выберите сеть:", btnFarm: "▶ Запустить Anti-Sybil Ядро",
-        logWait: "Ожидание...", logStart: "Запуск фарма в сети", logCost: "Списано", logErrNet: "Сеть не выбрана.", logErrBal: "Недостаточно средств на балансе.", logSuccess: "Фарм сессия успешно завершена! Отчет отправлен в Telegram.",
-
-        walTitle: "👥 Кошельки", slotsLabel: "Slots", btnBuySlot: "➕ Купить +1 слот ($10)",
-        walAddTitle: "➕ Добавить воркера", phAddr: "Адрес кошелька (0x...)", phPk: "Приватный ключ", phProxy: "Прокси (ip:port:login:pass)",
-        proxyTipTitle: "Рекомендация по прокси:", proxyTipDesc: "Для безопасного фарма лучше использовать <b>резидентные</b> или <b>мобильные</b> прокси. Обычные серверные IP имеют высокий риск банов.",
-        btnAddWal: "Добавить в ферму", btnTest: "🔍 Проверить", btnDel: "Удалить", noWal: "Кошельков пока нет.",
-        balLabel: "Баланс:", proxyLabel: "Proxy:", proxyNone: "Не задан",
-
-        netTitle: "🌐 Проверка сетей и газа", netDesc: "Мониторинг соединения с блокчейнами, пинга и актуальной стоимости газа в сети.",
-        statusOnline: "Онлайн", gasLabel: "Газ в реальном времени:", btnExp: "🔍 Обозреватель",
-
-        setWarnTitle: "Anti-Sybil Защита Активна", setWarnDesc: "Настройте уникальное время и задержку для каждого отдельного дня недели (1–4 активных дня). Это гарантирует максимальную рандомизацию фермы.",
-        setTitle: "🔒 Настройки планировщика и Anti-Sybil", setDesc: "Расписание, индивидуальные тайминги дней и лимиты.", btnRand: "🎲 Max Рандом (1-4 дня)",
-        setBgTitle: "Фоновый планировщик задач", setBgDesc: "Автоматический запуск по расписанию",
-        setDays: "Дни активности бота (нажмите, чтобы включить/выключить день):", setTimeTitle: "Индивидуальное время запуска и задержка:",
-        timeAlert: "ℹ️ Время запуска указывается по вашему <b>местному времени</b> в 24-часовом формате.",
-        tTime: "Время:", tMin: "Мин(с):", tMax: "Макс(с):",
-        setGwei: "Максимальный лимит газа (Max Gwei, макс. 300):", setTg: "Telegram Chat ID для уведомлений:", tgPh: "@username или ID",
-        tgTip: "Перейдите в бота", tgTip2: "и отправьте", tgTip3: "перед сохранением.",
-        notifTitle: "🔔 Фильтрация уведомлений в Telegram:", notif1: "Сохранение настроек", notif2: "Запуск сессий фарма", notif3: "Успешное завершение", notif4: "Ошибки и пропуски",
-        btnSaveSet: "💾 Сохранить настройки профиля",
-        
-        setInterfaceTitle: "Интерфейс и подсказки",
-        setInterfaceDesc: "Управление отображением информационных блоков и подсказок на сайте",
-        setHideAllBanners: "Скрывать все информационные подсказки и баннеры",
-        msgBannersHidden: "Все подсказки скрыты",
-        msgBannersShown: "Подсказки включены",
-
-        calDays: { 'Пн': 'Пн', 'Вт': 'Вт', 'Ср': 'Ср', 'Чт': 'Чт', 'Пт': 'Пт', 'Сб': 'Сб', 'Вс': 'Вс' }
-    },
-    en: {
-        langCode: "EN", login: "Login", logout: "Logout", loading: "Loading...", days: "days",
-        privateSoftware: "Private Software",
-        
-        heroTitle: "Universal tool<br>for automation and Airdrop farming.",
-        heroDesc: "Farm points, scan wallets for distributions, and claim airdrops in one click with Anti-Sybil protection.",
-        farmBtn: "Get Access", settingsBtn: "Learn More",
-        coreStatus: "Protected / Online",
-        featuresHeading: "Platform Features",
-        feat1Title: "Drop Scanner & Looter",
-        feat1Desc: "Automatic search for claimable airdrops and retro-drops across all connected wallets.",
-        feat2Title: "Multi-Chain Swaps & Bridges",
-        feat2Desc: "Randomized cross-chain swaps and transactions in LayerZero, Base, Arbitrum, and ZkSync networks to build volume.",
-        feat3Title: "Sybil Shield",
-        feat3Desc: "Real user pattern simulation and intelligent gas distribution without wallet linkages.",
-        
-        instructionHeading: "How AIRDROP-X Works (Guide)",
-        inst1Title: "🌾 1. Auto-Farm & Anti-Sybil Core",
-        inst1DescBold: "What it is and why it's profitable:",
-        inst1DescText: "Executing hundreds of transactions manually every day takes a lot of time and effort. Our auto-farming via the built-in core fully simulates real user activity.",
-        inst1DescText2: "The software randomizes delays, wallet order, and transaction amounts, protecting you from sybil bans.",
-        ph1: "Auto-farm process GIF animation",
-        
-        inst2Title: "👥 2. Limits & Adding Wallets",
-        inst2DescBold: "Convenience and tariff security:",
-        inst2DescText: "The Standard plan allows running up to 5 wallets (for testing), PRO unlocks up to 15 slots, and Premium expands the limit to 30 wallets.",
-        inst2DescText2: "Import keys and proxies in one click and manage your entire farm from a single panel.",
-        ph2: "Wallet import screenshot",
-        
-        inst3Title: "📦 3. Claim Looter (Auto-Collect)",
-        inst3DescBold: "When and how it happens:",
-        inst3DescText: "As soon as a project announces a retro-drop, the scanner finds distributed tokens.",
-        inst3DescText2: "Supported networks include Base, Arbitrum, ZkSync, Scroll, Solana, and more. One click and the rewards are yours.",
-        ph3: "Claim rewards GIF animation",
-        
-        inst4Title: "🔔 4. Telegram Notifications & Scheduler",
-        inst4DescBold: "Real-time control and reports:",
-        inst4DescText: "Get detailed reports on every farming session, gas consumption, proxy status, and found loot directly in your Telegram bot.",
-        ph4: "Telegram bot report screenshot",
-
-        faqHeading: "Frequently Asked Questions",
-        faq1Q: "How does auto-claim for airdrops work?",
-        faq1A: "The software automatically scans all connected wallets via API and smart contracts for available distributions, aggregating them into a master wallet with randomization.",
-        faq2Q: "What is the difference between Standard and PRO?",
-        faq2A: "Standard is suitable for beginners and supports up to 5 workers. PRO unlocks advanced strategies, up to 15 slots, and priority transaction execution.",
-        faq3Q: "Do I need to configure a proxy for each wallet?",
-        faq3A: "It is recommended to bind an individual proxy (especially residential or mobile) to each worker for absolute security against Anti-Sybil systems.",
-        faq4Q: "How to get access to the software?",
-        faq4A: "Select a suitable plan on the website, make payment in cryptocurrency in a supported network, and register using the received payment token.",
-
-        footerPrivacy: "Privacy Policy",
-        footerTerms: "Terms of Use",
-
-        // Pricing Modal
-        pTitleModal: "⚡ Select AIRDROP-X Pricing Plan",
-        pDescModal: "Private access: activation payment for the first month, then monthly renewal.",
-        subTop: "LOGIN + SUBSCRIPTION",
-        
-        stdName: "Standard",
-        stdPer: "/ 1st month, then $30/mo",
-        stdF1: "Limit: up to 5 wallets (workers)",
-        stdF2: "Base L2 network only",
-        stdF3: "Basic Claim Looter and Anti-Sybil",
-        stdBtn: "Activate for $95",
-        
-        proBadge: "RECOMMENDED",
-        proName: "PRO Farmer",
-        proPer: "/ 1st month, then $50/mo",
-        proF1: "Limit up to 15 wallets (workers)",
-        proF2: "All networks except Solana (Arbitrum, ZkSync, Scroll...)",
-        proF3: "Automatic background scheduler",
-        proF4: "Priority 24/7 support",
-        proBtn: "Activate for $150",
-        
-        premName: "Premium VIP",
-        premPer: "/ 1st month, then $90/mo",
-        premF1: "Limit up to 30 wallet slots",
-        premF2: "All current and future blockchains",
-        premF3: "Telegram Webhook push notifications",
-        premF4: "Personal manager and early access",
-        premBtn: "Activate for $280",
-
-        // Payment Modal
-        payTitle: "Payment",
-        payNetwork: "Network:",
-        payAmount: "Amount:",
-        payWallet: "Wallet",
-        payCopy: "📋 Copy",
-        payTxid: "TXID",
-        payConfirm: "Confirm",
-
-        // Menu and Dashboard
-        menuMain: "Menu", menuAcc: "👤 Account", menuLooter: "📦 Looter", menuFarm: "🌾 Farming", 
-        menuWallets: "👥 Wallets", menuNet: "🌐 Networks & Proxies", menuSet: "🔒 Profile Settings", menuExit: "🚪 Logout",
-        
-        accWelcome: "Welcome",
-        accWelcomeDesc: "Master-wallet protection is active. Farming fees are deducted from your personal balance. Top up your balance for uninterrupted worker operation.",
-        accTitle: "💳 Personal Account & Balance", btnTopUp: "➕ Top up balance",
-        accDesc: "Available for gas and automation fees. Overspend protection is enabled.",
-        txTitle: "📊 Transaction History", noTx: "You have no completed transactions yet",
-        txDep: "📥 Deposit", txSlot: "🛒 Slot Purchase", txGas: "⛽ Gas Fee",
-        subTitle: "✏️ Subscription Management", subPlan: "Plan", subActive: "Subscription active", btnChangePlan: "Change Plan",
-
-        lootTitle: "Loot Search & Auto-Claim Panel",
-        lootDesc: "Scan your wallets for unclaimed rewards and launch volume auto-farming.",
-        btnScan: "🔍 Run Auto-Claim (Looter)", logInitLoot: "[System] Anti-fraud core initialized. Awaiting scan...",
-        
-        farmTitle: "Anti-Sybil Swaps & Bridges (Volume Farm)",
-        farmDesc: "Launch combat core with randomized pauses and worker order.",
-        netSelect: "Target network for farming:", netPh: "Select network:", btnFarm: "▶ Start Anti-Sybil Core",
-        logWait: "Awaiting...", logStart: "Starting farm in network", logCost: "Deducted", logErrNet: "Network not selected.", logErrBal: "Insufficient funds.", logSuccess: "Farm session completed successfully! Report sent to Telegram.",
-
-        walTitle: "👥 Wallets", slotsLabel: "Slots", btnBuySlot: "➕ Buy +1 Slot ($10)",
-        walAddTitle: "➕ Add Worker", phAddr: "Wallet Address (0x...)", phPk: "Private Key", phProxy: "Proxy (ip:port:login:pass)",
-        proxyTipTitle: "Proxy Recommendation:", proxyTipDesc: "For safe farming, it is better to use <b>residential</b> or <b>mobile</b> proxies. Datacenter IPs have a high risk of bans.",
-        btnAddWal: "Add to Farm", btnTest: "🔍 Test", btnDel: "Delete", noWal: "No wallets added yet.",
-        balLabel: "Balance:", proxyLabel: "Proxy:", proxyNone: "Not set",
-
-        netTitle: "🌐 Network and Gas Check", netDesc: "Monitor blockchain connections, ping, and real-time gas costs.",
-        statusOnline: "Online", gasLabel: "Real-time Gas:", btnExp: "🔍 Explorer",
-
-        setWarnTitle: "Anti-Sybil Protection Active", setWarnDesc: "Set unique timing and delays for each individual day of the week (1–4 active days). This ensures maximum farm randomization.",
-        setTitle: "🔒 Scheduler & Anti-Sybil Settings", setDesc: "Schedules, individual day timings, and limits.", btnRand: "🎲 Max Random (1-4 days)",
-        setBgTitle: "Background Task Scheduler", setBgDesc: "Automatic scheduled launch",
-        setDays: "Bot activity days (click to toggle day):", setTimeTitle: "Individual start time and delay:",
-        timeAlert: "ℹ️ Start time is specified in your <b>local time</b> in 24-hour format.",
-        tTime: "Time:", tMin: "Min(s):", tMax: "Max(s):",
-        setGwei: "Maximum Gas Limit (Max Gwei, max 300):", setTg: "Telegram Chat ID for notifications:", tgPh: "@username or ID",
-        tgTip: "Go to bot", tgTip2: "and send", tgTip3: "before saving.",
-        notifTitle: "🔔 Telegram Notification Filtering:", notif1: "Settings saved", notif2: "Farm session start", notif3: "Successful completion", notif4: "Errors and skips",
-        btnSaveSet: "💾 Save Profile Settings",
-
-        setInterfaceTitle: "Interface & Tips",
-        setInterfaceDesc: "Manage the display of informational blocks and tips on the site",
-        setHideAllBanners: "Hide all informational tips and banners",
-        msgBannersHidden: "All tips hidden",
-        msgBannersShown: "Tips enabled",
-
-        calDays: { 'Пн': 'Mo', 'Вт': 'Tu', 'Ср': 'We', 'Чт': 'Th', 'Пт': 'Fr', 'Сб': 'Sa', 'Вс': 'Su' }
-    },
-    cn: {
-        langCode: "CN", login: "登录", logout: "登出", loading: "加载中...", days: "天",
-        privateSoftware: "私有软件",
-        
-        heroTitle: "用于自动化和空投交互的<br>通用工具。",
-        heroDesc: "通过防女巫保护，一键刷积分、扫描钱包分发并领取空投。",
-        farmBtn: "获取权限", settingsBtn: "了解更多",
-        coreStatus: "已保护 / 在线",
-        featuresHeading: "平台功能",
-        feat1Title: "空投扫描与收集",
-        feat1Desc: "自动扫描所有连接钱包中可领取的空投和retro-drop。",
-        feat2Title: "多链兑换与跨链",
-        feat2Desc: "在 LayerZero、Base、Arbitrum 和 ZkSync 网络中进行随机跨链交互以增加交易量。",
-        feat3Title: "女巫防御盾",
-        feat3Desc: "真实用户行为模拟和智能 Gas 分配，钱包之间无关联。",
-        
-        instructionHeading: "AIRDROP-X 如何工作（指南）",
-        inst1Title: "🌾 1. 自动挂机与防女巫核心",
-        inst1DescBold: "这是什么以及为什么有利可图：",
-        inst1DescText: "每天手动执行数百笔交易需要大量精力和时间。我们的内置核心自动挂机完全模拟真实用户的活动。",
-        inst1DescText2: "软件随机化延迟、钱包顺序和交易金额，保护您免受女巫封禁。",
-        ph1: "自动挂机过程 GIF 动画",
-        
-        inst2Title: "👥 2. 限制与添加钱包",
-        inst2DescBold: "套餐的便利性与安全性：",
-        inst2DescText: "Standard 套餐允许运行最多 5 个钱包（用于测试），PRO 最多可开启 15 个槽位，Premium 将限制扩大到 30 个钱包。",
-        inst2DescText2: "一键导入密钥和代理，从单一面板管理整个农场。",
-        ph2: "钱包导入截图",
-        
-        inst3Title: "📦 3. 自动领取空投 (Claim Looter)",
-        inst3DescBold: "何时以及如何发生：",
-        inst3DescText: "一旦项目宣布空投，扫描器就会找到分发的代币。",
-        inst3DescText2: "支持 Base、Arbitrum、ZkSync、Scroll、Solana 等网络。一键点击，奖励即归您所有。",
-        ph3: "领取奖励 GIF 动画",
-        
-        inst4Title: "🔔 4. Telegram 通知系统与调度程序",
-        inst4DescBold: "实时控制与报告：",
-        inst4DescText: "直接在 Telegram 机器人中接收有关每次挂机交互、Gas 消耗、代理状态和找到的空投的详细报告。",
-        ph4: "Telegram 机器人报告截图",
-
-        faqHeading: "常见问题",
-        faq1Q: "空投自动领取是如何工作的？",
-        faq1A: "该软件通过 API 和智能合约自动扫描所有连接的钱包以寻找可用的分发，并通过随机化将其汇集到主钱包中。",
-        faq2Q: "Standard 和 PRO 有什么区别？",
-        faq2A: "Standard 适合初学者，最多支持 5 个工作节点。PRO 解锁高级策略、最多 15 个槽位以及优先执行交易。",
-        faq3Q: "我需要为每个钱包配置代理吗？",
-        faq3A: "建议为每个工作节点绑定单独的代理（尤其是住宅或移动代理），以绝对安全地抵御防女巫系统。",
-        faq4Q: "如何获取软件访问权限？",
-        faq4A: "在网站上选择合适的套餐，在受支持的网络中使用加密货币付款，并使用收到的付款令牌进行注册。",
-
-        footerPrivacy: "隐私政策",
-        footerTerms: "使用条款",
-
-        // Pricing Modal
-        pTitleModal: "⚡ 选择 AIRDROP-X 套餐方案",
-        pDescModal: "私人访问权限：首月激活费，之后按月续费。",
-        subTop: "登录 + 订阅",
-        
-        stdName: "标准版 (Standard)",
-        stdPer: "/ 首月，之后 $30/月",
-        stdF1: "限制：最多 5 个钱包（工作节点）",
-        stdF2: "仅限 Base L2 网络",
-        stdF3: "基础 Claim Looter 和防女巫",
-        stdBtn: "以 $95 激活",
-        
-        proBadge: "推荐",
-        proName: "PRO 农场主",
-        proPer: "/ 首月，之后 $50/月",
-        proF1: "限制最多 15 个钱包（工作节点）",
-        proF2: "除 Solana 外的所有网络 (Arbitrum, ZkSync, Scroll...)",
-        proF3: "自动后台任务调度程序",
-        proF4: "7x24 小时优先客服支持",
-        proBtn: "以 $150 激活",
-        
-        premName: "高级 VIP (Premium)",
-        premPer: "/ 首月，之后 $90/月",
-        premF1: "最多 30 个钱包槽位限制",
-        premF2: "所有当前及未来的区块链",
-        premF3: "Telegram Webhook 推送通知",
-        premF4: "专属客户经理与抢先体验",
-        premBtn: "以 $280 激活",
-
-        // Payment Modal
-        payTitle: "付款",
-        payNetwork: "网络：",
-        payAmount: "金额：",
-        payWallet: "钱包",
-        payCopy: "📋 复制",
-        payTxid: "交易哈希 (TXID)",
-        payConfirm: "确认付款",
-
-        // Menu and Dashboard
-        menuMain: "菜单", menuAcc: "👤 账户与余额", menuLooter: "📦 空投收集", menuFarm: "🌾 自动交互", 
-        menuWallets: "👥 钱包与余额", menuNet: "🌐 网络与代理", menuSet: "🔒 个人资料设置", menuExit: "🚪 退出账号",
-        
-        accWelcome: "欢迎",
-        accWelcomeDesc: "主钱包保护系统已激活。交互Gas费用将从您的个人余额中扣除。请充值余额以确保工作节点不间断运行。",
-        accTitle: "💳 个人账户与余额", btnTopUp: "➕ 充值余额",
-        accDesc: "可用于支付Gas和自动化费用。超支保护已启用。",
-        txTitle: "📊 交易记录", noTx: "您目前没有任何交易记录",
-        txDep: "📥 充值", txSlot: "🛒 购买槽位", txGas: "⛽ 扣除Gas",
-        subTitle: "✏️ 订阅管理", subPlan: "套餐", subActive: "订阅有效", btnChangePlan: "更改套餐",
-
-        lootTitle: "空投搜索与自动领取面板",
-        lootDesc: "扫描您的钱包以查找未领取的奖励，并启动自动交互以增加交易量。",
-        btnScan: "🔍 运行自动领取 (Looter)", logInitLoot: "[System] 防女巫核心已初始化。等待扫描...",
-        
-        farmTitle: "Anti-Sybil 交换与跨链 (刷交易量)",
-        farmDesc: "启动带有随机暂停和随机工作顺序的战斗核心。",
-        netSelect: "选择目标网络：", netPh: "选择网络：", btnFarm: "▶ 启动防女巫核心",
-        logWait: "等待中...", logStart: "正在启动网络交互", logCost: "已扣除", logErrNet: "未选择网络。", logErrBal: "余额不足。", logSuccess: "交互会话成功完成！报告已发送至 Telegram。",
-
-        walTitle: "👥 钱包和工作节点余额", slotsLabel: "槽位", btnBuySlot: "➕ 购买 +1 槽位 ($10)",
-        walAddTitle: "➕ 添加工作节点", phAddr: "钱包地址 (0x...)", phPk: "私钥", phProxy: "代理 (ip:端口:账号:密码)",
-        proxyTipTitle: "代理建议：", proxyTipDesc: "为了安全起见，最好使用<b>住宅</b>或<b>移动</b>代理。数据中心 IP 被封禁的风险很高。",
-        btnAddWal: "添加到农场", btnTest: "🔍 测试", btnDel: "删除", noWal: "暂无添加的钱包。",
-        balLabel: "余额:", proxyLabel: "代理:", proxyNone: "未设置",
-
-        netTitle: "🌐 网络、代理和 Gas 检查", netDesc: "监控区块链连接, 延迟和实时 Gas 成本。",
-        statusOnline: "Online", gasLabel: "实时 Gas:", btnExp: "🔍 区块浏览器",
-
-        setWarnTitle: "防女巫保护已激活", setWarnDesc: "为一周中的每一天（1-4 个活跃日）设置独特的时间和延迟。这确保了交互的最大随机性。",
-        setTitle: "🔒 计划任务与防女巫设置", setDesc: "时间表、单日时间和限制。", btnRand: "🎲 最大随机 (1-4天)",
-        setBgTitle: "后台任务计划程序", setBgDesc: "按计划自动启动",
-        setDays: "机器人活跃日 (点击切换):", setTimeTitle: "独立的启动时间和延迟：",
-        timeAlert: "ℹ️ 启动时间以您的<b>本地时间</b> (24小时制) 指定。",
-        tTime: "时间:", tMin: "最小(秒):", tMax: "最大(秒):",
-        setGwei: "最大 Gas 限制 (Max Gwei, 最高 300):", setTg: "接收通知的 Telegram Chat ID:", tgPh: "@username 或 ID",
-        tgTip: "前往机器人", tgTip2: "并发送", tgTip3: "然后保存。",
-        notifTitle: "🔔 Telegram 通知过滤：", notif1: "保存设置", notif2: "交互会话开始", notif3: "成功完成", notif4: "错误和跳过",
-        btnSaveSet: "💾 保存个人资料设置",
-
-        setInterfaceTitle: "界面与提示",
-        setInterfaceDesc: "管理网站上信息块和提示的显示",
-        setHideAllBanners: "隐藏所有信息提示和横幅",
-        msgBannersHidden: "所有提示已隐藏",
-        msgBannersShown: "提示已启用",
-
-        calDays: { 'Пн': '一', 'Вт': '二', 'Ср': '三', 'Чт': '四', 'Пт': '五', 'Сб': '六', 'Вс': '日' }
-    }
-};
 
 // --- Инициализация при загрузке ---
 document.getElementById('main-logo-btn').addEventListener('click', function(e) {
@@ -584,23 +159,13 @@ window.addEventListener('DOMContentLoaded', () => {
 
 function formatCountdown(deadlineStr) {
     const total = Date.parse(new Date(deadlineStr)) - Date.now();
-    const currentLang = localStorage.getItem('ax_lang') || 'ru';
-    
-    const texts = {
-        ru: { ended: "⚡ Кампания завершена / Снепшот прошел", label: "До конца:", d: "д", h: "ч", m: "м", s: "с" },
-        en: { ended: "⚡ Campaign ended / Snapshot taken", label: "Remaining:", d: "d", h: "h", m: "m", s: "s" },
-        cn: { ended: "⚡ 活动已结束 / 快照已完成", label: "剩余时间:", d: "天", h: "小时", m: "分", s: "秒" }
-    };
-    
-    const t = texts[currentLang] || texts['ru'];
-    
-    if (total <= 0) return t.ended;
+    if (total <= 0) return t('countdown.ended');
     const days = Math.floor(total / (1000 * 60 * 60 * 24));
     const hours = Math.floor((total / (1000 * 60 * 60)) % 24);
     const minutes = Math.floor((total / 1000 / 60) % 60);
     const seconds = Math.floor((total / 1000) % 60);
     
-    return `⏳ ${t.label} ${days}${t.d} ${hours}${t.h} ${minutes}${t.m} ${seconds}${t.s}`;
+    return `⏳ ${t('countdown.label')} ${days}${t('countdown.d')} ${hours}${t('countdown.h')} ${minutes}${t('countdown.m')} ${seconds}${t('countdown.s')}`;
 }
 
 // --- Вспомогательные функции ---
@@ -669,7 +234,7 @@ function showNotification(text, type = 'success') {
 function renderLanguageAwareText() {
     const lang = setLanguage(currentLang);
     const loginBtn = document.getElementById('login-btn');
-    if (loginBtn) loginBtn.innerText = t('login', 'Login');
+    if (loginBtn) loginBtn.innerText = t('login');
 
     const badge = document.getElementById('current-lang-badge');
     const text = document.getElementById('current-lang-text');
@@ -678,7 +243,7 @@ function renderLanguageAwareText() {
 
     const counterEl = document.getElementById('slots-counter-text');
     if (counterEl && window.cachedStatsData) {
-        counterEl.innerHTML = `${t('privateSoftware', 'Private Software')}. <b style="color:#fff; margin-left:8px;">${window.cachedStatsData.current_slots} / ${window.cachedStatsData.max_slots} SLOTS</b>`;
+        counterEl.innerHTML = `${t('privateSoftware')}. <b style="color:#fff; margin-left:8px;">${window.cachedStatsData.current_slots} / ${window.cachedStatsData.max_slots} ${t('slotsShort')}</b>`;
     }
 }
 
@@ -696,162 +261,61 @@ function checkInputLimit(input, maxLimit) {
 }
 
 // 🌍 Обновление всего статического текста
+const STATIC_TEXT_BINDINGS = [
+    ['login-btn', 'login'], ['hero-title', 'heroTitle', true], ['hero-desc', 'heroDesc'], ['farm-btn', 'farmBtn'], ['settings-btn', 'settingsBtn'],
+    ['core-status-label', 'coreStatusLabel'], ['core-status-val', 'coreStatus'], ['features-heading', 'featuresHeading'], ['instr-title', 'instructionHeading'], ['faq-heading', 'faqHeading'],
+    ['c1-t', 'c1t'], ['c1-d', 'c1d'], ['c2-t', 'c2t'], ['c2-d', 'c2d'], ['c3-t', 'c3t'], ['c3-d', 'c3d'],
+    ['sc1-t', 'sc1t'], ['sc1-b1', 'sc1b1'], ['sc1-d1', 'sc1d1'], ['sc1-d2', 'sc1d2'], ['sc1-l1', 'sc1l1'], ['sc1-l2', 'sc1l2'], ['sc1-l3', 'sc1l3'],
+    ['sc2-t', 'sc2t'], ['sc2-b1', 'sc2b1'], ['sc2-d1', 'sc2d1'], ['sc2-d2', 'sc2d2'], ['sc2-l1', 'sc2l1'], ['sc2-l2', 'sc2l2'], ['sc2-l3', 'sc2l3'],
+    ['sc3-t', 'sc3t'], ['sc3-b1', 'sc3b1'], ['sc3-d1', 'sc3d1'], ['sc3-d2', 'sc3d2'], ['sc3-l1', 'sc3l1'], ['sc3-l2', 'sc3l2'], ['sc3-l3', 'sc3l3'],
+    ['sc4-t', 'sc4t'], ['sc4-b1', 'sc4b1'], ['sc4-d1', 'sc4d1'], ['sc4-l1', 'sc4l1'], ['sc4-l2', 'sc4l2'], ['sc4-l3', 'sc4l3'],
+    ['q1', 'q1'], ['a1', 'a1'], ['q2', 'q2'], ['a2', 'a2'], ['q3', 'q3'], ['a3', 'a3'], ['q4', 'q4'], ['a4', 'a4'],
+    ['mn-looter', 'mnLooter'], ['mn-farm', 'mnFarm'], ['mn-proxy', 'mnProxy'], ['mn-stats', 'mnStats'], ['mn-more', 'mnMore'],
+    ['p-title-modal', 'pTitleModal'], ['p-desc-modal', 'pDescModal'], ['p-std-top', 'subTop'], ['p-std-name', 'stdName'], ['p-std-per', 'stdPer'], ['p-std-f1', 'stdF1'], ['p-std-f2', 'stdF2'], ['p-std-f3', 'stdF3'], ['p-std-btn', 'stdBtn'],
+    ['p-pro-badge', 'proBadge'], ['p-pro-top', 'subTop'], ['p-pro-name', 'proName'], ['p-pro-per', 'proPer'], ['p-pro-f1', 'proF1'], ['p-pro-f2', 'proF2'], ['p-pro-f3', 'proF3'], ['p-pro-f4', 'proF4'], ['p-pro-btn', 'proBtn'],
+    ['p-prem-top', 'subTop'], ['p-prem-name', 'premName'], ['p-prem-per', 'premPer'], ['p-prem-f1', 'premF1'], ['p-prem-f2', 'premF2'], ['p-prem-f3', 'premF3'], ['p-prem-f4', 'premF4'], ['p-prem-btn', 'premBtn'],
+    ['walletModalTitle', 'walletModalTitle'], ['wm-dep-title', 'wmDepTitle'], ['wm-master-lbl', 'wmMasterLbl'], ['wm-net-lbl', 'wmNetLbl'], ['wm-amt-lbl', 'wmAmtLbl'], ['wm-dep-btn', 'wmDepBtn'], ['wm-edit-title', 'wmEditTitle'], ['wm-save-btn', 'wmSaveBtn'], ['wm-del-btn', 'wmDelBtn'],
+    ['footer-rights', 'footerRights'], ['footer-privacy', 'footerPrivacy'], ['footer-terms', 'footerTerms'], ['page-title', 'pageTitle']
+];
+
 function updateStaticText(lang) {
-    const normalizedLang = setLanguage(lang);
-    const locale = translations[normalizedLang] || translations.ru || {};
-    if (!locale) return;
-
-    const setText = (id, value, useHtml = false) => {
-        const el = document.getElementById(id);
-        if (!el) return;
-        if (useHtml) {
-            el.innerHTML = value;
-        } else {
-            el.innerText = value;
-        }
-    };
-
-    setText('login-btn', locale.login || 'Login');
-
-    const badge = document.getElementById('current-lang-badge');
-    const text = document.getElementById('current-lang-text');
-    if (badge) badge.innerText = locale.langCode || normalizedLang.toUpperCase();
-    if (text) text.innerText = locale.langCode || normalizedLang.toUpperCase();
-
+    setLanguage(lang);
+    STATIC_TEXT_BINDINGS.forEach(([id, key, useHtml]) => {
+        const element = document.getElementById(id);
+        if (element) element[useHtml ? 'innerHTML' : 'innerText'] = t(key);
+    });
+    ['current-lang-badge', 'current-lang-text'].forEach(id => {
+        const element = document.getElementById(id);
+        if (element) element.innerText = t('langCode');
+    });
     const counterEl = document.getElementById('slots-counter-text');
     if (counterEl && window.cachedStatsData) {
-        counterEl.innerHTML = `${locale.privateSoftware || 'Private Software'}. <b style="color:#fff; margin-left:8px;">${window.cachedStatsData.current_slots} / ${window.cachedStatsData.max_slots} SLOTS</b>`;
-    }
-
-    const mainContent = document.getElementById('main-content');
-    if (mainContent) {
-        setText('hero-title', locale.heroTitle || 'Universal tool', true);
-        setText('hero-desc', locale.heroDesc || '');
-
-        const farmBtn = document.getElementById('farm-btn');
-        const settingsBtn = document.getElementById('settings-btn');
-        if (farmBtn) farmBtn.innerText = locale.farmBtn || 'Get Access';
-        if (settingsBtn) settingsBtn.innerText = locale.settingsBtn || 'Learn More';
-
-        setText('core-status-label', locale.coreStatusLabel || '🛡️ Core status:');
-        setText('core-status-val', locale.coreStatus || 'Protected / Online');
-        setText('features-heading', locale.featuresHeading || 'Platform Features');
-        setText('instr-title', locale.instructionHeading || 'How AIRDROP-X Works');
-        setText('faq-heading', locale.faqHeading || 'FAQ');
-
-        setText('c1-t', locale.c1t || 'Drop Scanner & Looter');
-        setText('c1-d', locale.c1d || 'Automatic search for claimable airdrops and retro-drops across all connected wallets.');
-        setText('c2-t', locale.c2t || 'Multi-Chain Swaps & Bridges');
-        setText('c2-d', locale.c2d || 'Randomized cross-chain swaps and transactions in LayerZero, Base, Arbitrum, and ZkSync networks to build volume.');
-        setText('c3-t', locale.c3t || 'Sybil Shield');
-        setText('c3-d', locale.c3d || 'Real user pattern simulation and intelligent gas distribution without wallet linkages.');
-
-        setText('sc1-t', locale.sc1t || '🌾 1. Auto-Farm & Anti-Sybil Core');
-        setText('sc1-b1', locale.sc1b1 || 'What it is and why it is profitable:');
-        setText('sc1-d1', locale.sc1d1 || 'Executing hundreds of transactions manually every day takes a lot of time and effort.');
-        setText('sc1-d2', locale.sc1d2 || 'The software randomizes delays, wallet order, and transaction amounts.');
-        setText('sc1-l1', locale.sc1l1 || 'Smart Gwei Control');
-        setText('sc1-l2', locale.sc1l2 || 'Dynamic transaction routing');
-        setText('sc1-l3', locale.sc1l3 || 'Human-like timings and pause simulation');
-
-        setText('sc2-t', locale.sc2t || '👥 2. Limits & Adding Wallets');
-        setText('sc2-b1', locale.sc2b1 || 'Convenience and tariff security:');
-        setText('sc2-d1', locale.sc2d1 || 'The Standard plan allows running up to 5 wallets (for testing).');
-        setText('sc2-d2', locale.sc2d2 || 'Import keys and proxies in one click and manage your entire farm.');
-        setText('sc2-l1', locale.sc2l1 || 'Isolated sessions for each slot');
-        setText('sc2-l2', locale.sc2l2 || 'Support for IPv4 / IPv6 and mobile proxies');
-        setText('sc2-l3', locale.sc2l3 || 'Local encryption of private keys');
-
-        setText('sc3-t', locale.sc3t || '📦 3. Claim Looter (Auto-Collect)');
-        setText('sc3-b1', locale.sc3b1 || 'When and how it happens:');
-        setText('sc3-d1', locale.sc3d1 || 'As soon as a project announces a retro-drop, the scanner finds distributed tokens.');
-        setText('sc3-d2', locale.sc3d2 || 'Supported networks include Base, Arbitrum, ZkSync, Scroll, Solana, and more.');
-        setText('sc3-l1', locale.sc3l1 || 'Instant search across contracts');
-        setText('sc3-l2', locale.sc3l2 || 'Bypass RPC lag during drops');
-        setText('sc3-l3', locale.sc3l3 || 'Auto-aggregation to the master account');
-
-        setText('sc4-t', locale.sc4t || '🔔 4. Telegram Notifications & Scheduler');
-        setText('sc4-b1', locale.sc4b1 || 'Real-time control and reports:');
-        setText('sc4-d1', locale.sc4d1 || 'Get detailed reports on every farming session, gas consumption, proxy status, and found loot directly in your Telegram bot.');
-        setText('sc4-l1', locale.sc4l1 || 'Detailed logs directly in Telegram');
-        setText('sc4-l2', locale.sc4l2 || 'Flexible scheduling for each day of the week');
-        setText('sc4-l3', locale.sc4l3 || 'Automatic stop on low gas or errors');
-
-        setText('q1', locale.q1 || 'How does auto-claim for airdrops work?');
-        setText('a1', locale.a1 || 'The software automatically scans all connected wallets via API and smart contracts for available distributions.');
-        setText('q2', locale.q2 || 'What is the difference between Standard and PRO?');
-        setText('a2', locale.a2 || 'Standard is suitable for beginners and supports up to 5 workers. PRO unlocks advanced strategies and more slots.');
-        setText('q3', locale.q3 || 'Do I need to configure a proxy for each wallet?');
-        setText('a3', locale.a3 || 'It is recommended to bind an individual proxy to each worker for better security.');
-        setText('q4', locale.q4 || 'How do I get access to the software?');
-        setText('a4', locale.a4 || 'Select a plan, pay, and register using the received payment token.');
-
-        setText('mn-looter', locale.mnLooter || 'Looter');
-        setText('mn-farm', locale.mnFarm || 'Farming');
-        setText('mn-proxy', locale.mnProxy || 'Proxy');
-        setText('mn-stats', locale.mnStats || 'Statistics');
-        setText('mn-more', locale.mnMore || 'More');
-    }
-
-    const pricingTitle = document.getElementById('p-title-modal');
-    if (pricingTitle) pricingTitle.innerText = locale.pTitleModal || 'Select plan';
-    const pricingDesc = document.getElementById('p-desc-modal');
-    if (pricingDesc) pricingDesc.innerText = locale.pDescModal || '';
-    const pricingTop = document.getElementById('p-std-top');
-    if (pricingTop) pricingTop.innerText = locale.subTop || 'LOGIN + SUBSCRIPTION';
-    const stdName = document.getElementById('p-std-name');
-    if (stdName) stdName.innerText = locale.stdName || 'Standard';
-    const stdPer = document.getElementById('p-std-per');
-    if (stdPer) stdPer.innerText = locale.stdPer || '/ 1st month, then $30/mo';
-    const stdF1 = document.getElementById('p-std-f1');
-    if (stdF1) stdF1.innerText = locale.stdF1 || 'Limit: up to 5 wallets';
-    const stdF2 = document.getElementById('p-std-f2');
-    if (stdF2) stdF2.innerText = locale.stdF2 || 'Base L2 network only';
-    const stdF3 = document.getElementById('p-std-f3');
-    if (stdF3) stdF3.innerText = locale.stdF3 || 'Basic Claim Looter';
-    const stdBtn = document.getElementById('p-std-btn');
-    if (stdBtn) stdBtn.innerText = locale.stdBtn || 'Activate for $95';
-    const proBadge = document.getElementById('p-pro-badge');
-    if (proBadge) proBadge.innerText = locale.proBadge || 'Recommended';
-    const proName = document.getElementById('p-pro-name');
-    if (proName) proName.innerText = locale.proName || 'PRO Farmer';
-    const proPer = document.getElementById('p-pro-per');
-    if (proPer) proPer.innerText = locale.proPer || '/ 1st month, then $50/mo';
-    const proF1 = document.getElementById('p-pro-f1');
-    if (proF1) proF1.innerText = locale.proF1 || 'Limit up to 15 wallets';
-    const proF2 = document.getElementById('p-pro-f2');
-    if (proF2) proF2.innerText = locale.proF2 || 'All networks except Solana';
-    const proF3 = document.getElementById('p-pro-f3');
-    if (proF3) proF3.innerText = locale.proF3 || 'Automatic background scheduler';
-    const proF4 = document.getElementById('p-pro-f4');
-    if (proF4) proF4.innerText = locale.proF4 || 'Priority 24/7 support';
-    const proBtn = document.getElementById('p-pro-btn');
-    if (proBtn) proBtn.innerText = locale.proBtn || 'Activate for $150';
-    const premName = document.getElementById('p-prem-name');
-    if (premName) premName.innerText = locale.premName || 'Premium VIP';
-    const premPer = document.getElementById('p-prem-per');
-    if (premPer) premPer.innerText = locale.premPer || '/ 1st month, then $90/mo';
-    const premF1 = document.getElementById('p-prem-f1');
-    if (premF1) premF1.innerText = locale.premF1 || 'Limit up to 30 wallet slots';
-    const premF2 = document.getElementById('p-prem-f2');
-    if (premF2) premF2.innerText = locale.premF2 || 'All current and future blockchains';
-    const premF3 = document.getElementById('p-prem-f3');
-    if (premF3) premF3.innerText = locale.premF3 || 'Telegram Webhook notifications';
-    const premF4 = document.getElementById('p-prem-f4');
-    if (premF4) premF4.innerText = locale.premF4 || 'Personal manager and early access';
-    const premBtn = document.getElementById('p-prem-btn');
-    if (premBtn) premBtn.innerText = locale.premBtn || 'Activate for $280';
-
-    const footerPrivacy = document.getElementById('footer-privacy');
-    if (footerPrivacy) footerPrivacy.innerText = locale.footerPrivacy || 'Privacy Policy';
-    const footerTerms = document.getElementById('footer-terms');
-    if (footerTerms) footerTerms.innerText = locale.footerTerms || 'Terms of Use';
-
-    const pageTitle = document.getElementById('page-title');
-    if (pageTitle) {
-        pageTitle.innerText = locale.heroTitle ? `AIRDROP-X — ${locale.faqHeading || 'AIRDROP-X'}` : 'AIRDROP-X — Cyberpunk SaaS Panel';
+        counterEl.innerHTML = `${t('privateSoftware')}. <b style="color:#fff; margin-left:8px;">${window.cachedStatsData.current_slots} / ${window.cachedStatsData.max_slots} ${t('slotsShort')}</b>`;
     }
 }
+
+window.translateBackendMessage = function(msg) {
+    if (!msg) return "";
+
+    const activeLang = getActiveLang();
+    if (activeLang === 'en') return msg; // Для английского оставляем как есть
+
+    const loc = window.AIRDROP_LOCALES[activeLang]?.backend;
+    if (!loc) return msg;
+
+    // Точные совпадения (из словаря)
+    if (loc[msg]) return loc[msg];
+
+    // Динамические сообщения с переменными (прокси, лимиты, слоты)
+    if (msg.includes("Invalid code! Attempts left:")) return msg.replace("Invalid code! Attempts left:", activeLang === 'ru' ? "Неверный код! Осталось попыток:" : "验证码无效！剩余次数：");
+    if (msg.includes("Plan limit reached:")) return activeLang === 'ru' ? "Лимит слотов для вашего тарифа исчерпан!" : "您的套餐限制已满！";
+    if (msg.includes("Slot purchased! Total slots:")) return msg.replace("Slot purchased! Total slots:", activeLang === 'ru' ? "Слот куплен! Всего слотов:" : "槽位已购买！总槽位：");
+    if (msg.includes("Proxy is working! Ping:")) return msg.replace("Proxy is working! Ping:", activeLang === 'ru' ? "Прокси рабочий! Пинг:" : "代理正常！延迟：");
+    if (msg.includes("Connection error:")) return msg.replace("Connection error:", activeLang === 'ru' ? "Ошибка соединения:" : "连接错误：");
+    if (msg.includes("Delay limit exceeded for day")) return activeLang === 'ru' ? "Превышен лимит задержки (максимум 7200 секунд)" : "延迟限制超标（最大7200秒）";
+
+    return msg; // Если перевода нет - отдаем оригинал
+};
 
 function returnToMainSite() {
     isLoggedIn = false;
@@ -931,7 +395,6 @@ function togglePasswordVisibility(fieldId, iconEl) {
 function openModal(type) {
     const modal = document.getElementById('authModal');
     const container = document.getElementById('modalContainer');
-    const locale = translations[getActiveLang()] || {};
 
     if (type === 'register' && (!paymentUnlocked || !paymentAccessToken)) {
         closeAuthModal();
@@ -945,21 +408,21 @@ function openModal(type) {
         container.innerHTML = `
             <form onsubmit="event.preventDefault(); validateLogin();">
                 <div class="modal-logo" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-                    <span style="font-weight:bold; font-size:16px;">${locale.login || 'Login'}</span>
+                    <span style="font-weight:bold; font-size:16px;">${t('login')}</span>
                     <span onclick="closeAuthModal()" style="cursor: pointer; color: #a3a3a3; font-size: 18px;">✕</span>
                 </div>
                 <div class="input-group" style="margin-bottom:12px;">
-                    <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">${t('auth.usernameLabel', 'Email / Nickname')}</label>
-                    <input type="text" class="auth-input" placeholder="${t('auth.usernamePlaceholder', 'Enter login')}" id="loginUsername" oninput="clearFormError('loginErrorContainer', 'loginUsername'); clearFieldValidationState('loginUsername')">
+                    <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">${t('auth.usernameLabel')}</label>
+                    <input type="text" class="auth-input" placeholder="${t('auth.usernamePlaceholder')}" id="loginUsername" oninput="clearFormError('loginErrorContainer', 'loginUsername'); clearFieldValidationState('loginUsername')">
                 </div>
                 <div class="input-group" style="margin-bottom:16px;">
-                    <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">${t('auth.password', 'Password')}</label>
+                    <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">${t('auth.password')}</label>
                     <div class="password-wrapper" style="position:relative;">
-                        <input type="password" class="auth-input" placeholder="${t('auth.passwordPlaceholder', 'Enter password')}" id="loginPass" style="padding-right: 35px;" oninput="clearFormError('loginErrorContainer', 'loginPass'); clearFieldValidationState('loginPass')">
+                        <input type="password" class="auth-input" placeholder="${t('auth.passwordPlaceholder')}" id="loginPass" style="padding-right: 35px;" oninput="clearFormError('loginErrorContainer', 'loginPass'); clearFieldValidationState('loginPass')">
                         <span class="password-toggle-icon" onclick="togglePasswordVisibility('loginPass', this)" style="position:absolute; right:12px; top:50%; transform:translateY(-50%); cursor:pointer; font-size:14px;">👁️</span>
                     </div>
                 </div>
-                <button type="submit" class="btn-modal-primary" style="width:100%; padding:12px;">${locale.login || 'Login'}</button>
+                <button type="submit" class="btn-modal-primary" style="width:100%; padding:12px;">${t('login')}</button>
                 <div id="loginErrorContainer" style="margin-top:10px;"></div>
             </form>
         `;
@@ -971,12 +434,12 @@ function openModal(type) {
 
         container.innerHTML = `
             <div class="modal-logo" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                <span style="font-weight:bold; font-size:16px;">${locale.payTitle || 'Payment'}: ${planDisplayLabel}</span>
+                <span style="font-weight:bold; font-size:16px;">${t('payTitle')}: ${planDisplayLabel}</span>
                 <span onclick="closeAuthModal()" style="cursor: pointer; color: #a3a3a3; font-size: 18px;">✕</span>
             </div>
             
             <div style="margin-bottom: 12px;">
-                <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">${locale.payNetwork || 'Network:'}</label>
+                <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">${t('payNetwork')}</label>
                 <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;">
                     <button type="button" class="btn-dark-sm auth-input" id="net-base" onclick="setPayNetwork('Base', '${MASTER_WALLET}', '${displayAmount}')" style="background:#1f1f1f; border-color:#fff; cursor:pointer;">Base L2</button>
                     <button type="button" class="btn-dark-sm auth-input" id="net-arb" onclick="setPayNetwork('Arbitrum', '${MASTER_WALLET}', '${displayAmount}')" style="cursor:pointer;">Arbitrum</button>
@@ -985,22 +448,22 @@ function openModal(type) {
             </div>
 
             <div style="background:#0a0a0a; border:1px solid var(--border-color); border-radius:12px; padding:12px; margin-bottom:12px; text-align:center;">
-                <div style="font-size:11px; color:#a3a3a3; margin-bottom:2px;">${locale.payAmount || 'Amount:'}</div>
+                <div style="font-size:11px; color:#a3a3a3; margin-bottom:2px;">${t('payAmount')}</div>
                 <div style="font-size:20px; color:#fff; font-weight:700; margin-bottom:8px;">$${displayAmount}</div>
                 
-                <div style="font-size:11px; color:#a3a3a3; margin-bottom:2px;">${locale.payWallet || 'Wallet'} (<span id="activePayNet">Base L2</span>):</div>
+                <div style="font-size:11px; color:#a3a3a3; margin-bottom:2px;">${t('payWallet')} (<span id="activePayNet">Base L2</span>):</div>
                 <div style="background:#181818; padding:6px 8px; border-radius:8px; font-family:monospace; font-size:11px; color:#fff; word-break:break-all; margin-bottom:6px;">${MASTER_WALLET}</div>
                 
-                <button type="button" id="copyWalletBtn" class="auth-input" style="margin: 0 auto; font-size: 11px; padding: 6px 12px; width:auto; cursor:pointer;" onclick="copyWalletAddress('${MASTER_WALLET}', this)">${locale.payCopy || 'Copy'}</button>
+                <button type="button" id="copyWalletBtn" class="auth-input" style="margin: 0 auto; font-size: 11px; padding: 6px 12px; width:auto; cursor:pointer;" onclick="copyWalletAddress('${MASTER_WALLET}', this)">${t('payCopy')}</button>
                 <div id="qrcodeContainer" style="display:flex; justify-content:center; align-items:center; margin:10px auto 0 auto; background:#fff; padding:8px; border-radius:8px; width:110px; height:110px; box-sizing:border-box; overflow:hidden;"></div>
             </div>
 
             <div class="input-group" style="margin-bottom:12px;">
-                <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">${locale.payTxid || 'TXID'}</label>
+                <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">${t('payTxid')}</label>
                 <input type="text" class="auth-input" placeholder="0x..." id="txidInput">
             </div>
 
-            <button type="button" id="paymentActionBtn" class="btn-modal-primary" onclick="startPlanPayment()" style="width:100%; padding:10px;">${locale.payConfirm || 'Confirm'} ($${displayAmount})</button>
+            <button type="button" id="paymentActionBtn" class="btn-modal-primary" onclick="startPlanPayment()" style="width:100%; padding:10px;">${t('payConfirm')} ($${displayAmount})</button>
             <div id="paymentStatusContainer"></div>
         `;
         setTimeout(() => renderPaymentQR(MASTER_WALLET, displayAmount), 100);
@@ -1008,44 +471,44 @@ function openModal(type) {
         const chosenPlan = localStorage.getItem('selected_plan') || 'Standard';
         const chosenPrice = Number(localStorage.getItem('selected_price') || PLAN_PRICES[chosenPlan] || 95);
         const planDisplayLabel = chosenPlan === 'Standard' ? t.stdName : chosenPlan === 'Pro' ? t.proName : t.premName;
-        const btnText = codeCooldownSeconds > 0 ? `${codeCooldownSeconds}s` : t('auth.sendCode', 'Send code');
+        const btnText = codeCooldownSeconds > 0 ? `${codeCooldownSeconds}s` : t('auth.sendCode');
         const btnDisabled = codeCooldownSeconds > 0 ? 'disabled' : '';
         const emailState = codeCooldownSeconds > 0 ? `readonly style="opacity: 0.7;" value="${confirmedRegistrationEmail}"` : '';
 
         container.innerHTML = `
             <form onsubmit="event.preventDefault(); validateRegister();">
                 <div class="modal-logo" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                    <span style="font-weight:bold; font-size:16px;">${locale.auth?.register || 'Register'}: ${planDisplayLabel} ($${chosenPrice})</span>
+                    <span style="font-weight:bold; font-size:16px;">${t('auth.register')}: ${planDisplayLabel} ($${chosenPrice})</span>
                     <span onclick="closeAuthModal()" style="cursor: pointer; color: #a3a3a3; font-size: 18px;">✕</span>
                 </div>
                 
                 <div class="input-group" style="margin-bottom:10px;">
-                    <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">${t('auth.nickname', 'Nickname')}</label>
-                    <input type="text" class="auth-input" placeholder="${t('auth.usernamePlaceholder', 'Enter login')}" id="regUsername" oninput="clearFormError('errorContainer', 'regUsername'); clearFieldValidationState('regUsername')">
+                    <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">${t('auth.nickname')}</label>
+                    <input type="text" class="auth-input" placeholder="${t('auth.usernamePlaceholder')}" id="regUsername" oninput="clearFormError('errorContainer', 'regUsername'); clearFieldValidationState('regUsername')">
                 </div>
                 
                 <div class="input-group" style="margin-bottom:10px;">
-                    <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">${t('auth.email', 'Email')}</label>
-                    <input type="email" class="auth-input" placeholder="${t('auth.emailPlaceholder', 'Email')}" id="regEmail" ${emailState} oninput="clearFormError('errorContainer', 'regEmail'); clearFieldValidationState('regEmail')">
+                    <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">${t('auth.email')}</label>
+                    <input type="email" class="auth-input" placeholder="${t('auth.emailPlaceholder')}" id="regEmail" ${emailState} oninput="clearFormError('errorContainer', 'regEmail'); clearFieldValidationState('regEmail')">
                 </div>
                 
                 <div class="input-group" style="margin-bottom:10px;">
-                    <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">${t('auth.password', 'Password')}</label>
+                    <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">${t('auth.password')}</label>
                     <div class="password-wrapper" style="position:relative;">
-                        <input type="password" class="auth-input" placeholder="${t('auth.passwordPlaceholder', 'Enter password')}" id="regPass" style="padding-right: 35px;" oninput="clearFormError('errorContainer', 'regPass'); clearFieldValidationState('regPass')">
+                        <input type="password" class="auth-input" placeholder="${t('auth.passwordPlaceholder')}" id="regPass" style="padding-right: 35px;" oninput="clearFormError('errorContainer', 'regPass'); clearFieldValidationState('regPass')">
                         <span class="password-toggle-icon" onclick="togglePasswordVisibility('regPass', this)" style="position:absolute; right:12px; top:50%; transform:translateY(-50%); cursor:pointer; font-size:14px;">👁️</span>
                     </div>
                 </div>
                 
                 <div class="input-group" style="margin-bottom:14px;">
-                    <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">${t('auth.code', 'Code')}</label>
+                    <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">${t('auth.code')}</label>
                     <div style="display: flex; gap: 8px;">
-                        <input type="text" class="auth-input" placeholder="${t('auth.codePlaceholder', 'Enter code')}" id="regCode" style="flex: 1; margin: 0;" oninput="clearFormError('errorContainer', 'regCode'); clearFieldValidationState('regCode')">
+                        <input type="text" class="auth-input" placeholder="${t('auth.codePlaceholder')}" id="regCode" style="flex: 1; margin: 0;" oninput="clearFormError('errorContainer', 'regCode'); clearFieldValidationState('regCode')">
                         <button type="button" id="sendCodeBtn" onclick="sendVerificationEmailCode()" ${btnDisabled} class="auth-input" style="width: auto; background:#1f1f1f; color:#fff; cursor:pointer; font-weight:600;">${btnText}</button>
                     </div>
                 </div>
                 
-                <button type="submit" class="btn-modal-primary" style="width:100%; padding:10px;">${locale.auth?.register || 'Register'}</button>
+                <button type="submit" class="btn-modal-primary" style="width:100%; padding:10px;">${t('auth.register')}</button>
                 <div id="errorContainer" style="margin-top:10px;"></div>
             </form>
         `;
@@ -1061,14 +524,14 @@ async function sendVerificationEmailCode() {
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!email || !emailRegex.test(email)) {
-        setFormError('errorContainer', t('errors.invalidEmail', 'Please check the email address'), 'error', 'regEmail');
+        setFormError('errorContainer', t('errors.invalidEmail'), 'error', 'regEmail');
         return;
     }
 
     emailInput.readOnly = true;
     emailInput.style.opacity = '0.7';
     confirmedRegistrationEmail = email;
-    setButtonLoading(btn, true, t('auth.sendCode', 'Send code'));
+    setButtonLoading(btn, true, t('auth.sendCode'));
 
     try {
         const response = await fetch('/api/send-code', {
@@ -1079,11 +542,11 @@ async function sendVerificationEmailCode() {
         if (!response.ok) {
             throw new Error('request failed');
         }
-        setFormError('errorContainer', t('auth.codeSent', 'Code sent'), 'success');
-        showNotification(t('auth.codeSent', 'Code sent'));
+        setFormError('errorContainer', t('auth.codeSent'), 'success');
+        showNotification(t('auth.codeSent'));
     } catch (e) {
-        setFormError('errorContainer', t('errors.networkError', 'Server connection error'));
-        showNotification(t('errors.networkError', 'Server connection error'), 'error');
+        setFormError('errorContainer', t('errors.networkError'));
+        showNotification(t('errors.networkError'), 'error');
     }
 
     codeCooldownSeconds = 60;
@@ -1095,7 +558,7 @@ async function sendVerificationEmailCode() {
         if (codeCooldownSeconds <= 0) {
             clearInterval(codeCooldownTimer);
             if (currentBtn) {
-                currentBtn.innerText = t('auth.sendCode', 'Send code');
+                currentBtn.innerText = t('auth.sendCode');
                 currentBtn.disabled = false;
                 currentBtn.classList.remove('btn-loading');
             }
@@ -1151,7 +614,7 @@ async function startPlanPayment() {
     const txid = document.getElementById('txidInput').value.trim();
 
     if (!txid) {
-        status.innerHTML = `<div style="color:#ef4444; font-size:12px; margin-top:8px;">${t('errors.txidRequired', 'Enter TXID')}</div>`;
+        status.innerHTML = `<div style="color:#ef4444; font-size:12px; margin-top:8px;">${t('errors.txidRequired')}</div>`;
         return;
     }
 
@@ -1171,7 +634,7 @@ async function startPlanPayment() {
         const confirmData = await confirmRes.json();
 
         if (!confirmRes.ok) {
-            status.innerHTML = `<div style="color:#ef4444; font-size:12px; margin-top:8px;">${confirmData.detail || t('errors.paymentFailed', 'Payment confirmation failed')}</div>`;
+            status.innerHTML = `<div style="color:#ef4444; font-size:12px; margin-top:8px;">${confirmData.detail || t('errors.paymentFailed')}</div>`;
             return;
         }
 
@@ -1183,7 +646,7 @@ async function startPlanPayment() {
         showNotification("OK!");
         setTimeout(() => openModal('register'), 800);
     } catch (e) {
-        status.innerHTML = `<div style="color:#ef4444; font-size:12px; margin-top:8px;">${t('errors.networkError', 'Server connection error')}</div>`;
+        status.innerHTML = `<div style="color:#ef4444; font-size:12px; margin-top:8px;">${t('errors.networkError')}</div>`;
     }
 }
 
@@ -1196,37 +659,37 @@ async function validateRegister() {
     const submitBtn = document.querySelector('#modalContainer .btn-modal-primary');
 
     if (!username) {
-        setFormError('errorContainer', t('errors.fillAllFields', 'Please fill in all fields'), 'error', 'regUsername');
+        setFormError('errorContainer', t('errors.fillAllFields'), 'error', 'regUsername');
         document.getElementById('regUsername')?.focus();
         return;
     }
     if (!email) {
-        setFormError('errorContainer', t('errors.fillAllFields', 'Please fill in all fields'), 'error', 'regEmail');
+        setFormError('errorContainer', t('errors.fillAllFields'), 'error', 'regEmail');
         document.getElementById('regEmail')?.focus();
         return;
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        setFormError('errorContainer', t('errors.invalidEmail', 'Please check the email address'), 'error', 'regEmail');
+        setFormError('errorContainer', t('errors.invalidEmail'), 'error', 'regEmail');
         document.getElementById('regEmail')?.focus();
         return;
     }
     if (!pass) {
-        setFormError('errorContainer', t('errors.fillAllFields', 'Please fill in all fields'), 'error', 'regPass');
+        setFormError('errorContainer', t('errors.fillAllFields'), 'error', 'regPass');
         document.getElementById('regPass')?.focus();
         return;
     }
     if (pass.length < 6) {
-        setFormError('errorContainer', t('errors.passwordTooShort', 'Password must be at least 6 characters'), 'error', 'regPass');
+        setFormError('errorContainer', t('errors.passwordTooShort'), 'error', 'regPass');
         document.getElementById('regPass')?.focus();
         return;
     }
     if (!code) {
-        setFormError('errorContainer', t('errors.fillAllFields', 'Please fill in all fields'), 'error', 'regCode');
+        setFormError('errorContainer', t('errors.fillAllFields'), 'error', 'regCode');
         document.getElementById('regCode')?.focus();
         return;
     }
 
-    setButtonLoading(submitBtn, true, t('auth.register', 'Register'));
+    setButtonLoading(submitBtn, true, t('auth.register'));
 
     const requestData = {
         username,
@@ -1249,10 +712,10 @@ async function validateRegister() {
         const result = await response.json();
 
         if (!response.ok) {
-            let errMsg = t('errors.genericRequestFailed', 'Request failed');
+            let errMsg = t('errors.genericRequestFailed');
             if (result.detail) {
                 if (Array.isArray(result.detail)) {
-                    errMsg = result.detail.map(e => e.msg === 'Field required' ? t('errors.fillAllFields', 'Please fill in all fields') : e.msg).join(', ');
+                    errMsg = result.detail.map(e => e.msg === 'Field required' ? t('errors.fillAllFields') : e.msg).join(', ');
                 } else {
                     errMsg = result.detail;
                 }
@@ -1264,13 +727,13 @@ async function validateRegister() {
         if (typeof clearPaymentAccess === 'function') {
             clearPaymentAccess();
         }
-        setFormError('errorContainer', t('auth.registerSuccess', 'Registration completed'), 'success');
-        showNotification(t('auth.registerSuccess', 'Registration completed'));
+        setFormError('errorContainer', t('auth.registerSuccess'), 'success');
+        showNotification(t('auth.registerSuccess'));
         setTimeout(() => openModal('login'), 1200);
     } catch (error) {
-        setFormError('errorContainer', t('errors.networkError', 'Server connection error'));
+        setFormError('errorContainer', t('errors.networkError'));
     } finally {
-        setButtonLoading(submitBtn, false, t('auth.register', 'Register'));
+        setButtonLoading(submitBtn, false, t('auth.register'));
     }
 }
 
@@ -1281,22 +744,22 @@ async function validateLogin() {
     const submitBtn = document.querySelector('#modalContainer .btn-modal-primary');
 
     if (!username) {
-        setFormError('loginErrorContainer', t('errors.fillAllFields', 'Please fill in all fields'), 'error', 'loginUsername');
+        setFormError('loginErrorContainer', t('errors.fillAllFields'), 'error', 'loginUsername');
         document.getElementById('loginUsername')?.focus();
         return;
     }
     if (!pass) {
-        setFormError('loginErrorContainer', t('errors.fillAllFields', 'Please fill in all fields'), 'error', 'loginPass');
+        setFormError('loginErrorContainer', t('errors.fillAllFields'), 'error', 'loginPass');
         document.getElementById('loginPass')?.focus();
         return;
     }
     if (pass.length < 6) {
-        setFormError('loginErrorContainer', t('errors.passwordTooShort', 'Password must be at least 6 characters'), 'error', 'loginPass');
+        setFormError('loginErrorContainer', t('errors.passwordTooShort'), 'error', 'loginPass');
         document.getElementById('loginPass')?.focus();
         return;
     }
 
-    setButtonLoading(submitBtn, true, t('auth.login', 'Login'));
+    setButtonLoading(submitBtn, true, t('auth.login'));
 
     try {
         const res = await fetch('/api/login', {
@@ -1312,14 +775,14 @@ async function validateLogin() {
             subscriptionDaysLeft = data.days_left ?? 29;
             handleLoginSuccess();
         } else {
-            let errMsg = t('errors.loginFailed', 'Incorrect login or password');
+            let errMsg = t('errors.loginFailed');
             if (data.detail) errMsg = Array.isArray(data.detail) ? data.detail.map(e => e.msg).join(', ') : data.detail;
             setFormError('loginErrorContainer', errMsg);
         }
     } catch (error) {
-        setFormError('loginErrorContainer', t('errors.networkError', 'Server connection error'));
+        setFormError('loginErrorContainer', t('errors.networkError'));
     } finally {
-        setButtonLoading(submitBtn, false, t('auth.login', 'Login'));
+        setButtonLoading(submitBtn, false, t('auth.login'));
     }
 }
 
@@ -2152,11 +1615,11 @@ function renderDashboardContent(section) {
         const networkGuideHtml = hideAllBanners ? '' : `
             <div id="guide-box" style="position: relative; background: rgba(157,78,221,0.08); border: 1px solid rgba(157,78,221,0.25); border-radius: 14px; padding: 16px 18px; margin-bottom: 18px; font-size: 13px; color: var(--text-muted); line-height: 1.5;">
                 <button onclick="document.getElementById('guide-box').style.display='none'" style="position: absolute; top: 14px; right: 16px; background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 16px; font-weight: bold;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--text-muted)'">✕</button>
-                <b style="color: #fff;">📖 Справочник показателей:</b><br>
-                • <b style="color: #c77dff;">Gwei</b> — единица стоимости газа в сетях EVM (чем ниже, тем дешевле транзакции).<br>
-                • <b style="color: #c77dff;">Sun</b> — минимальная неделимая расчетная единица сети Tron.<br>
-                • <b style="color: #c77dff;">Micro-lamports</b> — микро-ламипорты, комиссия за приоритет транзакций в Solana.<br>
-                • <b style="color: #c77dff;">N/A</b> — узел ноды временно перегружен (автоматически переподключается).
+                <b style="color: #fff;">${t.guideTitle}</b><br>
+                • <b style="color: #c77dff;">Gwei</b> ${t.guideGwei}<br>
+                • <b style="color: #c77dff;">Sun</b> ${t.guideSun}<br>
+                • <b style="color: #c77dff;">Micro-lamports</b> ${t.guideLamports}<br>
+                • <b style="color: #c77dff;">N/A</b> ${t.guideNA}
             </div>
         `;
 

@@ -6,6 +6,8 @@ window.AIRDROP_LOCALES.en = {
   loading: 'Loading...',
   days: 'days',
   privateSoftware: 'Private software',
+  slotsShort: 'SLOTS',
+  pageTitle: 'AIRDROP-X — Control Panel',
   heroTitle: 'A universal tool<br>for automating and farming airdrops.',
   heroDesc: 'Farm points, inspect wallets for available distributions, and claim airdrops in one click with protection against Sybil attacks.',
   farmBtn: 'Get access',
@@ -63,6 +65,7 @@ window.AIRDROP_LOCALES.en = {
   mnMore: 'More',
   footerPrivacy: 'Privacy policy',
   footerTerms: 'Terms of use',
+  footerRights: 'AIRDROP-X © 2026. All rights reserved.',
   legal: {
     privacyTitle: 'Privacy Policy',
     privacyContent: `<p style="margin-bottom:12px;">This Privacy Policy explains how AIRDROP-X collects, uses, stores, and protects personal data when you interact with our platform and service.</p><p style="color:#fff; font-weight:bold; margin-bottom:4px;">1. Information we collect</p><p style="margin-bottom:12px;">We may collect information you provide during registration, payments, or service use, including your email address, nickname, login, payment details, browser and device information, IP address, and activity data related to your use of the service.</p><p style="color:#fff; font-weight:bold; margin-bottom:4px;">2. How we use your information</p><p style="margin-bottom:12px;">Collected data is used to create and maintain your account, process payments, provide access to service features, send notifications, improve platform quality, protect against fraud, and comply with legal obligations.</p><p style="color:#fff; font-weight:bold; margin-bottom:4px;">3. Storage and protection</p><p style="margin-bottom:12px;">We apply reasonable organizational and technical measures to protect your information from unauthorized access, loss, disclosure, or alteration. No method of transmission over the Internet or electronic storage is completely secure, however.</p><p style="color:#fff; font-weight:bold; margin-bottom:4px;">4. Sharing with third parties</p><p style="margin-bottom:12px;">We do not sell personal data. We may share information only with trusted third-party services that are necessary for platform operation, such as payment processors, hosting providers, infrastructure vendors, or support providers, where required to fulfill our obligations.</p><p style="color:#fff; font-weight:bold; margin-bottom:4px;">5. Your rights</p><p style="margin-bottom:12px;">You may request access to, correction of, deletion of, or restriction of processing of your personal data where applicable by law. To do so, please contact us through the official support channels.</p><p style="color:#fff; font-weight:bold; margin-bottom:4px;">6. Changes to this policy</p><p style="margin-bottom:12px;">We reserve the right to update this Privacy Policy from time to time. The updated version becomes effective upon publication on the website.</p><p style="margin-bottom:4px;">If you have any questions, please contact the AIRDROP-X support team through the official Telegram channel or other project-supported contact methods.</p>`,
@@ -215,6 +218,13 @@ window.AIRDROP_LOCALES.en = {
     code: 'Code',
     codePlaceholder: 'Enter code'
   },
+  calDays: { 'Пн': 'Mo', 'Вт': 'Tu', 'Ср': 'We', 'Чт': 'Th', 'Пт': 'Fr', 'Сб': 'Sa', 'Вс': 'Su' },
+    countdown: { ended: "⚡ Campaign ended / Snapshot taken", label: "Remaining:", d: "d", h: "h", m: "m", s: "s" },
+    guideTitle: "📖 Metrics Guide:",
+    guideGwei: "— gas cost unit in EVM networks (lower is cheaper).",
+    guideSun: "— the smallest indivisible unit of the Tron network.",
+    guideLamports: "— micro-lamports, priority fee for transactions in Solana.",
+    guideNA: "— node is temporarily overloaded (reconnects automatically).",
   errors: {
     fillAllFields: 'Please fill in all fields',
     invalidEmail: 'Please check the email address',

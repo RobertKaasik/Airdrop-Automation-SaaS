@@ -6,6 +6,8 @@ window.AIRDROP_LOCALES.zh = {
   loading: '加载中...',
   days: '天',
   privateSoftware: '私有软件',
+  slotsShort: '槽位',
+  pageTitle: 'AIRDROP-X — 控制面板',
   heroTitle: '一款通用工具<br>用于自动化和空投挖矿。',
   heroDesc: '刷取积分、检查钱包是否有可领取的空投，并通过一键操作完成领取，且具备防女巫攻击保护。',
   farmBtn: '获取权限',
@@ -63,6 +65,7 @@ window.AIRDROP_LOCALES.zh = {
   mnMore: '更多',
   footerPrivacy: '隐私政策',
   footerTerms: '使用条款',
+  footerRights: 'AIRDROP-X © 2026. 保留所有权利。',
   legal: {
     privacyTitle: '隐私政策',
     privacyContent: `<p style="margin-bottom:12px;">本隐私政策说明了 AIRDROP-X 在您使用平台和服务时如何收集、使用、存储和保护您的个人信息。</p><p style="color:#fff; font-weight:bold; margin-bottom:4px;">1. 我们收集哪些信息</p><p style="margin-bottom:12px;">我们可能会在注册、付款或使用服务过程中收集您提供的信息，包括邮箱、昵称、登录名、付款信息、浏览器和设备信息、IP 地址，以及与您使用服务相关的活动数据。</p><p style="color:#fff; font-weight:bold; margin-bottom:4px;">2. 我们如何使用信息</p><p style="margin-bottom:12px;">收集到的数据用于创建和维护账户、处理付款、提供服务功能、发送通知、改进平台质量、防止欺诈并遵守相关法律义务。</p><p style="color:#fff; font-weight:bold; margin-bottom:4px;">3. 存储和保护</p><p style="margin-bottom:12px;">我们会采取合理的组织和技术措施来保护您的信息，防止未经授权的访问、丢失、泄露或篡改。然而，任何通过互联网传输或电子存储的方法都无法做到绝对安全。</p><p style="color:#fff; font-weight:bold; margin-bottom:4px;">4. 与第三方共享</p><p style="margin-bottom:12px;">我们不会出售您的个人信息。只有在平台运营需要时，我们才会与必要的第三方服务提供商共享信息，例如支付处理方、云服务提供商、基础设施供应商或支持服务提供商。</p><p style="color:#fff; font-weight:bold; margin-bottom:4px;">5. 您的权利</p><p style="margin-bottom:12px;">在适用法律允许的范围内，您可以请求查阅、更正、删除或限制处理您的个人信息。如需此类请求，请通过官方支持渠道联系我们。</p><p style="color:#fff; font-weight:bold; margin-bottom:4px;">6. 政策变更</p><p style="margin-bottom:12px;">我们保留不时更新本隐私政策的权利。更新后的版本将在网站发布后生效。</p><p style="margin-bottom:4px;">如果您有任何问题，请通过官方 Telegram 频道或项目提供的其他联系方式联系 AIRDROP-X 支持团队。</p>`,
@@ -215,6 +218,13 @@ window.AIRDROP_LOCALES.zh = {
     code: '验证码',
     codePlaceholder: '请输入验证码'
   },
+  calDays: { 'Пн': '一', 'Вт': '二', 'Ср': '三', 'Чт': '四', 'Пт': '五', 'Сб': '六', 'Вс': '日' },
+    countdown: { ended: "⚡ 活动已结束 / 快照已完成", label: "剩余时间:", d: "天", h: "小时", m: "分", s: "秒" },
+    guideTitle: "📖 指标指南：",
+    guideGwei: "— EVM 网络中的 Gas 成本单位（越低越便宜）。",
+    guideSun: "— Tron 网络的最小不可分割单位。",
+    guideLamports: "— 微 lamports，Solana 中的交易优先费。",
+    guideNA: "— 节点暂时过载（自动重新连接）。",
   errors: {
     fillAllFields: '请填写所有字段',
     invalidEmail: '请检查电子邮件地址',
@@ -226,5 +236,31 @@ window.AIRDROP_LOCALES.zh = {
     loginFailed: '登录名或密码错误',
     txidRequired: '请输入 TXID',
     paymentFailed: '支付确认失败'
+  },
+  backend: {
+    "Invalid login or password": "登录名或密码错误",
+    "An account with this email is already registered!": "该邮箱已被注册！",
+    "A user with this username already exists!": "该用户名已存在！",
+    "Please request a verification code first!": "请先获取验证码！",
+    "Attempt limit exceeded (3/3). Request a new code.": "超过尝试次数限制 (3/3)。请重新获取验证码。",
+    "SMTP Error. Check App Password in .env": "SMTP 错误。请检查 .env 中的应用密码",
+    "Transaction with this TXID not found in the system": "系统中未找到此 TXID 的交易",
+    "❌ Blockchain gateway rejected TXID: transaction not found or amount mismatch!": "❌ 区块链网关拒绝了 TXID：未找到交易或金额不匹配！",
+    "Invalid deposit amount": "存款金额无效",
+    "❌ Deposit transaction not confirmed on Base blockchain!": "❌ 存款交易未在 Base 区块链上确认！",
+    "Payment not confirmed or token already used": "付款未确认或令牌已被使用",
+    "Payment confirmed for a different session": "付款已在其他会话中确认",
+    "Registration plan does not match the paid one": "注册计划与已支付计划不符",
+    "Insufficient balance ($10 required)": "余额不足（需要 $10）",
+    "Wallet or proxy not found": "未找到钱包或代理",
+    "Proxy responded with an error": "代理响应错误",
+    "Insufficient funds for gas ($1.50 required)": "Gas 资金不足（需要 $1.50）",
+    "Settings saved successfully": "设置已成功保存",
+    "Settings saved, but the bot failed to send a message. Make sure you sent /start to the bot!": "设置已保存，但机器人未能发送消息。请确保您已向机器人发送 /start！",
+    "Wallet added": "钱包已添加",
+    "Wallet deleted": "钱包已删除",
+    "Farming session completed!": "挖矿会话成功完成！",
+    "Registered successfully": "注册成功",
+    "Logged in": "已登录"
   }
 };

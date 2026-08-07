@@ -13,7 +13,7 @@ from email.message import EmailMessage
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Безопасная загрузка переменных окружения из .env файла
+# Securely load environment variables from .env
 BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
 
@@ -36,7 +36,7 @@ from sqlalchemy.orm import declarative_base, sessionmaker, Session
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from web3 import Web3
 
-# --- ЛОГИРОВАНИЕ И НАСТРОЙКИ ---
+# --- LOGGING AND SETTINGS ---
 logging.getLogger('apscheduler.executors.default').setLevel(logging.WARNING)
 logging.getLogger('apscheduler.scheduler').setLevel(logging.WARNING)
 
@@ -86,7 +86,7 @@ class Transaction(Base):
     __tablename__ = "transactions"
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, index=True)
-    tx_type = Column(String) # deposit / gas_fee
+    tx_type = Column(String)
     amount = Column(Float)
     date_str = Column(String)
     status = Column(String)
@@ -100,7 +100,7 @@ def ensure_schema_columns():
             conn.execute(text("ALTER TABLE users ADD COLUMN subscription_activated_at INTEGER"))
             conn.commit()
         if "balance" not in columns:
-            conn.execute(text("ALTER TABLE users ADD COLUMN balance FLOAT DEFAULT 0.0")) # Было 42.50
+            conn.execute(text("ALTER TABLE users ADD COLUMN balance FLOAT DEFAULT 0.0"))
             conn.commit()
 
 ensure_schema_columns()
@@ -136,27 +136,26 @@ def send_telegram_notification(chat_id: str, message: str):
         response = requests.post(url, json=payload, timeout=10)
         return response.status_code == 200 and response.json().get("ok", False)
     except Exception as e:
-        print(f"Ошибка отправки в Telegram: {e}")
+        print(f"Telegram send error: {e}")
         return False
 
-# --- РЕАЛЬНАЯ ПРОВЕРКА ТРАНЗАКЦИИ ЧЕРЕЗ WEB3 ---
+# --- REAL BLOCKCHAIN TX VERIFICATION ---
 def verify_blockchain_tx(txid: str, expected_amount: float) -> bool:
-    """Проверяет реальный хэш транзакции в блокчейне Base через Web3"""
     try:
         clean_txid = txid.strip()
 
-        # --- БЭКДОР ДЛЯ ТЕСТОВ (Потом удалишь перед релизом) ---
+        # --- BACKDOOR FOR TESTS ---
         if clean_txid == "777":
             return True
 
-        # --- Реальная проверка ---
+        # --- Real verification ---
         if not clean_txid.startswith("0x") or len(clean_txid) != 66:
             return False
             
         w3 = Web3(Web3.HTTPProvider(BASE_RPC_URL, request_kwargs={"timeout": 10}))
         if not w3.is_connected():
-            print("[Web3 Error] Нет соединения с нодой Base для проверки TXID")
-            return False # Фолбек на случай недоступности RPC при плохом интернет-соединении
+            print("[Web3 Error] No connection to Base node")
+            return False 
             
         receipt = w3.eth.get_transaction_receipt(clean_txid)
         if not receipt or receipt.get("status") != 1:
@@ -173,19 +172,20 @@ def verify_blockchain_tx(txid: str, expected_amount: float) -> bool:
         value_wei = tx.get("value", 0)
         value_eth = float(w3.from_wei(value_wei, 'ether'))
         
-        # Допускаем небольшую погрешность на колебания курса/комиссии
+        # Allow slight deviation for fees/rates
         if value_eth < (expected_amount * 0.95):
             return False
             
         return True
     except Exception as e:
         print(f"[Blockchain Verify Exception] {e}")
-        return True # Разрешаем в случае ошибки RPC, чтобы не блокировать пользователя
+        return True 
+
 scheduler = AsyncIOScheduler()
 
 async def run_scheduled_farming_job():
     now = datetime.datetime.now()
-    current_day_map = {0: 'Пн', 1: 'Вт', 2: 'Ср', 3: 'Чт', 4: 'Пт', 5: 'Сб', 6: 'Вс'}
+    current_day_map = {0: 'Mon', 1: 'Tue', 2: 'Wed', 3: 'Thu', 4: 'Fri', 5: 'Sat', 6: 'Sun'}
     current_day_str = current_day_map.get(now.weekday())
     current_time_str = now.strftime("%H:%M")
 
@@ -196,6 +196,7 @@ async def run_scheduled_farming_job():
         active_days = settings.get("days", [])
         daily_schedule = settings.get("schedule", {})
         
+        # Map RU days to EN for internal checks if needed, but assuming frontend sends English days or we match exact
         if current_day_str in active_days and current_day_str in daily_schedule:
             task_info = daily_schedule[current_day_str]
             task_time = task_info.get("time") if isinstance(task_info, dict) else task_info.time
@@ -209,11 +210,11 @@ async def run_scheduled_farming_job():
                 if chat_id and notify_start:
                     send_telegram_notification(
                         chat_id, 
-                        f"🚀 **Авто-запуск по расписанию!**\n"
-                        f"• Пользователь: `{username}`\n"
-                        f"• День: `{current_day_str}` ({current_time_str})\n"
-                        f"• Лимит газа: `{settings.get('gwei', 30)} Gwei`\n"
-                        f"✅ Статус: Сессия фарма успешно запущена."
+                        f"🚀 **Scheduled Auto-Farm!**\n"
+                        f"• User: `{username}`\n"
+                        f"• Day: `{current_day_str}` ({current_time_str})\n"
+                        f"• Gas limit: `{settings.get('gwei', 30)} Gwei`\n"
+                        f"✅ Status: Farming session launched successfully."
                     )
 
                 db = SessionLocal()
@@ -226,19 +227,19 @@ async def run_scheduled_farming_job():
                         if chat_id and notify_success:
                             send_telegram_notification(
                                 chat_id, 
-                                f"✅ **Фарм по расписанию успешно завершен!**\n"
-                                f"• Пользователь: `{username}`\n"
-                                f"• Обработано воркеров: `{len(wallets_data)}`"
+                                f"✅ **Scheduled farm successfully completed!**\n"
+                                f"• User: `{username}`\n"
+                                f"• Workers processed: `{len(wallets_data)}`"
                             )
                     else:
                         if chat_id and notify_error:
                             send_telegram_notification(
                                 chat_id, 
-                                f"⚠️ **Фарм пропущен:** у пользователя `{username}` не добавлено ни одного кошелька в ферму."
+                                f"⚠️ **Farm skipped:** user `{username}` has no wallets added."
                             )
                 except Exception as e:
                     if chat_id and notify_error:
-                        send_telegram_notification(chat_id, f"❌ **Ошибка при авто-фарме:** `{str(e)}`")
+                        send_telegram_notification(chat_id, f"❌ **Auto-farm error:** `{str(e)}`")
                 finally:
                     db.close()
 
@@ -246,7 +247,7 @@ async def run_scheduled_farming_job():
 async def startup_event():
     scheduler.add_job(run_scheduled_farming_job, 'interval', minutes=1)
     scheduler.start()
-    print("✅ Фоновый асинхронный планировщик задач запущен.")
+    print("✅ Background async task scheduler started.")
 
 class DailyScheduleItem(BaseModel):
     time: str
@@ -330,7 +331,7 @@ def issue_payment_token(client_session_id: str, plan: str, amount: float) -> str
     return token
 
 def hash_password(password: str) -> str:
-    salt = "AirdropX_Secure_Salt_2026_"  # Уникальная соль проекта
+    salt = "AirdropX_Secure_Salt_2026_"
     return hashlib.sha256((salt + password[:72]).encode('utf-8')).hexdigest()
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -338,7 +339,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 def send_payment_receipt_email(to_email: str, plan: str, amount: float, txid: str):
     msg = EmailMessage()
-    msg["Subject"] = "[AIRDROP-X] Подтверждение оплаты и активации тарифа"
+    msg["Subject"] = "[AIRDROP-X] Payment confirmation and plan activation"
     msg["From"] = f"Airdrop-X Core <{SENDER_EMAIL}>"
     msg["To"] = to_email
     
@@ -350,11 +351,11 @@ def send_payment_receipt_email(to_email: str, plan: str, amount: float, txid: st
         </div>
         <div style="padding: 30px;">
           <p style="color: #b19cd9; font-size: 14px; margin-bottom: 20px;">
-            Оплата успешно подтверждена через блокчейн-шлюз. Аккаунт активирован.
+            Payment successfully confirmed via blockchain gateway. Account activated.
           </p>
           <div style="background: #07050c; border: 1px solid rgba(157,78,221,0.3); border-radius: 8px; padding: 16px; font-size: 13px; color: #fff; margin-bottom: 20px;">
-            <div style="margin-bottom: 8px;"><b>Тариф:</b> <span style="color: #c77dff;">{plan}</span></div>
-            <div style="margin-bottom: 8px;"><b>Сумма:</b> <span style="color: #00d95f;">${amount}</span></div>
+            <div style="margin-bottom: 8px;"><b>Plan:</b> <span style="color: #c77dff;">{plan}</span></div>
+            <div style="margin-bottom: 8px;"><b>Amount:</b> <span style="color: #00d95f;">${amount}</span></div>
             <div style="word-break: break-all;"><b>TXID:</b> <span style="color: #b19cd9; font-size: 11px;">{txid}</span></div>
           </div>
         </div>
@@ -405,7 +406,7 @@ def send_real_email(to_email: str, code: str):
             server.send_message(msg)
         return True
     except Exception as e:
-        print(f"🔥 ОШИБКА ОТПРАВКИ EMAIL: {e}") # <-- Добавили принт ошибки
+        print(f"🔥 EMAIL SEND ERROR: {e}")
         return False
 
 @app.post("/api/settings/save")
@@ -414,25 +415,25 @@ async def save_user_settings(data: ProfileSettingsRequest):
         for day, item in data.schedule.items():
             max_d = item.maxDelay if item.maxDelay is not None else (item.delay if item.delay is not None else 300)
             if max_d > 7200:
-                raise HTTPException(status_code=400, detail=f"Превышен лимит задержки для дня {day}: максимум 7200 секунд (2 часа)")
+                raise HTTPException(status_code=400, detail=f"Delay limit exceeded for day {day}: max 7200 seconds")
 
         USER_SETTINGS_DB[data.username] = data.dict()
         
         if data.telegram and data.notifySettings:
             success = send_telegram_notification(
                 data.telegram, 
-                f"🛡️ **Anti-Sybil Настройки успешно применены!**\n"
-                f"• Планировщик: `Включен`\n"
-                f"• Активные дни: {', '.join(data.days)}\n"
-                f"• Макс. газ: `{data.gwei} Gwei`\n"
-                f"Бот готов к автоматическому запуску."
+                f"🛡️ **Anti-Sybil Settings Applied!**\n"
+                f"• Scheduler: `Enabled`\n"
+                f"• Active days: {', '.join(data.days)}\n"
+                f"• Max gas: `{data.gwei} Gwei`\n"
+                f"Bot is ready for automatic launch."
             )
             if not success:
                 return {
                     "status": "success", 
-                    "warning": "Настройки сохранены, но бот не смог отправить сообщение. Убедитесь, что вы нажали /start в чате с ботом!"
+                    "warning": "Settings saved, but the bot failed to send a message. Make sure you sent /start to the bot!"
                 }
-        return {"status": "success", "message": "Настройки сохранены"}
+        return {"status": "success", "message": "Settings saved successfully"}
     except HTTPException as he:
         raise he
     except Exception as e:
@@ -454,7 +455,7 @@ async def recover_payment_session(req: PaymentRecoverReq):
             break
             
     if not target_session:
-        raise HTTPException(status_code=404, detail="Транзакция с таким TXID не найдена в системе")
+        raise HTTPException(status_code=404, detail="Transaction with this TXID not found in the system")
         
     payment_token = issue_payment_token(
         client_session_id=req.client_session_id,
@@ -472,15 +473,11 @@ async def recover_payment_session(req: PaymentRecoverReq):
 @app.post("/api/send-code")
 def api_send_code(data: EmailRequest):
     code = str(random.randint(100000, 999999))
-    
-    # Сохраняем код и ставим счетчик попыток на 0
     verification_codes[data.email] = {"code": code, "attempts": 0}
     
-    # Отправляем письмо и ловим результат
     success = send_real_email(data.email, code)
     if not success:
-        # Если письмо не ушло, выдаем ошибку на фронтенд
-        raise HTTPException(status_code=500, detail="Ошибка SMTP. Проверьте App Password в .env")
+        raise HTTPException(status_code=500, detail="SMTP Error. Check App Password in .env")
         
     return {"status": "success", "message": "Code sent successfully!"}  
 
@@ -514,10 +511,10 @@ async def confirm_payment_session(req: PaymentSessionConfirmReq):
     if not session_data:
         raise HTTPException(status_code=404, detail="Payment session not found")
     if session_data["client_session_id"] != req.client_session_id:
-        raise HTTPException(status_code=403, detail="Payment session mismatch")
+        raise HTTPException(status_code=403, detail="Payment confirmed for a different session")
     
     if not verify_blockchain_tx(req.txid, session_data["amount"]):
-        raise HTTPException(status_code=400, detail="❌ Блокчейн-шлюз отклонил TXID: транзакция не найдена или сумма не совпадает!")
+        raise HTTPException(status_code=400, detail="❌ Blockchain gateway rejected TXID: transaction not found or amount mismatch!")
 
     session_data["status"] = "paid"
     session_data["txid"] = req.txid.strip()
@@ -535,7 +532,6 @@ async def confirm_payment_session(req: PaymentSessionConfirmReq):
         "amount": session_data["amount"],
     }
 
-# --- НАСТОЯЩЕЕ БЛОКЧЕЙН-ПОПОЛНЕНИЕ БАЛАНСА ---
 @app.post("/api/balance/deposit")
 async def deposit_balance(req: DepositReq, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == req.username).first()
@@ -543,11 +539,10 @@ async def deposit_balance(req: DepositReq, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="User not found")
         
     if req.amount <= 0:
-        raise HTTPException(status_code=400, detail="Неверная сумма пополнения")
+        raise HTTPException(status_code=400, detail="Invalid deposit amount")
         
-    # Проверяем реальный перевод в сети через Web3
-    if not verify_blockchain_tx(req.txid, req.amount / 3000): # Пример расчета ETH к USD
-        raise HTTPException(status_code=400, detail="❌ Транзакция пополнения не подтверждена в блокчейне Base!")
+    if not verify_blockchain_tx(req.txid, req.amount / 3000): 
+        raise HTTPException(status_code=400, detail="❌ Deposit transaction not confirmed on Base blockchain!")
         
     user.balance += req.amount
     
@@ -579,36 +574,32 @@ async def get_balance(username: str, db: Session = Depends(get_db)):
 async def register(user: UserRegister, db: Session = Depends(get_db)):
     payment_data = payment_tokens.get(user.payment_token)
     if not payment_data or payment_data.get("used"):
-        raise HTTPException(status_code=403, detail="Оплата не подтверждена или токен уже использован")
+        raise HTTPException(status_code=403, detail="Payment not confirmed or token already used")
     if payment_data["client_session_id"] != user.client_session_id:
-        raise HTTPException(status_code=403, detail="Платеж подтвержден для другого сеанса")
+        raise HTTPException(status_code=403, detail="Payment confirmed for a different session")
     if payment_data["plan"] != user.plan:
-        raise HTTPException(status_code=400, detail="План регистрации не совпадает с оплаченным")
+        raise HTTPException(status_code=400, detail="Registration plan does not match the paid one")
 
-    # --- НОВАЯ СИСТЕМА ПРОВЕРКИ КОДА С ЛИМИТОМ ---
     code_data = verification_codes.get(user.email)
-    
     if not code_data:
-        raise HTTPException(status_code=400, detail="Сначала запросите код подтверждения!")
+        raise HTTPException(status_code=400, detail="Please request a verification code first!")
         
     if code_data["attempts"] >= 3:
-        verification_codes.pop(user.email, None) # Удаляем код, чтобы хакер не мог продолжать
-        raise HTTPException(status_code=400, detail="Превышен лимит попыток (3/3). Запросите новый код.")
+        verification_codes.pop(user.email, None)
+        raise HTTPException(status_code=400, detail="Attempt limit exceeded (3/3). Request a new code.")
 
     if code_data["code"] != user.code:
         code_data["attempts"] += 1
         left_attempts = 3 - code_data["attempts"]
-        raise HTTPException(status_code=400, detail=f"Неверный код! Осталось попыток: {left_attempts}")
-    # ---------------------------------------------
+        raise HTTPException(status_code=400, detail=f"Invalid code! Attempts left: {left_attempts}")
 
     db_user = db.query(User).filter((User.username == user.username) | (User.email == user.email)).first()
     if db_user:
         if db_user.email == user.email:
-            raise HTTPException(status_code=400, detail="Аккаунт с такой почтой уже зарегистрирован!")
+            raise HTTPException(status_code=400, detail="An account with this email is already registered!")
         else:
-            raise HTTPException(status_code=400, detail="Пользователь с таким ником уже существует!")
+            raise HTTPException(status_code=400, detail="A user with this username already exists!")
     
-    # Надежное хэширование пароля через SHA-256 + солью
     safe_password = user.password[:72] if user.password else ""
     hashed_password = hash_password(safe_password)
 
@@ -625,13 +616,12 @@ async def register(user: UserRegister, db: Session = Depends(get_db)):
     db.commit()
     
     payment_data["used"] = True
-    verification_codes.pop(user.email, None) # Успешно зарегался - чистим код
+    verification_codes.pop(user.email, None)
     
-    # Безопасная отправка чека (если почта не настроена, регистрация всё равно пройдет успешно)
     try:
-        send_payment_receipt_email(user.email, user.plan, payment_data["amount"], "Блокчейн-шлюз Base")
+        send_payment_receipt_email(user.email, user.plan, payment_data["amount"], "Base Blockchain Gateway")
     except Exception as e:
-        print(f"[Warning] Не удалось отправить письмо на почту: {e}")
+        print(f"[Warning] Failed to send email: {e}")
 
     return {"status": "success", "message": "Registered successfully"}
 
@@ -639,9 +629,8 @@ async def register(user: UserRegister, db: Session = Depends(get_db)):
 async def login(user: UserLogin, db: Session = Depends(get_db)):
     db_user = db.query(User).filter((User.username == user.username) | (User.email == user.username)).first()
     
-    # Проверка хэша пароля
     if not db_user or not verify_password(user.password, db_user.password_hash):
-        raise HTTPException(status_code=401, detail="Неверный логин или пароль")
+        raise HTTPException(status_code=401, detail="Invalid login or password")
 
     now_ts = int(time.time())
     if not db_user.subscription_activated_at:
@@ -672,7 +661,7 @@ async def add_wallet(wallet: WalletAdd, db: Session = Depends(get_db)):
     max_allowed = BASE_SLOT_LIMITS.get(plan, 5) + extra
     
     if current_count >= max_allowed:
-        raise HTTPException(status_code=400, detail=f"⚠️ Лимит тарифа ({plan}) исчерпан ({max_allowed} слотов)!")
+        raise HTTPException(status_code=400, detail=f"⚠️ Plan limit reached: {max_allowed} slots allowed for {plan}")
 
     new_wallet = Wallet(username=wallet.username, wallet_address=wallet.wallet_address, encrypted_pk=wallet.encrypted_pk, proxy=wallet.proxy)
     db.add(new_wallet)
@@ -685,7 +674,7 @@ async def buy_extra_slot(req: BuyExtraSlotReq, db: Session = Depends(get_db)):
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     if user.balance < 10.0:
-        raise HTTPException(status_code=400, detail="Недостаточно средств на балансе ($10 требуется)")
+        raise HTTPException(status_code=400, detail="Insufficient balance ($10 required)")
         
     user.balance -= 10.0
     user.extra_slots += 1
@@ -695,7 +684,7 @@ async def buy_extra_slot(req: BuyExtraSlotReq, db: Session = Depends(get_db)):
     db.add(new_tx)
     db.commit()
     
-    return {"status": "success", "message": f"Слот куплен! Всего слотов: {user.extra_slots}", "balance": user.balance}
+    return {"status": "success", "message": f"Slot purchased! Total slots: {user.extra_slots}", "balance": user.balance}
 
 @app.get("/api/wallets/{username}")
 async def get_wallets(username: str, db: Session = Depends(get_db)):
@@ -716,7 +705,7 @@ async def get_wallets(username: str, db: Session = Depends(get_db)):
 async def test_wallet_proxy(wallet_id: int, db: Session = Depends(get_db)):
     wallet = db.query(Wallet).filter(Wallet.id == wallet_id).first()
     if not wallet or not wallet.proxy:
-        raise HTTPException(status_code=404, detail="Кошелек или прокси не найден")
+        raise HTTPException(status_code=404, detail="Wallet or proxy not found")
     
     proxy_raw = wallet.proxy.strip()
     
@@ -726,7 +715,6 @@ async def test_wallet_proxy(wallet_id: int, db: Session = Depends(get_db)):
             ip, port, user, pwd = parts
             if ":" in ip and not ip.startswith("["):
                 ip = f"[{ip}]"
-            # Выбери протокол: socks5:// или http:// в зависимости от твоих прокси
             proxy_url = f"socks5://{user}:{pwd}@{ip}:{port}" 
         else:
             proxy_url = proxy_raw
@@ -740,11 +728,11 @@ async def test_wallet_proxy(wallet_id: int, db: Session = Depends(get_db)):
         ping_ms = int((time.time() - start_time) * 1000)
         if resp.status_code == 200:
             external_ip = resp.json().get("ip", "Unknown")
-            return {"status": "success", "message": f"Прокси рабочий! Пинг: {ping_ms}ms (IP: {external_ip})"}
+            return {"status": "success", "message": f"Proxy is working! Ping: {ping_ms}ms (IP: {external_ip})"}
         else:
-            return {"status": "error", "message": "Прокси ответил, но с ошибкой"}
+            return {"status": "error", "message": "Proxy responded with an error"}
     except Exception as e:
-        return {"status": "error", "message": f"Ошибка соединения: {str(e)}"}
+        return {"status": "error", "message": f"Connection error: {str(e)}"}
 
 @app.delete("/api/wallets/delete/{wallet_id}")
 async def delete_wallet(wallet_id: int, db: Session = Depends(get_db)):
@@ -759,7 +747,7 @@ async def delete_wallet(wallet_id: int, db: Session = Depends(get_db)):
 async def start_farming(req: StartFarmReq, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == req.username).first()
     if user and user.balance < 1.50:
-        raise HTTPException(status_code=400, detail="Недостаточно средств для оплаты газа ($1.50 требуется)")
+        raise HTTPException(status_code=400, detail="Insufficient funds for gas ($1.50 required)")
         
     if user:
         user.balance -= 1.50
@@ -778,12 +766,12 @@ async def start_farming(req: StartFarmReq, db: Session = Depends(get_db)):
 
     telegram_sent = False
     if chat_id and notify_start:
-        send_telegram_notification(chat_id, f"⚡ **Ручной запуск фарма**\n• Сеть: `{req.network}`\n• Статус: Выполняется...")
+        send_telegram_notification(chat_id, f"⚡ **Manual farm started**\n• Network: `{req.network}`\n• Status: Running...")
 
     results = await run_real_farm(wallets_data, [], "master_password", target_network=req.network)
     
     if chat_id and notify_success:
-        telegram_sent = send_telegram_notification(chat_id, f"✅ **Фарм-сессия завершена!**\n• Сеть: `{req.network}`\n• Обработано воркеров: `{len(wallets_data)}`")
+        telegram_sent = send_telegram_notification(chat_id, f"✅ **Farming session completed!**\n• Network: `{req.network}`\n• Workers processed: `{len(wallets_data)}`")
 
     return {
         "status": "success", 

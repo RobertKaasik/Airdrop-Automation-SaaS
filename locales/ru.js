@@ -6,6 +6,8 @@ window.AIRDROP_LOCALES.ru = {
   loading: 'Загрузка...',
   days: 'дн.',
   privateSoftware: 'Приватное программное обеспечение',
+  slotsShort: 'СЛОТОВ',
+  pageTitle: 'AIRDROP-X — Панель управления',
   heroTitle: 'Универсальный инструмент<br>для автоматизации и фарминга аирдропов.',
   heroDesc: 'Фармите очки, проверяйте кошельки на доступные распределения и собирайте аирдропы в один клик с защитой от сибил-атак.',
   farmBtn: 'Получить доступ',
@@ -63,6 +65,7 @@ window.AIRDROP_LOCALES.ru = {
   mnMore: 'Ещё',
   footerPrivacy: 'Политика конфиденциальности',
   footerTerms: 'Условия использования',
+  footerRights: 'AIRDROP-X © 2026. Все права защищены.',
   legal: {
     privacyTitle: 'Политика конфиденциальности',
     privacyContent: `<p style="margin-bottom:12px;">Настоящая Политика конфиденциальности описывает, как AIRDROP-X собирает, использует, хранит и защищает персональные данные пользователей при взаимодействии с нашей платформой и сервисом.</p><p style="color:#fff; font-weight:bold; margin-bottom:4px;">1. Какие данные мы собираем</p><p style="margin-bottom:12px;">Мы можем собирать данные, которые вы предоставляете при регистрации, оплате или использовании функционала сервиса: email, никнейм, логин, данные для оплаты, техническую информацию о браузере, IP-адрес, а также данные, связанные с активностью в системе.</p><p style="color:#fff; font-weight:bold; margin-bottom:4px;">2. Как мы используем данные</p><p style="margin-bottom:12px;">Собранные данные используются для создания и поддержки аккаунта, обработки платежей, предоставления доступа к функциям сервиса, отправки уведомлений, улучшения качества работы платформы, защиты от мошенничества и соблюдения юридических обязательств.</p><p style="color:#fff; font-weight:bold; margin-bottom:4px;">3. Хранение и защита</p><p style="margin-bottom:12px;">Мы принимаем разумные организационные и технические меры для защиты ваших данных от несанкционированного доступа, утраты, раскрытия или изменения. Однако ни один способ передачи данных через интернет или хранения информации не является абсолютно защищенным.</p><p style="color:#fff; font-weight:bold; margin-bottom:4px;">4. Передача данных третьим лицам</p><p style="margin-bottom:12px;">Мы не продаем персональные данные пользователей. Мы можем передавать данные только сервисам, необходимым для работы платформы (например, платежным провайдерам, провайдерам облака, инфраструктуры или технической поддержки), если это требуется для исполнения наших обязательств.</p><p style="color:#fff; font-weight:bold; margin-bottom:4px;">5. Ваши права</p><p style="margin-bottom:12px;">Вы можете запросить доступ к своим данным, их исправление, удаление или ограничение обработки, если это предусмотрено законодательством. Для этого свяжитесь с нами через официальные каналы поддержки.</p><p style="color:#fff; font-weight:bold; margin-bottom:4px;">6. Изменения политики</p><p style="margin-bottom:12px;">Мы оставляем за собой право периодически обновлять настоящую Политику конфиденциальности. Новая версия вступает в силу после публикации на сайте.</p><p style="margin-bottom:4px;">Если у вас есть вопросы, обращайтесь в службу поддержки AIRDROP-X через официальный Telegram или другие контактные каналы проекта.</p>`,
@@ -215,6 +218,14 @@ window.AIRDROP_LOCALES.ru = {
     code: 'Код',
     codePlaceholder: 'Введите код'
   },
+  calDays: 
+  {'Пн': 'Пн', 'Вт': 'Вт', 'Ср': 'Ср', 'Чт': 'Чт', 'Пт': 'Пт', 'Сб': 'Сб', 'Вс': 'Вс' },
+    countdown: { ended: "⚡ Кампания завершена / Снепшот прошел", label: "До конца:", d: "д", h: "ч", m: "м", s: "с" },
+    guideTitle: "📖 Справочник показателей:",
+    guideGwei: "— единица стоимости газа в сетях EVM (чем ниже, тем дешевле транзакции).",
+    guideSun: "— минимальная неделимая расчетная единица сети Tron.",
+    guideLamports: "— микро-ламипорты, комиссия за приоритет транзакций в Solana.",
+    guideNA: "— узел ноды временно перегружен (автоматически переподключается).",
   errors: {
     fillAllFields: 'Заполните все поля',
     invalidEmail: 'Проверьте адрес электронной почты',
@@ -226,5 +237,31 @@ window.AIRDROP_LOCALES.ru = {
     loginFailed: 'Неверный логин или пароль',
     txidRequired: 'Введите TXID транзакции',
     paymentFailed: 'Не удалось подтвердить оплату'
+  },
+  backend: {
+    "Invalid login or password": "Неверный логин или пароль",
+    "An account with this email is already registered!": "Аккаунт с такой почтой уже зарегистрирован!",
+    "A user with this username already exists!": "Пользователь с таким ником уже существует!",
+    "Please request a verification code first!": "Сначала запросите код подтверждения!",
+    "Attempt limit exceeded (3/3). Request a new code.": "Превышен лимит попыток (3/3). Запросите новый код.",
+    "SMTP Error. Check App Password in .env": "Ошибка SMTP. Проверьте App Password в .env",
+    "Transaction with this TXID not found in the system": "Транзакция с таким TXID не найдена в системе",
+    "❌ Blockchain gateway rejected TXID: transaction not found or amount mismatch!": "❌ Блокчейн-шлюз отклонил TXID: транзакция не найдена или сумма не совпадает!",
+    "Invalid deposit amount": "Неверная сумма пополнения",
+    "❌ Deposit transaction not confirmed on Base blockchain!": "❌ Транзакция пополнения не подтверждена в блокчейне Base!",
+    "Payment not confirmed or token already used": "Оплата не подтверждена или токен уже использован",
+    "Payment confirmed for a different session": "Платеж подтвержден для другого сеанса",
+    "Registration plan does not match the paid one": "План регистрации не совпадает с оплаченным",
+    "Insufficient balance ($10 required)": "Недостаточно средств на балансе ($10 требуется)",
+    "Wallet or proxy not found": "Кошелек или прокси не найден",
+    "Proxy responded with an error": "Прокси ответил, но с ошибкой",
+    "Insufficient funds for gas ($1.50 required)": "Недостаточно средств для оплаты газа ($1.50 требуется)",
+    "Settings saved successfully": "Настройки сохранены",
+    "Settings saved, but the bot failed to send a message. Make sure you sent /start to the bot!": "Настройки сохранены, но бот не смог отправить сообщение. Отправьте /start боту!",
+    "Wallet added": "Кошелек добавлен",
+    "Wallet deleted": "Кошелек удален",
+    "Farming session completed!": "Сессия фарма успешно завершена!",
+    "Registered successfully": "Регистрация успешно завершена",
+    "Logged in": "Вход выполнен"
   }
 };
