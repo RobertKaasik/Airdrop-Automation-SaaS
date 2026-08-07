@@ -63,7 +63,7 @@
                 <span onclick="closePricingModal()" style="cursor: pointer; color: #b19cd9; font-size: 20px;">✕</span>
             </div>
             <div class="modal-desc" id="p-desc-modal" style="text-align: center; margin-bottom: 24px;">
-                Закрытый доступ: оплата активации за первый месяц, далее ежемесячное продление.
+                Ежемесячная подписка без обязательного активационного платежа.
             </div>
 
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px;">
@@ -73,7 +73,7 @@
                     <div>
                         <div id="p-std-top" style="font-size: 14px; font-weight: bold; color: #b19cd9; margin-bottom: 6px;">ВХОД + ПОДПИСКА</div>
                         <div id="p-std-name" style="font-size: 22px; font-weight: 800; color: #fff; margin-bottom: 4px;">Стандарт</div>
-                        <div style="font-size: 26px; font-weight: 800; color: #e0aaff; margin-bottom: 16px;">$95 <span id="p-std-per" style="font-size: 13px; color: #b19cd9; font-weight: normal;">/ 1-й месяц, далее $30/мес</span></div>
+                        <div style="font-size: 26px; font-weight: 800; color: #e0aaff; margin-bottom: 16px;">$29 <span id="p-std-per" style="font-size: 13px; color: #b19cd9; font-weight: normal;">/ мес</span></div>
                         
                         <div style="border-top: 1px solid rgba(157,78,221,0.2); padding-top: 14px; display: flex; flex-direction: column; gap: 10px; font-size: 13px; color: #b19cd9;">
                             <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-std-f1">Лимит: до 5 кошельков (воркеров)</span></div>
@@ -81,7 +81,7 @@
                             <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-std-f3">Базовый Claim Looter и Anti-Sybil</span></div>
                         </div>
                     </div>
-                    <button type="button" id="p-std-btn" onclick="selectPlanAndRegister('Standard', 95)" class="btn-dark-lg" style="margin-top: 20px; width: 100%; padding: 12px; font-size: 13px;">Активировать за $95</button>
+                    <button type="button" id="p-std-btn" onclick="selectPlanAndRegister('Standard', 29)" class="btn-dark-lg" style="margin-top: 20px; width: 100%; padding: 12px; font-size: 13px;">Выбрать за $29/мес</button>
                 </div>
 
                 <!-- PRO -->
@@ -90,7 +90,7 @@
                     <div>
                         <div id="p-pro-top" style="font-size: 14px; font-weight: bold; color: #c77dff; margin-bottom: 6px;">ВХОД + ПОДПИСКА</div>
                         <div id="p-pro-name" style="font-size: 22px; font-weight: 800; color: #fff; margin-bottom: 4px;">PRO Фермер</div>
-                        <div style="font-size: 26px; font-weight: 800; color: #e0aaff; margin-bottom: 16px;">$150 <span id="p-pro-per" style="font-size: 13px; color: #b19cd9; font-weight: normal;">/ 1-й месяц, далее $50/мес</span></div>
+                        <div style="font-size: 26px; font-weight: 800; color: #e0aaff; margin-bottom: 16px;">$49 <span id="p-pro-per" style="font-size: 13px; color: #b19cd9; font-weight: normal;">/ мес</span></div>
                         
                         <div style="border-top: 1px solid rgba(157,78,221,0.2); padding-top: 14px; display: flex; flex-direction: column; gap: 10px; font-size: 13px; color: #b19cd9;">
                             <div style="display: flex; align-items: flex-start; gap: 8px; color: #fff;"><span>✓</span> <span id="p-pro-f1"><b>Лимит до 15 кошельков</b> (воркеров)</span></div>
@@ -99,7 +99,7 @@
                             <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-pro-f4">Приоритетная поддержка 24/7</span></div>
                         </div>
                     </div>
-                    <button type="button" id="p-pro-btn" onclick="selectPlanAndRegister('Pro', 150)" class="btn-purple-lg" style="margin-top: 20px; width: 100%; padding: 12px; font-size: 13px;">Активировать за $150</button>
+                    <button type="button" id="p-pro-btn" onclick="selectPlanAndRegister('Pro', 49)" class="btn-purple-lg" style="margin-top: 20px; width: 100%; padding: 12px; font-size: 13px;">Выбрать за $49/мес</button>
                 </div>
 
                 <!-- Premium -->
@@ -107,7 +107,7 @@
                     <div>
                         <div id="p-prem-top" style="font-size: 14px; font-weight: bold; color: #00d95f; margin-bottom: 6px;">ВХОД + ПОДПИСКА</div>
                         <div id="p-prem-name" style="font-size: 22px; font-weight: 800; color: #fff; margin-bottom: 4px;">Premium VIP</div>
-                        <div style="font-size: 26px; font-weight: 800; color: #e0aaff; margin-bottom: 16px;">$280 <span id="p-prem-per" style="font-size: 13px; color: #b19cd9; font-weight: normal;">/ 1-й месяц, далее $90/мес</span></div>
+                        <div style="font-size: 26px; font-weight: 800; color: #e0aaff; margin-bottom: 16px;">$89 <span id="p-prem-per" style="font-size: 13px; color: #b19cd9; font-weight: normal;">/ мес</span></div>
                         
                         <div style="border-top: 1px solid rgba(157,78,221,0.2); padding-top: 14px; display: flex; flex-direction: column; gap: 10px; font-size: 13px; color: #b19cd9;">
                             <div style="display: flex; align-items: flex-start; gap: 8px; color: #00d95f;"><span>✓</span> <span id="p-prem-f1"><b>Лимит до 30 слотов</b> кошельков</span></div>
@@ -116,10 +116,14 @@
                             <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-prem-f4">Личный менеджер и ранний доступ</span></div>
                         </div>
                     </div>
-                    <button type="button" id="p-prem-btn" onclick="selectPlanAndRegister('Premium', 280)" class="btn-dark-lg" style="margin-top: 20px; width: 100%; padding: 12px; font-size: 13px;">Активировать за $280</button>
+                    <button type="button" id="p-prem-btn" onclick="selectPlanAndRegister('Premium', 89)" class="btn-dark-lg" style="margin-top: 20px; width: 100%; padding: 12px; font-size: 13px;">Выбрать за $89/мес</button>
                 </div>
 
             </div>
+            <label style="display:flex; align-items:flex-start; gap:10px; margin-top:18px; padding:14px; border:1px solid rgba(157,78,221,0.3); border-radius:12px; cursor:pointer; color:#b19cd9;">
+                <input type="checkbox" id="onboardingOption" style="margin-top:3px; accent-color:#9d4edd;">
+                <span><b id="onboarding-title" style="color:#fff;">Опциональный onboarding — $49</b><br><span id="onboarding-desc">Персональная настройка и чек-лист безопасности.</span></span>
+            </label>
         </div>
     </div>
 

@@ -9,6 +9,8 @@ import datetime
 import requests
 import logging
 import hashlib
+import hmac
+import bcrypt
 from email.message import EmailMessage
 from pathlib import Path
 from dotenv import load_dotenv
@@ -22,17 +24,19 @@ SMTP_PORT = 465
 SENDER_EMAIL = "airdrop.x.support@gmail.com"
 SENDER_PASSWORD = os.getenv("SMTP_PASSWORD")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_BOT_USERNAME = os.getenv("TELEGRAM_BOT_USERNAME", "").strip().lstrip("@")
 
 MASTER_WALLET_ADDRESS = "0x5e5316Dea1c44d220d4c60A5fcC2949E5A06Fc66"
 BASE_RPC_URL = "https://mainnet.base.org"
 
-from fastapi import FastAPI, APIRouter, Depends, HTTPException
+from fastapi import FastAPI, APIRouter, Depends, HTTPException, Header
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Dict, List, Optional
-from sqlalchemy import create_engine, Column, Integer, String, Float, text
+from sqlalchemy import create_engine, Column, Integer, String, Float, Boolean, text
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
+from sqlalchemy.exc import IntegrityError
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from web3 import Web3
 
@@ -51,11 +55,18 @@ except ImportError:
 USER_SETTINGS_DB = {}
 verification_codes = {}
 SUBSCRIPTION_DURATION_SECONDS = 30 * 24 * 60 * 60
-SUBSCRIPTION_RENEWAL_PRICE = 50
-PLAN_PRICES = {"Standard": 95, "Pro": 150, "Premium": 280}
+PLAN_PRICES = {"Standard": 29, "Pro": 49, "Premium": 89}
+ONBOARDING_PRICE = 49
 BASE_SLOT_LIMITS = {"Standard": 5, "Pro": 15, "Premium": 30}
 payment_sessions = {}
 payment_tokens = {}
+gas_cache = {}
+AUTH_SESSION_DURATION_SECONDS = 12 * 60 * 60
+EMAIL_CODE_TTL_SECONDS = 10 * 60
+EMAIL_CODE_RESEND_SECONDS = 60
+PAYMENT_SESSION_TTL_SECONDS = 30 * 60
+TELEGRAM_LINK_TTL_SECONDS = 10 * 60
+TELEGRAM_TEST_COOLDOWN_SECONDS = 60
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///./airdrop_x.db"
 engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
@@ -73,6 +84,7 @@ class User(Base):
     balance = Column(Float, default=0.0)
     fingerprint = Column(String, nullable=True)
     subscription_activated_at = Column(Integer, nullable=True)
+    onboarding_purchased = Column(Boolean, default=False)
 
 class Wallet(Base):
     __tablename__ = "wallets"
@@ -91,6 +103,48 @@ class Transaction(Base):
     date_str = Column(String)
     status = Column(String)
 
+class AuthSession(Base):
+    __tablename__ = "auth_sessions"
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, index=True, nullable=False)
+    token_hash = Column(String, unique=True, index=True, nullable=False)
+    expires_at = Column(Integer, nullable=False)
+    created_at = Column(Integer, nullable=False)
+
+class ProcessedBlockchainTransaction(Base):
+    __tablename__ = "processed_blockchain_transactions"
+    txid = Column(String, primary_key=True)
+    purpose = Column(String, nullable=False)
+    username = Column(String, nullable=True)
+    created_at = Column(Integer, nullable=False)
+
+class BudgetPlan(Base):
+    __tablename__ = "budget_plans"
+    username = Column(String, primary_key=True)
+    network = Column(String, nullable=False, default="Base")
+    planned_operations = Column(Integer, nullable=False, default=1)
+    max_cost_per_operation = Column(Float, nullable=False, default=1.0)
+    extra_cost_reserve = Column(Float, nullable=False, default=0.0)
+    daily_cap = Column(Float, nullable=False, default=10.0)
+    monthly_cap = Column(Float, nullable=False, default=50.0)
+    updated_at = Column(Integer, nullable=False)
+
+class TelegramLinkCode(Base):
+    __tablename__ = "telegram_link_codes"
+    code = Column(String, primary_key=True)
+    username = Column(String, index=True, nullable=False)
+    expires_at = Column(Integer, nullable=False)
+    used = Column(Boolean, nullable=False, default=False)
+    created_at = Column(Integer, nullable=False)
+
+class TelegramSubscription(Base):
+    __tablename__ = "telegram_subscriptions"
+    username = Column(String, primary_key=True)
+    chat_id = Column(String, unique=True, index=True, nullable=False)
+    last_test_at = Column(Integer, nullable=True)
+    linked_at = Column(Integer, nullable=False)
+    updated_at = Column(Integer, nullable=False)
+
 Base.metadata.create_all(bind=engine)
 
 def ensure_schema_columns():
@@ -102,18 +156,37 @@ def ensure_schema_columns():
         if "balance" not in columns:
             conn.execute(text("ALTER TABLE users ADD COLUMN balance FLOAT DEFAULT 0.0"))
             conn.commit()
+        if "onboarding_purchased" not in columns:
+            conn.execute(text("ALTER TABLE users ADD COLUMN onboarding_purchased BOOLEAN DEFAULT 0"))
+            conn.commit()
 
 ensure_schema_columns()
 
 app = FastAPI(title="AIRDROP-X Backend API")
 
+allowed_origins = [
+    origin.strip()
+    for origin in os.getenv("APP_ALLOWED_ORIGINS", "http://127.0.0.1:8000,http://localhost:8000").split(",")
+    if origin.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=allowed_origins,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "DELETE"],
+    allow_headers=["Content-Type", "Authorization"],
 )
+
+@app.middleware("http")
+async def add_security_headers(request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    if os.getenv("APP_ENV", "development").lower() == "production":
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
 
 def get_db():
     db = SessionLocal()
@@ -123,7 +196,7 @@ def get_db():
         db.close()
 
 def send_telegram_notification(chat_id: str, message: str):
-    if not chat_id:
+    if not TELEGRAM_BOT_TOKEN or not chat_id:
         return False
     clean_chat_id = chat_id.strip()
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
@@ -136,20 +209,39 @@ def send_telegram_notification(chat_id: str, message: str):
         response = requests.post(url, json=payload, timeout=10)
         return response.status_code == 200 and response.json().get("ok", False)
     except Exception as e:
-        print(f"Telegram send error: {e}")
+        logging.warning("Telegram notification failed: %s", e)
         return False
+
+def get_telegram_subscription(db: Session, username: str) -> Optional[TelegramSubscription]:
+    return db.query(TelegramSubscription).filter(TelegramSubscription.username == username).first()
+
+def classify_gas_level(network: str, gas: str) -> str:
+    try:
+        value = float(str(gas).split()[0])
+    except (ValueError, IndexError):
+        return "unavailable"
+    thresholds = {
+        "Ethereum": (15, 35),
+        "Base": (0.03, 0.12),
+        "Arbitrum": (0.05, 0.15),
+        "Optimism": (0.05, 0.15),
+        "Polygon": (50, 150),
+        "BNB Chain": (3, 6),
+        "Solana": (1000, 5000),
+        "Tron": (20, 50),
+    }
+    low_threshold, medium_threshold = thresholds.get(network, (10, 30))
+    if value <= low_threshold:
+        return "low"
+    if value <= medium_threshold:
+        return "medium"
+    return "high"
 
 # --- REAL BLOCKCHAIN TX VERIFICATION ---
 def verify_blockchain_tx(txid: str, expected_amount: float) -> bool:
     try:
         clean_txid = txid.strip()
-
-        # --- BACKDOOR FOR TESTS ---
-        if clean_txid == "777":
-            return True
-
-        # --- Real verification ---
-        if not clean_txid.startswith("0x") or len(clean_txid) != 66:
+        if expected_amount <= 0 or not clean_txid.startswith("0x") or len(clean_txid) != 66:
             return False
             
         w3 = Web3(Web3.HTTPProvider(BASE_RPC_URL, request_kwargs={"timeout": 10}))
@@ -172,18 +264,21 @@ def verify_blockchain_tx(txid: str, expected_amount: float) -> bool:
         value_wei = tx.get("value", 0)
         value_eth = float(w3.from_wei(value_wei, 'ether'))
         
-        # Allow slight deviation for fees/rates
+        # The sender pays network fees separately, so the transfer itself must cover
+        # the expected payment amount.
         if value_eth < (expected_amount * 0.95):
             return False
             
         return True
     except Exception as e:
         print(f"[Blockchain Verify Exception] {e}")
-        return True 
+        return False
 
 scheduler = AsyncIOScheduler()
 
 async def run_scheduled_farming_job():
+    logging.warning("Scheduled signing is disabled until non-custodial wallet signing is implemented.")
+    return
     now = datetime.datetime.now()
     current_day_map = {0: 'Mon', 1: 'Tue', 2: 'Wed', 3: 'Thu', 4: 'Fri', 5: 'Sat', 6: 'Sun'}
     current_day_str = current_day_map.get(now.weekday())
@@ -290,7 +385,6 @@ class UserLogin(BaseModel):
 class WalletAdd(BaseModel):
     username: str
     wallet_address: str
-    encrypted_pk: str
     proxy: str
 
 class StartFarmReq(BaseModel):
@@ -313,29 +407,111 @@ class PaymentSessionCreateReq(BaseModel):
     plan: str
     amount: int
     client_session_id: str
+    onboarding: bool = False
 
 class PaymentSessionConfirmReq(BaseModel):
     payment_session_id: str
     client_session_id: str
     txid: str
 
-def issue_payment_token(client_session_id: str, plan: str, amount: float) -> str:
+class BudgetPlanRequest(BaseModel):
+    network: str
+    planned_operations: int
+    max_cost_per_operation: float
+    extra_cost_reserve: float
+    daily_cap: float
+    monthly_cap: float
+
+def issue_payment_token(client_session_id: str, plan: str, amount: float, onboarding: bool = False) -> str:
     token = secrets.token_urlsafe(32)
     payment_tokens[token] = {
         "client_session_id": client_session_id,
         "plan": plan,
         "amount": amount,
+        "onboarding": onboarding,
         "created_at": int(time.time()),
         "used": False,
     }
     return token
 
 def hash_password(password: str) -> str:
-    salt = "AirdropX_Secure_Salt_2026_"
-    return hashlib.sha256((salt + password[:72]).encode('utf-8')).hexdigest()
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt(rounds=12)).decode("utf-8")
+
+def is_legacy_password_hash(hashed_password: str) -> bool:
+    return len(hashed_password) == 64 and not hashed_password.startswith("$2")
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return hash_password(plain_password) == hashed_password
+    if not plain_password or not hashed_password:
+        return False
+    try:
+        if hashed_password.startswith("$2"):
+            return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
+        # Existing accounts are migrated on their next successful login. This path
+        # is only for compatibility with the original legacy database format.
+        legacy_salt = "AirdropX_Secure_Salt_2026_"
+        legacy_hash = hashlib.sha256((legacy_salt + plain_password[:72]).encode("utf-8")).hexdigest()
+        return hmac.compare_digest(legacy_hash, hashed_password)
+    except (ValueError, TypeError):
+        return False
+
+def issue_access_token(username: str, db: Session) -> str:
+    raw_token = secrets.token_urlsafe(32)
+    now_ts = int(time.time())
+    db.query(AuthSession).filter(AuthSession.expires_at <= now_ts).delete()
+    db.add(AuthSession(
+        username=username,
+        token_hash=hashlib.sha256(raw_token.encode("utf-8")).hexdigest(),
+        created_at=now_ts,
+        expires_at=now_ts + AUTH_SESSION_DURATION_SECONDS,
+    ))
+    db.commit()
+    return raw_token
+
+def get_current_user(
+    authorization: Optional[str] = Header(default=None),
+    db: Session = Depends(get_db),
+) -> User:
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Authentication required")
+    raw_token = authorization.removeprefix("Bearer ").strip()
+    if not raw_token:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+    auth_session = db.query(AuthSession).filter(AuthSession.token_hash == token_hash).first()
+    now_ts = int(time.time())
+    if not auth_session or auth_session.expires_at <= now_ts:
+        if auth_session:
+            db.delete(auth_session)
+            db.commit()
+        raise HTTPException(status_code=401, detail="Session expired or invalid")
+    current_user = db.query(User).filter(User.username == auth_session.username).first()
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Session user not found")
+    return current_user
+
+def require_owned_username(username: str, current_user: User) -> None:
+    if username != current_user.username:
+        raise HTTPException(status_code=403, detail="You do not have access to this account")
+
+def reserve_verified_transaction(
+    db: Session, txid: str, expected_amount: float, purpose: str, username: Optional[str] = None
+) -> None:
+    clean_txid = txid.strip().lower()
+    if db.query(ProcessedBlockchainTransaction).filter(ProcessedBlockchainTransaction.txid == clean_txid).first():
+        raise HTTPException(status_code=409, detail="This blockchain transaction has already been used")
+    if not verify_blockchain_tx(clean_txid, expected_amount):
+        raise HTTPException(status_code=400, detail="Blockchain transaction was not confirmed or amount did not match")
+    db.add(ProcessedBlockchainTransaction(
+        txid=clean_txid,
+        purpose=purpose,
+        username=username,
+        created_at=int(time.time()),
+    ))
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="This blockchain transaction has already been used")
 
 def send_payment_receipt_email(to_email: str, plan: str, amount: float, txid: str):
     msg = EmailMessage()
@@ -410,8 +586,9 @@ def send_real_email(to_email: str, code: str):
         return False
 
 @app.post("/api/settings/save")
-async def save_user_settings(data: ProfileSettingsRequest):
+async def save_user_settings(data: ProfileSettingsRequest, current_user: User = Depends(get_current_user)):
     try:
+        require_owned_username(data.username, current_user)
         for day, item in data.schedule.items():
             max_d = item.maxDelay if item.maxDelay is not None else (item.delay if item.delay is not None else 300)
             if max_d > 7200:
@@ -419,61 +596,92 @@ async def save_user_settings(data: ProfileSettingsRequest):
 
         USER_SETTINGS_DB[data.username] = data.dict()
         
-        if data.telegram and data.notifySettings:
-            success = send_telegram_notification(
-                data.telegram, 
-                f"🛡️ **Anti-Sybil Settings Applied!**\n"
-                f"• Scheduler: `Enabled`\n"
-                f"• Active days: {', '.join(data.days)}\n"
-                f"• Max gas: `{data.gwei} Gwei`\n"
-                f"Bot is ready for automatic launch."
-            )
-            if not success:
-                return {
-                    "status": "success", 
-                    "warning": "Settings saved, but the bot failed to send a message. Make sure you sent /start to the bot!"
-                }
         return {"status": "success", "message": "Settings saved successfully"}
     except HTTPException as he:
         raise he
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+@app.get("/api/telegram/status")
+def telegram_status(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    subscription = get_telegram_subscription(db, current_user.username)
+    return {
+        "linked": bool(subscription),
+        "bot_configured": bool(TELEGRAM_BOT_TOKEN and TELEGRAM_BOT_USERNAME),
+    }
+
+@app.post("/api/telegram/link-code")
+def create_telegram_link_code(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_BOT_USERNAME:
+        raise HTTPException(status_code=503, detail="Telegram bot is not configured")
+
+    now_ts = int(time.time())
+    db.query(TelegramLinkCode).filter(
+        (TelegramLinkCode.username == current_user.username) |
+        (TelegramLinkCode.expires_at <= now_ts)
+    ).delete(synchronize_session=False)
+    code = secrets.token_urlsafe(24).replace("=", "")
+    db.add(TelegramLinkCode(
+        code=code,
+        username=current_user.username,
+        expires_at=now_ts + TELEGRAM_LINK_TTL_SECONDS,
+        used=False,
+        created_at=now_ts,
+    ))
+    db.commit()
+    return {
+        "code": code,
+        "expires_in": TELEGRAM_LINK_TTL_SECONDS,
+        "bot_link": f"https://t.me/{TELEGRAM_BOT_USERNAME}?start={code}",
+    }
+
+@app.post("/api/telegram/test")
+def send_telegram_test(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    subscription = get_telegram_subscription(db, current_user.username)
+    if not subscription:
+        raise HTTPException(status_code=409, detail="Telegram is not linked")
+
+    now_ts = int(time.time())
+    if subscription.last_test_at and now_ts - subscription.last_test_at < TELEGRAM_TEST_COOLDOWN_SECONDS:
+        raise HTTPException(status_code=429, detail="Please wait before sending another test")
+    if not send_telegram_notification(subscription.chat_id, "AIRDROP-X: Telegram connection is active. You will only receive notifications that you enabled."):
+        raise HTTPException(status_code=502, detail="Telegram message could not be delivered")
+    subscription.last_test_at = now_ts
+    subscription.updated_at = now_ts
+    db.commit()
+    return {"status": "success"}
+
 @app.get("/api/gas/{network}")
 async def get_network_gas(network: str):
+    now_ts = int(time.time())
+    cached = gas_cache.get(network)
+    if cached and now_ts - cached["updated_at"] < 20:
+        return {"status": "success", "network": network, **cached["data"], "cached": True}
     gas = get_live_gas_price(network)
-    return {"status": "success", "network": network, "gas": gas}
+    data = {
+        "gas": gas,
+        "gas_level": classify_gas_level(network, gas),
+    }
+    gas_cache[network] = {"updated_at": now_ts, "data": data}
+    return {"status": "success", "network": network, **data, "cached": False}
 
 @app.post("/api/payment/recover")
 async def recover_payment_session(req: PaymentRecoverReq):
-    target_session = None
-    clean_txid = req.txid.strip()
-    
-    for s_id, s_data in payment_sessions.items():
-        if s_data.get("txid") == clean_txid:
-            target_session = s_data
-            break
-            
-    if not target_session:
-        raise HTTPException(status_code=404, detail="Transaction with this TXID not found in the system")
-        
-    payment_token = issue_payment_token(
-        client_session_id=req.client_session_id,
-        plan=target_session["plan"],
-        amount=target_session["amount"]
-    )
-    
-    return {
-        "status": "success",
-        "payment_token": payment_token,
-        "plan": target_session["plan"],
-        "amount": target_session["amount"]
-    }
+    raise HTTPException(status_code=410, detail="Payment recovery is disabled for security. Contact support with your transaction ID.")
 
 @app.post("/api/send-code")
 def api_send_code(data: EmailRequest):
+    now_ts = int(time.time())
+    existing = verification_codes.get(data.email)
+    if existing and now_ts - existing.get("sent_at", 0) < EMAIL_CODE_RESEND_SECONDS:
+        raise HTTPException(status_code=429, detail="Please wait before requesting another verification code")
     code = str(random.randint(100000, 999999))
-    verification_codes[data.email] = {"code": code, "attempts": 0}
+    verification_codes[data.email] = {
+        "code": code,
+        "attempts": 0,
+        "sent_at": now_ts,
+        "expires_at": now_ts + EMAIL_CODE_TTL_SECONDS,
+    }
     
     success = send_real_email(data.email, code)
     if not success:
@@ -487,13 +695,14 @@ async def create_payment_session(req: PaymentSessionCreateReq):
     if base_amount is None:
         raise HTTPException(status_code=400, detail="Unknown plan")
     
-    unique_amount = round(base_amount + 0.47, 2)
+    unique_amount = round(base_amount + (ONBOARDING_PRICE if req.onboarding else 0) + 0.47, 2)
     
     payment_session_id = str(uuid.uuid4())
     payment_sessions[payment_session_id] = {
         "client_session_id": req.client_session_id,
         "plan": req.plan,
         "amount": unique_amount,
+        "onboarding": req.onboarding,
         "status": "pending",
         "created_at": int(time.time()),
     }
@@ -503,19 +712,22 @@ async def create_payment_session(req: PaymentSessionCreateReq):
         "wallet": MASTER_WALLET_ADDRESS,
         "amount": unique_amount,
         "plan": req.plan,
+        "onboarding": req.onboarding,
     }
 
 @app.post("/api/payment/confirm")
-async def confirm_payment_session(req: PaymentSessionConfirmReq):
+async def confirm_payment_session(req: PaymentSessionConfirmReq, db: Session = Depends(get_db)):
     session_data = payment_sessions.get(req.payment_session_id)
     if not session_data:
         raise HTTPException(status_code=404, detail="Payment session not found")
     if session_data["client_session_id"] != req.client_session_id:
         raise HTTPException(status_code=403, detail="Payment confirmed for a different session")
-    
-    if not verify_blockchain_tx(req.txid, session_data["amount"]):
-        raise HTTPException(status_code=400, detail="❌ Blockchain gateway rejected TXID: transaction not found or amount mismatch!")
+    if int(time.time()) - session_data["created_at"] > PAYMENT_SESSION_TTL_SECONDS:
+        raise HTTPException(status_code=410, detail="Payment session expired. Create a new payment session.")
+    if session_data.get("status") == "paid":
+        raise HTTPException(status_code=409, detail="Payment session has already been confirmed")
 
+    reserve_verified_transaction(db, req.txid, session_data["amount"], "subscription_payment")
     session_data["status"] = "paid"
     session_data["txid"] = req.txid.strip()
     session_data["paid_at"] = int(time.time())
@@ -524,43 +736,27 @@ async def confirm_payment_session(req: PaymentSessionConfirmReq):
         client_session_id=session_data["client_session_id"],
         plan=session_data["plan"],
         amount=session_data["amount"],
+        onboarding=session_data.get("onboarding", False),
     )
     return {
         "status": "success",
         "payment_token": payment_token,
         "plan": session_data["plan"],
         "amount": session_data["amount"],
+        "onboarding": session_data.get("onboarding", False),
     }
 
 @app.post("/api/balance/deposit")
-async def deposit_balance(req: DepositReq, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.username == req.username).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-        
-    if req.amount <= 0:
-        raise HTTPException(status_code=400, detail="Invalid deposit amount")
-        
-    if not verify_blockchain_tx(req.txid, req.amount / 3000): 
-        raise HTTPException(status_code=400, detail="❌ Deposit transaction not confirmed on Base blockchain!")
-        
-    user.balance += req.amount
-    
-    date_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-    new_tx = Transaction(
-        username=req.username,
-        tx_type="deposit",
-        amount=req.amount,
-        date_str=date_str,
-        status="Completed"
+async def deposit_balance(req: DepositReq, current_user: User = Depends(get_current_user)):
+    require_owned_username(req.username, current_user)
+    raise HTTPException(
+        status_code=503,
+        detail="Balance deposits are disabled until a signed, chain-specific payment flow and price reconciliation are implemented.",
     )
-    db.add(new_tx)
-    db.commit()
-    
-    return {"status": "success", "new_balance": user.balance}
 
 @app.get("/api/balance/{username}")
-async def get_balance(username: str, db: Session = Depends(get_db)):
+async def get_balance(username: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    require_owned_username(username, current_user)
     user = db.query(User).filter(User.username == username).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -583,6 +779,9 @@ async def register(user: UserRegister, db: Session = Depends(get_db)):
     code_data = verification_codes.get(user.email)
     if not code_data:
         raise HTTPException(status_code=400, detail="Please request a verification code first!")
+    if int(time.time()) > code_data.get("expires_at", 0):
+        verification_codes.pop(user.email, None)
+        raise HTTPException(status_code=400, detail="Verification code expired. Request a new code.")
         
     if code_data["attempts"] >= 3:
         verification_codes.pop(user.email, None)
@@ -600,8 +799,11 @@ async def register(user: UserRegister, db: Session = Depends(get_db)):
         else:
             raise HTTPException(status_code=400, detail="A user with this username already exists!")
     
-    safe_password = user.password[:72] if user.password else ""
-    hashed_password = hash_password(safe_password)
+    if len(user.password.encode("utf-8")) > 72:
+        raise HTTPException(status_code=400, detail="Password must be no more than 72 bytes")
+    if len(user.password) < 12:
+        raise HTTPException(status_code=400, detail="Password must be at least 12 characters")
+    hashed_password = hash_password(user.password)
 
     new_user = User(
         username=user.username, 
@@ -610,7 +812,8 @@ async def register(user: UserRegister, db: Session = Depends(get_db)):
         subscription_plan=user.plan,
         fingerprint=user.fingerprint,
         balance=0.0,
-        subscription_activated_at=int(time.time())
+        subscription_activated_at=int(time.time()),
+        onboarding_purchased=payment_data.get("onboarding", False)
     )
     db.add(new_user)
     db.commit()
@@ -623,7 +826,7 @@ async def register(user: UserRegister, db: Session = Depends(get_db)):
     except Exception as e:
         print(f"[Warning] Failed to send email: {e}")
 
-    return {"status": "success", "message": "Registered successfully"}
+    return {"status": "success", "message": "Registered successfully", "onboarding": payment_data.get("onboarding", False)}
 
 @app.post("/api/login")
 async def login(user: UserLogin, db: Session = Depends(get_db)):
@@ -633,9 +836,11 @@ async def login(user: UserLogin, db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="Invalid login or password")
 
     now_ts = int(time.time())
+    if is_legacy_password_hash(db_user.password_hash):
+        db_user.password_hash = hash_password(user.password)
     if not db_user.subscription_activated_at:
         db_user.subscription_activated_at = now_ts
-        db.commit()
+    db.commit()
 
     expires_at = db_user.subscription_activated_at + SUBSCRIPTION_DURATION_SECONDS
     days_left = max(0, int((expires_at - now_ts) / (24 * 60 * 60)))
@@ -648,14 +853,24 @@ async def login(user: UserLogin, db: Session = Depends(get_db)):
         "extra_slots": db_user.extra_slots,
         "balance": db_user.balance,
         "days_left": days_left,
-        "renewal_price": SUBSCRIPTION_RENEWAL_PRICE,
+        "renewal_price": PLAN_PRICES.get(db_user.subscription_plan, PLAN_PRICES["Standard"]),
+        "onboarding_purchased": db_user.onboarding_purchased,
+        "access_token": issue_access_token(db_user.username, db),
+        "token_type": "Bearer",
+        "expires_in": AUTH_SESSION_DURATION_SECONDS,
     }
     
 @app.post("/api/wallets/add")
-async def add_wallet(wallet: WalletAdd, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.username == wallet.username).first()
-    plan = user.subscription_plan if user else "Standard"
-    extra = user.extra_slots if user else 0
+async def add_wallet(wallet: WalletAdd, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    require_owned_username(wallet.username, current_user)
+    user = current_user
+    wallet_address = wallet.wallet_address.strip()
+    if not (wallet_address.startswith("0x") and len(wallet_address) == 42 and all(char in "0123456789abcdefABCDEF" for char in wallet_address[2:])):
+        raise HTTPException(status_code=400, detail="Enter a valid EVM wallet address")
+    if db.query(Wallet).filter(Wallet.username == wallet.username, Wallet.wallet_address.ilike(wallet_address)).first():
+        raise HTTPException(status_code=400, detail="This wallet has already been added")
+    plan = user.subscription_plan
+    extra = user.extra_slots
     
     current_count = db.query(Wallet).filter(Wallet.username == wallet.username).count()
     max_allowed = BASE_SLOT_LIMITS.get(plan, 5) + extra
@@ -663,16 +878,15 @@ async def add_wallet(wallet: WalletAdd, db: Session = Depends(get_db)):
     if current_count >= max_allowed:
         raise HTTPException(status_code=400, detail=f"⚠️ Plan limit reached: {max_allowed} slots allowed for {plan}")
 
-    new_wallet = Wallet(username=wallet.username, wallet_address=wallet.wallet_address, encrypted_pk=wallet.encrypted_pk, proxy=wallet.proxy)
+    new_wallet = Wallet(username=wallet.username, wallet_address=wallet_address, encrypted_pk=None, proxy=wallet.proxy)
     db.add(new_wallet)
     db.commit()
     return {"status": "success", "message": "Wallet added"}
 
 @app.post("/api/wallets/buy-slot")
-async def buy_extra_slot(req: BuyExtraSlotReq, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.username == req.username).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+async def buy_extra_slot(req: BuyExtraSlotReq, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    require_owned_username(req.username, current_user)
+    user = current_user
     if user.balance < 10.0:
         raise HTTPException(status_code=400, detail="Insufficient balance ($10 required)")
         
@@ -687,7 +901,8 @@ async def buy_extra_slot(req: BuyExtraSlotReq, db: Session = Depends(get_db)):
     return {"status": "success", "message": f"Slot purchased! Total slots: {user.extra_slots}", "balance": user.balance}
 
 @app.get("/api/wallets/{username}")
-async def get_wallets(username: str, db: Session = Depends(get_db)):
+async def get_wallets(username: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    require_owned_username(username, current_user)
     wallets = db.query(Wallet).filter(Wallet.username == username).all()
     user = db.query(User).filter(User.username == username).first()
     plan = user.subscription_plan if user else "Standard"
@@ -702,8 +917,8 @@ async def get_wallets(username: str, db: Session = Depends(get_db)):
     }
 
 @app.post("/api/wallets/test-proxy/{wallet_id}")
-async def test_wallet_proxy(wallet_id: int, db: Session = Depends(get_db)):
-    wallet = db.query(Wallet).filter(Wallet.id == wallet_id).first()
+async def test_wallet_proxy(wallet_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    wallet = db.query(Wallet).filter(Wallet.id == wallet_id, Wallet.username == current_user.username).first()
     if not wallet or not wallet.proxy:
         raise HTTPException(status_code=404, detail="Wallet or proxy not found")
     
@@ -735,17 +950,83 @@ async def test_wallet_proxy(wallet_id: int, db: Session = Depends(get_db)):
         return {"status": "error", "message": f"Connection error: {str(e)}"}
 
 @app.delete("/api/wallets/delete/{wallet_id}")
-async def delete_wallet(wallet_id: int, db: Session = Depends(get_db)):
-    wallet = db.query(Wallet).filter(Wallet.id == wallet_id).first()
+async def delete_wallet(wallet_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    wallet = db.query(Wallet).filter(Wallet.id == wallet_id, Wallet.username == current_user.username).first()
     if not wallet:
         raise HTTPException(status_code=404, detail="Wallet not found")
     db.delete(wallet)
     db.commit()
     return {"status": "success", "message": "Wallet deleted"}
 
+@app.get("/api/budget-plan")
+async def get_budget_plan(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    plan = db.query(BudgetPlan).filter(BudgetPlan.username == current_user.username).first()
+    if not plan:
+        return {
+            "status": "success",
+            "plan": {
+                "network": "Base",
+                "planned_operations": 1,
+                "max_cost_per_operation": 1.0,
+                "extra_cost_reserve": 0.0,
+                "daily_cap": 10.0,
+                "monthly_cap": 50.0,
+            },
+        }
+    return {
+        "status": "success",
+        "plan": {
+            "network": plan.network,
+            "planned_operations": plan.planned_operations,
+            "max_cost_per_operation": plan.max_cost_per_operation,
+            "extra_cost_reserve": plan.extra_cost_reserve,
+            "daily_cap": plan.daily_cap,
+            "monthly_cap": plan.monthly_cap,
+        },
+    }
+
+@app.post("/api/budget-plan")
+async def save_budget_plan(
+    payload: BudgetPlanRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    supported_networks = {"Ethereum", "Base", "Arbitrum", "ZkSync", "Scroll", "Linea", "Solana", "BNB Chain", "Polygon", "Optimism", "Tron"}
+    if payload.network not in supported_networks:
+        raise HTTPException(status_code=400, detail="Unsupported network")
+    if not 1 <= payload.planned_operations <= 1000:
+        raise HTTPException(status_code=400, detail="Planned operations must be between 1 and 1000")
+    values = [payload.max_cost_per_operation, payload.extra_cost_reserve, payload.daily_cap, payload.monthly_cap]
+    if any(value < 0 or value > 100000 for value in values):
+        raise HTTPException(status_code=400, detail="Budget values are outside the permitted range")
+    planned_total = round(payload.planned_operations * payload.max_cost_per_operation + payload.extra_cost_reserve, 2)
+    if payload.max_cost_per_operation > payload.daily_cap or payload.daily_cap > payload.monthly_cap:
+        raise HTTPException(status_code=400, detail="Budget caps are inconsistent")
+    if planned_total > payload.monthly_cap:
+        raise HTTPException(status_code=400, detail="Planned cost exceeds the monthly cap")
+
+    plan = db.query(BudgetPlan).filter(BudgetPlan.username == current_user.username).first()
+    if not plan:
+        plan = BudgetPlan(username=current_user.username, updated_at=int(time.time()))
+        db.add(plan)
+    plan.network = payload.network
+    plan.planned_operations = payload.planned_operations
+    plan.max_cost_per_operation = payload.max_cost_per_operation
+    plan.extra_cost_reserve = payload.extra_cost_reserve
+    plan.daily_cap = payload.daily_cap
+    plan.monthly_cap = payload.monthly_cap
+    plan.updated_at = int(time.time())
+    db.commit()
+    return {"status": "success", "planned_total": planned_total, "message": "Budget plan saved"}
+
 @app.post("/api/start")
-async def start_farming(req: StartFarmReq, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.username == req.username).first()
+async def start_farming(req: StartFarmReq, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    require_owned_username(req.username, current_user)
+    raise HTTPException(
+        status_code=503,
+        detail="Automated signing is disabled until non-custodial wallet signing is implemented.",
+    )
+    user = current_user
     if user and user.balance < 1.50:
         raise HTTPException(status_code=400, detail="Insufficient funds for gas ($1.50 required)")
         
@@ -783,29 +1064,20 @@ async def start_farming(req: StartFarmReq, db: Session = Depends(get_db)):
     }
 
 @app.post("/api/scan/{username}")
-async def scan_wallets(username: str, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.username == username).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+async def scan_wallets(username: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    require_owned_username(username, current_user)
+    user = current_user
     wallets = db.query(Wallet).filter(Wallet.username == username).all()
     
     valid_wallets = [w for w in wallets if w.wallet_address.startswith("0x") and len(w.wallet_address) == 42]
-    
-    found_drops = []
-    if valid_wallets:
-        for i, w in enumerate(valid_wallets):
-            found_drops.append({
-                "wallet": w.wallet_address,
-                "amount": f"{(i + 1) * 150} Pts",
-                "protocol": "LayerZero / Base"
-            })
     
     return {
         "status": "success",
         "data": {
             "total_wallets_scanned": len(wallets),
             "valid_wallets_checked": len(valid_wallets),
-            "found_drops": found_drops
+            "found_drops": [],
+            "notice": "Eligibility scanning is not available until verified protocol integrations are implemented.",
         }
     }
 

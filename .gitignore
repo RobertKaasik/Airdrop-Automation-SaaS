@@ -1,0 +1,16 @@
+.env
+.env.*
+!.env.example
+
+__pycache__/
+*.py[cod]
+
+*.db
+*.sqlite
+*.sqlite3
+
+wallets.txt
+airdrop_x_backend_report.json
+
+.pytest_cache/
+.mypy_cache/

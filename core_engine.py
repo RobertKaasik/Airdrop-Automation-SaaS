@@ -182,6 +182,12 @@ class RealFarmWorker:
             return {"wallet_id": self.wallet_id, "status": "Failed", "error": clean_err}
 
 async def run_real_farm(wallets_data, rpc_list, master_password: str, target_network: str = "Base"):
+    logger.warning("Automated signing is disabled until non-custodial wallet signing is implemented.")
+    return [{
+        "wallet_id": wallet.get("id", 0),
+        "status": "Blocked",
+        "reason": "Non-custodial wallet signing is required before transactions can be sent.",
+    } for wallet in wallets_data]
     logger.info(f"🚀 Старт антифрод-ядра фермы (Swaps & Bridges). Сеть: {target_network}")
     
     shuffled_wallets = list(wallets_data)

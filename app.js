@@ -104,12 +104,35 @@ let lastSaveTimestamp = 0;
 let lastRandomizeTimestamp = 0; 
 let cachedStatsData = { current_slots: 1, max_slots: 300, is_sold_out: false };
 
-const PLAN_PRICES = { Standard: 95, Pro: 150, Premium: 280 };
+const PLAN_PRICES = { Standard: 29, Pro: 49, Premium: 89 };
+const ONBOARDING_PRICE = 49;
 const clientSessionId = getOrCreateClientSessionId();
 let paymentAccessToken = sessionStorage.getItem('ax_payment_token') || '';
 let paymentUnlocked = sessionStorage.getItem('ax_paid_session_id') === clientSessionId && !!paymentAccessToken;
 
+if (typeof window.fetch === 'function') {
+    const nativeFetch = window.fetch.bind(window);
+    window.fetch = (resource, options = {}) => {
+        const requestUrl = typeof resource === 'string' ? resource : resource.url;
+        const accessToken = sessionStorage.getItem('ax_access_token');
+        if (!accessToken || !requestUrl || !requestUrl.startsWith('/api/')) {
+            return nativeFetch(resource, options);
+        }
+        const headers = new Headers(options.headers || {});
+        headers.set('Authorization', `Bearer ${accessToken}`);
+        return nativeFetch(resource, { ...options, headers });
+    };
+}
+
 const MASTER_WALLET = "0x5e5316Dea1c44d220d4c60A5fcC2949E5A06Fc66";
+const BASE_MAINNET_CHAIN_ID = '0x2105';
+const BASE_MAINNET_CONFIG = {
+    chainId: BASE_MAINNET_CHAIN_ID,
+    chainName: 'Base Mainnet',
+    nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+    rpcUrls: ['https://mainnet.base.org'],
+    blockExplorerUrls: ['https://base.blockscout.com'],
+};
 
 const NETWORKS_CONFIG = [
     { name: "Ethereum", symbol: "ETH", key: "Ethereum", icon: '<img src="https://cryptologos.cc/logos/ethereum-eth-logo.svg?v=032" style="width:32px; height:32px;">', explorer: "https://etherscan.io", deadline: "2026-10-15T00:00:00" },
@@ -140,7 +163,8 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 
     const savedUsername = localStorage.getItem('airdrop_username');
-    if (savedUsername) {
+    const savedAccessToken = sessionStorage.getItem('ax_access_token');
+    if (savedUsername && savedAccessToken) {
         isLoggedIn = true;
         userPlan = localStorage.getItem('selected_plan') || 'Standard';
         
@@ -275,6 +299,7 @@ const STATIC_TEXT_BINDINGS = [
     ['p-pro-badge', 'proBadge'], ['p-pro-top', 'subTop'], ['p-pro-name', 'proName'], ['p-pro-per', 'proPer'], ['p-pro-f1', 'proF1'], ['p-pro-f2', 'proF2'], ['p-pro-f3', 'proF3'], ['p-pro-f4', 'proF4'], ['p-pro-btn', 'proBtn'],
     ['p-prem-top', 'subTop'], ['p-prem-name', 'premName'], ['p-prem-per', 'premPer'], ['p-prem-f1', 'premF1'], ['p-prem-f2', 'premF2'], ['p-prem-f3', 'premF3'], ['p-prem-f4', 'premF4'], ['p-prem-btn', 'premBtn'],
     ['walletModalTitle', 'walletModalTitle'], ['wm-dep-title', 'wmDepTitle'], ['wm-master-lbl', 'wmMasterLbl'], ['wm-net-lbl', 'wmNetLbl'], ['wm-amt-lbl', 'wmAmtLbl'], ['wm-dep-btn', 'wmDepBtn'], ['wm-edit-title', 'wmEditTitle'], ['wm-save-btn', 'wmSaveBtn'], ['wm-del-btn', 'wmDelBtn'],
+    ['onboarding-title', 'onboardingTitle'], ['onboarding-desc', 'onboardingDesc'],
     ['footer-rights', 'footerRights'], ['footer-privacy', 'footerPrivacy'], ['footer-terms', 'footerTerms'], ['page-title', 'pageTitle']
 ];
 
@@ -298,29 +323,53 @@ window.translateBackendMessage = function(msg) {
     if (!msg) return "";
 
     const activeLang = getActiveLang();
-    if (activeLang === 'en') return msg; // Для английского оставляем как есть
+    const locale = translations[activeLang] || {};
+    const exactMessages = locale.backend || {};
+    if (exactMessages[msg]) return exactMessages[msg];
 
-    const loc = window.AIRDROP_LOCALES[activeLang]?.backend;
-    if (!loc) return msg;
+    const dynamicPatterns = [
+        ['invalidCodeAttempts', /^Invalid code! Attempts left:\s*(.*)$/],
+        ['planLimitReached', /^Plan limit reached:\s*(.*)$/],
+        ['slotPurchased', /^Slot purchased! Total slots:\s*(.*)$/],
+        ['proxyWorking', /^Proxy is working! Ping:\s*(.*)$/],
+        ['connectionError', /^Connection error:\s*(.*)$/],
+        ['delayLimitExceeded', /^Delay limit exceeded for day\s*(.*)$/]
+    ];
 
-    // Точные совпадения (из словаря)
-    if (loc[msg]) return loc[msg];
+    for (const [key, pattern] of dynamicPatterns) {
+        const match = msg.match(pattern);
+        const template = locale.backendDynamic?.[key];
+        if (match && template) return template.replace('{details}', match[1].trim());
+    }
 
-    // Динамические сообщения с переменными (прокси, лимиты, слоты)
-    if (msg.includes("Invalid code! Attempts left:")) return msg.replace("Invalid code! Attempts left:", activeLang === 'ru' ? "Неверный код! Осталось попыток:" : "验证码无效！剩余次数：");
-    if (msg.includes("Plan limit reached:")) return activeLang === 'ru' ? "Лимит слотов для вашего тарифа исчерпан!" : "您的套餐限制已满！";
-    if (msg.includes("Slot purchased! Total slots:")) return msg.replace("Slot purchased! Total slots:", activeLang === 'ru' ? "Слот куплен! Всего слотов:" : "槽位已购买！总槽位：");
-    if (msg.includes("Proxy is working! Ping:")) return msg.replace("Proxy is working! Ping:", activeLang === 'ru' ? "Прокси рабочий! Пинг:" : "代理正常！延迟：");
-    if (msg.includes("Connection error:")) return msg.replace("Connection error:", activeLang === 'ru' ? "Ошибка соединения:" : "连接错误：");
-    if (msg.includes("Delay limit exceeded for day")) return activeLang === 'ru' ? "Превышен лимит задержки (максимум 7200 секунд)" : "延迟限制超标（最大7200秒）";
-
-    return msg; // Если перевода нет - отдаем оригинал
+    return msg;
 };
+
+function escapeHtml(value) {
+    return String(value).replace(/[&<>'"]/g, character => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+    })[character]);
+}
+
+function translateBackendDetail(detail, fallbackKey = 'errors.genericRequestFailed') {
+    let translated;
+    if (Array.isArray(detail)) {
+        translated = detail.map(item => {
+            const message = item?.msg || '';
+            return message === 'Field required' ? t('errors.fillAllFields') : window.translateBackendMessage(message);
+        }).filter(Boolean).join(', ') || t(fallbackKey);
+    } else {
+        translated = typeof detail === 'string' && detail ? window.translateBackendMessage(detail) : t(fallbackKey);
+    }
+    return escapeHtml(translated);
+}
 
 function returnToMainSite() {
     isLoggedIn = false;
     localStorage.removeItem('airdrop_username');
     localStorage.removeItem('airdrop_current_section');
+    sessionStorage.removeItem('ax_access_token');
+    sessionStorage.removeItem('ax_base_wallet_address');
     
     const loginBtn = document.getElementById('login-btn');
     if (loginBtn) loginBtn.style.display = '';
@@ -371,9 +420,11 @@ function handlePricingOverlayClick(event) { if (event.target.id === 'pricingModa
 
 function selectPlanAndRegister(planName, price) {
     closePricingModal();
+    const onboarding = document.getElementById('onboardingOption')?.checked ?? false;
     userPlan = planName;
     localStorage.setItem('selected_plan', planName);
     localStorage.setItem('selected_price', String(price));
+    localStorage.setItem('selected_onboarding', onboarding);
     clearPaymentAccess();
     openModal('payment');
 }
@@ -428,8 +479,9 @@ function openModal(type) {
         `;
     } else if (type === 'payment') {
         const chosenPlan = localStorage.getItem('selected_plan') || 'Standard';
-        const basePrice = Number(localStorage.getItem('selected_price') || PLAN_PRICES[chosenPlan] || 95);
-        const displayAmount = (basePrice + 0.47).toFixed(2);
+        const basePrice = Number(localStorage.getItem('selected_price') || PLAN_PRICES[chosenPlan] || PLAN_PRICES.Standard);
+        const withOnboarding = localStorage.getItem('selected_onboarding') === 'true';
+        const displayAmount = (basePrice + (withOnboarding ? ONBOARDING_PRICE : 0) + 0.47).toFixed(2);
         const planDisplayLabel = chosenPlan === 'Standard' ? t.stdName : chosenPlan === 'Pro' ? t.proName : t.premName;
 
         container.innerHTML = `
@@ -450,6 +502,7 @@ function openModal(type) {
             <div style="background:#0a0a0a; border:1px solid var(--border-color); border-radius:12px; padding:12px; margin-bottom:12px; text-align:center;">
                 <div style="font-size:11px; color:#a3a3a3; margin-bottom:2px;">${t('payAmount')}</div>
                 <div style="font-size:20px; color:#fff; font-weight:700; margin-bottom:8px;">$${displayAmount}</div>
+                ${withOnboarding ? `<div style="font-size:11px; color:#b19cd9; margin-bottom:8px;">${t('onboardingSelected')}</div>` : ''}
                 
                 <div style="font-size:11px; color:#a3a3a3; margin-bottom:2px;">${t('payWallet')} (<span id="activePayNet">Base L2</span>):</div>
                 <div style="background:#181818; padding:6px 8px; border-radius:8px; font-family:monospace; font-size:11px; color:#fff; word-break:break-all; margin-bottom:6px;">${MASTER_WALLET}</div>
@@ -469,7 +522,7 @@ function openModal(type) {
         setTimeout(() => renderPaymentQR(MASTER_WALLET, displayAmount), 100);
     } else if (type === 'register') {
         const chosenPlan = localStorage.getItem('selected_plan') || 'Standard';
-        const chosenPrice = Number(localStorage.getItem('selected_price') || PLAN_PRICES[chosenPlan] || 95);
+        const chosenPrice = Number(localStorage.getItem('selected_price') || PLAN_PRICES[chosenPlan] || PLAN_PRICES.Standard);
         const planDisplayLabel = chosenPlan === 'Standard' ? t.stdName : chosenPlan === 'Pro' ? t.proName : t.premName;
         const btnText = codeCooldownSeconds > 0 ? `${codeCooldownSeconds}s` : t('auth.sendCode');
         const btnDisabled = codeCooldownSeconds > 0 ? 'disabled' : '';
@@ -609,7 +662,8 @@ function copyWalletAddress(address, btn) {
 
 async function startPlanPayment() {
     const chosenPlan = localStorage.getItem('selected_plan') || 'Standard';
-    const basePrice = PLAN_PRICES[chosenPlan] || 95;
+    const basePrice = PLAN_PRICES[chosenPlan] || PLAN_PRICES.Standard;
+    const onboarding = localStorage.getItem('selected_onboarding') === 'true';
     const status = document.getElementById('paymentStatusContainer');
     const txid = document.getElementById('txidInput').value.trim();
 
@@ -622,9 +676,13 @@ async function startPlanPayment() {
         const createRes = await fetch('/api/payment/create-session', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ plan: chosenPlan, amount: basePrice, client_session_id: clientSessionId })
+            body: JSON.stringify({ plan: chosenPlan, amount: basePrice, onboarding, client_session_id: clientSessionId })
         });
         const createData = await createRes.json();
+        if (!createRes.ok) {
+            status.innerHTML = `<div style="color:#ef4444; font-size:12px; margin-top:8px;">${translateBackendDetail(createData.detail, 'errors.paymentFailed')}</div>`;
+            return;
+        }
         
         const confirmRes = await fetch('/api/payment/confirm', {
             method: 'POST',
@@ -634,7 +692,7 @@ async function startPlanPayment() {
         const confirmData = await confirmRes.json();
 
         if (!confirmRes.ok) {
-            status.innerHTML = `<div style="color:#ef4444; font-size:12px; margin-top:8px;">${confirmData.detail || t('errors.paymentFailed')}</div>`;
+            status.innerHTML = `<div style="color:#ef4444; font-size:12px; margin-top:8px;">${translateBackendDetail(confirmData.detail, 'errors.paymentFailed')}</div>`;
             return;
         }
 
@@ -678,8 +736,8 @@ async function validateRegister() {
         document.getElementById('regPass')?.focus();
         return;
     }
-    if (pass.length < 6) {
-        setFormError('errorContainer', t('errors.passwordTooShort'), 'error', 'regPass');
+    if (pass.length < 12) {
+        setFormError('errorContainer', t('errors.registrationPasswordTooShort'), 'error', 'regPass');
         document.getElementById('regPass')?.focus();
         return;
     }
@@ -714,11 +772,7 @@ async function validateRegister() {
         if (!response.ok) {
             let errMsg = t('errors.genericRequestFailed');
             if (result.detail) {
-                if (Array.isArray(result.detail)) {
-                    errMsg = result.detail.map(e => e.msg === 'Field required' ? t('errors.fillAllFields') : e.msg).join(', ');
-                } else {
-                    errMsg = result.detail;
-                }
+                errMsg = translateBackendDetail(result.detail);
             }
             setFormError('errorContainer', errMsg);
             return;
@@ -771,12 +825,13 @@ async function validateLogin() {
 
         if (res.ok) {
             localStorage.setItem('airdrop_username', data.username);
+            sessionStorage.setItem('ax_access_token', data.access_token);
             userPlan = data.plan || 'Standard';
             subscriptionDaysLeft = data.days_left ?? 29;
             handleLoginSuccess();
         } else {
             let errMsg = t('errors.loginFailed');
-            if (data.detail) errMsg = Array.isArray(data.detail) ? data.detail.map(e => e.msg).join(', ') : data.detail;
+            if (data.detail) errMsg = translateBackendDetail(data.detail, 'errors.loginFailed');
             setFormError('loginErrorContainer', errMsg);
         }
     } catch (error) {
@@ -806,28 +861,68 @@ function switchMenu(element, sectionName) {
     renderDashboardContent(sectionName);
 }
 
+function updateBaseWalletConnectionState(address = sessionStorage.getItem('ax_base_wallet_address') || '') {
+    const status = document.getElementById('baseWalletConnectionStatus');
+    const addressInput = document.getElementById('newWalletAddress');
+    if (addressInput && address) addressInput.value = address;
+    if (status) {
+        const t = translations[currentLang];
+        status.innerText = address ? t.walletConnected.replace('{address}', `${address.slice(0, 6)}…${address.slice(-4)}`) : '';
+        status.style.display = address ? 'block' : 'none';
+    }
+}
+
+async function connectBaseWallet() {
+    const t = translations[currentLang];
+    const provider = window.ethereum;
+    if (!provider || typeof provider.request !== 'function') {
+        showNotification(t.walletConnectUnsupported, 'error');
+        return;
+    }
+    try {
+        const accounts = await provider.request({ method: 'eth_requestAccounts' });
+        if (!Array.isArray(accounts) || !accounts[0]) throw new Error('No account returned');
+        let chainId = await provider.request({ method: 'eth_chainId' });
+        if (chainId !== BASE_MAINNET_CHAIN_ID) {
+            try {
+                await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: BASE_MAINNET_CHAIN_ID }] });
+            } catch (switchError) {
+                if (switchError?.code !== 4902) throw switchError;
+                await provider.request({ method: 'wallet_addEthereumChain', params: [BASE_MAINNET_CONFIG] });
+            }
+            chainId = await provider.request({ method: 'eth_chainId' });
+        }
+        if (chainId !== BASE_MAINNET_CHAIN_ID) {
+            showNotification(t.walletBaseRequired, 'error');
+            return;
+        }
+        const address = accounts[0];
+        sessionStorage.setItem('ax_base_wallet_address', address);
+        updateBaseWalletConnectionState(address);
+    } catch (error) {
+        showNotification(t.walletConnectRejected, 'error');
+    }
+}
+
 async function addNewWalletToDB() {
     const username = localStorage.getItem('airdrop_username') || "Robert";
     const address = document.getElementById('newWalletAddress').value.trim();
-    const pk = document.getElementById('newWalletPk').value.trim();
     const proxy = document.getElementById('newWalletProxy').value.trim();
     const msg = document.getElementById('walletResponseMsg');
 
     const res = await fetch('/api/wallets/add', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, wallet_address: address, encrypted_pk: pk, proxy })
+        body: JSON.stringify({ username, wallet_address: address, proxy })
     });
     const data = await res.json();
     if(res.ok) {
         showNotification("OK!");
         document.getElementById('newWalletAddress').value = '';
-        document.getElementById('newWalletPk').value = '';
         document.getElementById('newWalletProxy').value = '';
         loadWalletsFromDB();
     } else {
-        let errText = data.detail;
-        if (Array.isArray(errText)) errText = errText.map(e => e.msg).join(', ');
+        const errText = translateBackendDetail(data.detail);
         msg.innerHTML = `<span style="color: #ef4444;">${errText}</span>`;
     }
 }
@@ -878,7 +973,7 @@ async function testWalletProxy(walletId, btn) {
         const data = await res.json();
         
         if (res.ok && data.status === 'success') {
-            const match = data.message.match(/Пинг: (\d+)ms/);
+            const match = String(data.message || '').match(/(\d+)\s*ms/);
             const ping = match ? parseInt(match[1]) : 0;
             if (ping >= 1000) {
                 btn.style.background = 'rgba(234, 179, 8, 0.1)';
@@ -925,7 +1020,7 @@ async function buyExtraSlot() {
         const balEl = document.getElementById('userBalanceValue');
         if (balEl && data.balance !== undefined) balEl.innerText = `$${data.balance.toFixed(2)}`;
     } else {
-        showNotification(data.detail || "Error", "error");
+        showNotification(translateBackendDetail(data.detail), "error");
     }
 }
 
@@ -1069,9 +1164,6 @@ async function saveGlobalProfileSettings() {
     if (now - lastSaveTimestamp < 1500) return;
     lastSaveTimestamp = now;
 
-    const telegram = document.getElementById('globalTelegramInput')?.value.trim() || '';
-    localStorage.setItem('ax_telegram_chat_id', telegram);
-    
     const notifySettings = document.getElementById('notifSettingsToggle')?.checked ?? true;
     const notifyStart = document.getElementById('notifStartToggle')?.checked ?? true;
     const notifySuccess = document.getElementById('notifSuccessToggle')?.checked ?? true;
@@ -1096,7 +1188,7 @@ async function saveGlobalProfileSettings() {
         days: activeDays, 
         schedule: dailySchedule, 
         gwei, 
-        telegram,
+        telegram: null,
         notifySettings,
         notifyStart,
         notifySuccess,
@@ -1114,7 +1206,7 @@ async function saveGlobalProfileSettings() {
         if (response.ok && result.status === 'success') {
             showNotification("OK!");
         } else {
-            showNotification(result.detail || "Error", "error");
+            showNotification(translateBackendDetail(result.detail), "error");
         }
     } catch (err) {
         showNotification("Error", "error");
@@ -1128,7 +1220,141 @@ function toggleHideBanners(checkbox) {
     renderDashboardContent(currentSection);
 }
 
-// --- Фарм и сканирование лута ---
+// --- Планирование расходов и сканирование ---
+function getBudgetPlanInputValue(id, fallback = 0) {
+    const input = document.getElementById(id);
+    const value = Number.parseFloat(input?.value);
+    return Number.isFinite(value) ? value : fallback;
+}
+
+async function refreshTelegramConnectionState() {
+    const statusEl = document.getElementById('telegramConnectionState');
+    const testButton = document.getElementById('telegramTestButton');
+    if (!statusEl) return;
+    try {
+        const response = await fetch('/api/telegram/status');
+        const data = await response.json();
+        if (!response.ok) throw new Error('status unavailable');
+        statusEl.textContent = data.linked ? t('tgLinked') : t('tgNotLinked');
+        statusEl.style.color = data.linked ? '#22c55e' : 'var(--text-muted)';
+        if (testButton) testButton.style.display = data.linked ? 'inline-flex' : 'none';
+    } catch (error) {
+        statusEl.textContent = t('tgUnavailable');
+        statusEl.style.color = '#eab308';
+    }
+}
+
+async function createTelegramLink() {
+    const resultEl = document.getElementById('telegramLinkResult');
+    if (!resultEl) return;
+    resultEl.textContent = t('tgPreparingLink');
+    try {
+        const response = await fetch('/api/telegram/link-code', { method: 'POST' });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'link unavailable');
+        resultEl.innerHTML = '';
+        const instruction = document.createElement('div');
+        instruction.textContent = t('tgLinkReady');
+        const link = document.createElement('a');
+        link.href = data.bot_link;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.textContent = t('tgOpenBot');
+        link.style.cssText = 'display:inline-flex; margin-top:8px; color:#c4b5fd; font-weight:600;';
+        resultEl.append(instruction, link);
+        showNotification(t('tgLinkReady'));
+    } catch (error) {
+        resultEl.textContent = t('tgUnavailable');
+        showNotification(t('tgUnavailable'), 'error');
+    }
+}
+
+async function sendTelegramTest() {
+    try {
+        const response = await fetch('/api/telegram/test', { method: 'POST' });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'test failed');
+        showNotification(t('tgTestSent'));
+    } catch (error) {
+        showNotification(translateBackendDetail(error.message, 'errors.genericRequestFailed'), 'error');
+    }
+}
+
+function updateTransactionPlanEstimate() {
+    const operations = Math.max(1, Math.floor(getBudgetPlanInputValue('planOperations', 1)));
+    const maxCost = Math.max(0, getBudgetPlanInputValue('planMaxCost', 0));
+    const reserve = Math.max(0, getBudgetPlanInputValue('planReserve', 0));
+    const dailyCap = Math.max(0, getBudgetPlanInputValue('planDailyCap', 0));
+    const monthlyCap = Math.max(0, getBudgetPlanInputValue('planMonthlyCap', 0));
+    const plannedTotal = operations * maxCost + reserve;
+    const isInvalid = maxCost > dailyCap || dailyCap > monthlyCap || plannedTotal > monthlyCap;
+    const estimate = document.getElementById('planEstimateValue');
+    const riskCap = document.getElementById('planRiskCapValue');
+    const warning = document.getElementById('planBudgetWarning');
+    const t = translations[currentLang];
+
+    if (estimate) estimate.innerText = `$${plannedTotal.toFixed(2)}`;
+    if (riskCap) riskCap.innerText = `$${monthlyCap.toFixed(2)}`;
+    if (warning) {
+        warning.innerText = isInvalid ? t.planInvalid : '';
+        warning.style.display = isInvalid ? 'block' : 'none';
+    }
+    return !isInvalid;
+}
+
+async function loadTransactionPlan() {
+    try {
+        const response = await fetch('/api/budget-plan');
+        const data = await response.json();
+        if (!response.ok || !data.plan) return;
+        const plan = data.plan;
+        const fieldMap = {
+            planNetwork: plan.network,
+            planOperations: plan.planned_operations,
+            planMaxCost: plan.max_cost_per_operation,
+            planReserve: plan.extra_cost_reserve,
+            planDailyCap: plan.daily_cap,
+            planMonthlyCap: plan.monthly_cap,
+        };
+        Object.entries(fieldMap).forEach(([id, value]) => {
+            const input = document.getElementById(id);
+            if (input && value !== undefined) input.value = value;
+        });
+        updateTransactionPlanEstimate();
+    } catch (error) {
+        updateTransactionPlanEstimate();
+    }
+}
+
+async function saveTransactionPlan() {
+    if (!updateTransactionPlanEstimate()) {
+        showNotification(translations[currentLang].planInvalid, 'error');
+        return;
+    }
+    const payload = {
+        network: document.getElementById('planNetwork')?.value || 'Base',
+        planned_operations: Math.max(1, Math.floor(getBudgetPlanInputValue('planOperations', 1))),
+        max_cost_per_operation: Math.max(0, getBudgetPlanInputValue('planMaxCost', 0)),
+        extra_cost_reserve: Math.max(0, getBudgetPlanInputValue('planReserve', 0)),
+        daily_cap: Math.max(0, getBudgetPlanInputValue('planDailyCap', 0)),
+        monthly_cap: Math.max(0, getBudgetPlanInputValue('planMonthlyCap', 0)),
+    };
+    try {
+        const response = await fetch('/api/budget-plan', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        if (!response.ok) {
+            showNotification(translations[currentLang].planInvalid, 'error');
+            return;
+        }
+        showNotification(translations[currentLang].planSaved, 'success');
+    } catch (error) {
+        showNotification(translations[currentLang].planInvalid, 'error');
+    }
+}
+
 async function startAutoFarming() {
     const netSelect = document.getElementById('farmNetwork');
     const net = netSelect ? netSelect.value : '';
@@ -1175,7 +1401,7 @@ async function startAutoFarming() {
                 if (balEl) balEl.innerText = `$${userInternalBalance.toFixed(2)}`;
             }
         } else {
-            if (log) log.innerHTML += `<br><span style="color: #ef4444;">❌ Ошибка: ${data.detail}</span>`;
+            if (log) log.innerHTML += `<br><span style="color: #ef4444;">❌ Ошибка: ${translateBackendDetail(data.detail)}</span>`;
         }
     } catch (e) {
         showNotification("Error", "error");
@@ -1287,7 +1513,7 @@ async function submitTopUpBalance() {
             closeAuthModal();
             renderDashboardContent('Account');
         } else {
-            status.innerHTML = `<div style="color:#ef4444; font-size:12px; margin-top:8px;">${data.detail || 'Error'}</div>`;
+            status.innerHTML = `<div style="color:#ef4444; font-size:12px; margin-top:8px;">${translateBackendDetail(data.detail)}</div>`;
         }
     } catch (e) {
         status.innerHTML = `<div style="color:#ef4444; font-size:12px; margin-top:8px;">Error</div>`;
@@ -1300,10 +1526,8 @@ async function loadPlatformStats() {
         const data = await res.json();
         window.cachedStatsData = data;
         const counterEl = document.getElementById('slots-counter-text');
-        const t = translations[currentLang];
-        
         if (counterEl) {
-            counterEl.innerHTML = `${t.privateSoftware}. <b style="color:#fff; margin-left:8px;">${data.current_slots} / ${data.max_slots} SLOTS</b>`;
+            counterEl.innerHTML = `${t('privateSoftware')}. <b style="color:#fff; margin-left:8px;">${data.current_slots} / ${data.max_slots} ${t('slotsShort')}</b>`;
         }
 
         if (data.is_sold_out) {
@@ -1428,7 +1652,6 @@ function renderDashboardContent(section) {
         const notifStartChecked = localStorage.getItem('ax_notify_start') !== 'false' ? 'checked' : '';
         const notifSuccessChecked = localStorage.getItem('ax_notify_success') !== 'false' ? 'checked' : '';
         const notifErrorChecked = localStorage.getItem('ax_notify_error') !== 'false' ? 'checked' : '';
-        const savedTelegramId = localStorage.getItem('ax_telegram_chat_id') || '';
 
         const antiSybilWarningHtml = hideAllBanners ? '' : `
             <div id="antiSybilWarningBox" style="background: linear-gradient(135deg, rgba(234, 179, 8, 0.12), rgba(234, 179, 8, 0.03)); border: 1px solid rgba(234, 179, 8, 0.35); border-radius: 16px; padding: 18px 20px; margin-bottom: 18px; display: flex; gap: 14px; align-items: flex-start; position: relative; box-shadow: 0 4px 20px rgba(0,0,0,0.2);">
@@ -1438,12 +1661,6 @@ function renderDashboardContent(section) {
                     <div style="color: var(--text-muted); font-size: 13px; line-height: 1.5;">${t.setWarnDesc}</div>
                 </div>
                 <span onclick="document.getElementById('antiSybilWarningBox').style.display='none'" style="cursor: pointer; color: var(--text-muted); font-size: 16px; padding: 2px 6px; transition: color 0.2s;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--text-muted)'">✕</span>
-            </div>
-        `;
-
-        const telegramTipBoxHtml = hideAllBanners ? '' : `
-            <div style="background: rgba(59, 130, 246, 0.1); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: 10px; padding: 10px 12px; margin-top: 8px; font-size: 12px; color: var(--text-muted); line-height: 1.4;">
-                ℹ️ ${t.tgTip} <b style="color:#fff;">AirdropX Bot (@AirdropX_Support_Bot)</b> ${t.tgTip2} <code style="color:#fff; background:#1f1f1f; padding:2px 4px; border-radius:4px;">/start</code> ${t.tgTip3}
             </div>
         `;
 
@@ -1492,10 +1709,14 @@ function renderDashboardContent(section) {
                         <label style="font-size: 12px; color: var(--text-muted); display: block; margin-bottom: 6px;">${t.setGwei}</label>
                         <input type="number" class="auth-input" value="30" min="5" max="300" id="globalGweiInput" oninput="checkInputLimit(this, 300)" style="padding: 10px 12px; background: var(--bg-main); border-radius: 10px; font-size: 13px;">
                     </div>
-                    <div>
-                        <label style="font-size: 12px; color: var(--text-muted); display: block; margin-bottom: 6px;">${t.setTg}</label>
-                        <input type="text" class="auth-input" placeholder="${t.tgPh}" id="globalTelegramInput" value="${savedTelegramId}" style="padding: 10px 12px; background: var(--bg-main); border-radius: 10px; font-size: 13px;">
-                        ${telegramTipBoxHtml}
+                    <div style="background:var(--bg-main); border:1px solid var(--border-color); border-radius:10px; padding:12px;">
+                        <div style="font-size:13px; color:#fff; font-weight:600;">${t.tgConnectTitle}</div>
+                        <div id="telegramConnectionState" style="font-size:12px; color:var(--text-muted); margin-top:4px;">${t.tgChecking}</div>
+                        <div style="display:flex; flex-wrap:wrap; gap:8px; margin-top:10px;">
+                            <button type="button" onclick="createTelegramLink()" style="background:#7c3aed; color:#fff; border:0; border-radius:8px; padding:8px 10px; cursor:pointer; font-size:12px; font-weight:600;">${t.tgConnectBtn}</button>
+                            <button type="button" id="telegramTestButton" onclick="sendTelegramTest()" style="display:none; background:transparent; color:#c4b5fd; border:1px solid #7c3aed; border-radius:8px; padding:8px 10px; cursor:pointer; font-size:12px;">${t.tgTestBtn}</button>
+                        </div>
+                        <div id="telegramLinkResult" style="font-size:12px; color:var(--text-muted); line-height:1.4; margin-top:8px;"></div>
                     </div>
                 </div>
 
@@ -1525,7 +1746,10 @@ function renderDashboardContent(section) {
                 </label>
             </div>
         `;
-        setTimeout(updateDailyConfigsUI, 50);
+        setTimeout(() => {
+            updateDailyConfigsUI();
+            refreshTelegramConnectionState();
+        }, 50);
 
     } else if (section === 'Looter') {
         centerHtml = `
@@ -1537,27 +1761,30 @@ function renderDashboardContent(section) {
             </div>
         `;
     } else if (section === 'Farming') {
+        const plannerNetworkOptions = NETWORKS_CONFIG.map(net => `<option value="${net.key}">${net.name} (${net.symbol})</option>`).join('');
         centerHtml = `
             <div class="dashboard-card">
                 <h3 style="color: #fff; margin-top: 0; font-size: 16px;">${t.farmTitle}</h3>
-                <p style="color: var(--text-muted); font-size: 13px; line-height: 1.5; margin-bottom: 12px;">${t.farmDesc} (${t.subPlan}: <b>${userPlan}</b>)</p>
+                <p style="color: var(--text-muted); font-size: 13px; line-height: 1.5; margin-bottom: 12px;">${t.farmDesc}</p>
+                <div style="background:rgba(59,130,246,.08); border:1px solid rgba(59,130,246,.25); color:#bfdbfe; padding:10px 12px; border-radius:10px; font-size:12px; line-height:1.5; margin-bottom:14px;">${t.planSigningNote}</div>
                 <label style="color: var(--text-muted); font-size: 12px; display: block; margin-bottom: 6px;">${t.netSelect}</label>
-                <select class="auth-input" id="farmNetwork" style="margin-bottom: 14px; font-size: 13px; padding: 10px 12px;">
-                    <option value="" disabled selected>${t.netPh}</option>
-                    <option value="Base">Base L2</option>
-                    <option value="Ethereum">Ethereum Mainnet</option>
-                    <option value="Arbitrum">Arbitrum One</option>
-                    <option value="Linea">Linea Mainnet</option>
-                    <option value="Solana">Solana</option>
-                    <option value="BNB Chain">BNB Chain (BSC)</option>
-                    <option value="Polygon">Polygon (POL)</option>
-                    <option value="Optimism">Optimism</option>
-                    <option value="Tron">Tron</option>
-                </select>
-                <button type="button" onclick="startAutoFarming()" class="btn-purple-lg" style="font-size: 13px; padding: 12px 20px; width:auto;">${t.btnFarm}</button>
-                <div id="farm-console-logs" style="margin-top: 16px; background: var(--bg-main); padding: 16px; border-radius: 12px; font-family: monospace; font-size: 13px; line-height: 1.5; color: #22c55e; min-height: 250px; max-height: 380px; overflow-y: auto; border: 1px solid var(--border-color);">${t.logWait}</div>
+                <select class="auth-input" id="planNetwork" style="margin-bottom: 12px; font-size: 13px; padding: 10px 12px;">${plannerNetworkOptions}</select>
+                <div style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px;">
+                    <label style="color:var(--text-muted); font-size:12px;">${t.planOps}<input id="planOperations" type="number" min="1" max="1000" value="1" oninput="updateTransactionPlanEstimate()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"></label>
+                    <label style="color:var(--text-muted); font-size:12px;">${t.planMaxCost}<input id="planMaxCost" type="number" min="0" step="0.01" value="1" oninput="updateTransactionPlanEstimate()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"></label>
+                    <label style="color:var(--text-muted); font-size:12px;">${t.planReserve}<input id="planReserve" type="number" min="0" step="0.01" value="0" oninput="updateTransactionPlanEstimate()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"></label>
+                    <label style="color:var(--text-muted); font-size:12px;">${t.planDailyCap}<input id="planDailyCap" type="number" min="0" step="0.01" value="10" oninput="updateTransactionPlanEstimate()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"></label>
+                    <label style="color:var(--text-muted); font-size:12px; grid-column:1 / -1;">${t.planMonthlyCap}<input id="planMonthlyCap" type="number" min="0" step="0.01" value="50" oninput="updateTransactionPlanEstimate()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"></label>
+                </div>
+                <div style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:14px;">
+                    <div style="background:var(--bg-main); border:1px solid var(--border-color); border-radius:10px; padding:12px;"><div style="font-size:11px; color:var(--text-muted);">${t.planEstimated}</div><div id="planEstimateValue" style="font-size:18px; color:#fff; font-weight:700; margin-top:4px;">$0.00</div></div>
+                    <div style="background:var(--bg-main); border:1px solid var(--border-color); border-radius:10px; padding:12px;"><div style="font-size:11px; color:var(--text-muted);">${t.planRiskCap}</div><div id="planRiskCapValue" style="font-size:18px; color:#fff; font-weight:700; margin-top:4px;">$0.00</div></div>
+                </div>
+                <div id="planBudgetWarning" style="display:none; color:#fca5a5; font-size:12px; margin-top:10px;"></div>
+                <button type="button" onclick="saveTransactionPlan()" class="btn-purple-lg" style="font-size:13px; padding:12px 20px; width:auto; margin-top:14px;">${t.planSave}</button>
             </div>
         `;
+        setTimeout(loadTransactionPlan, 50);
     } else if (section === 'Wallets') {
         const isTipHidden = localStorage.getItem('hideProxyTip') === 'true' || hideAllBanners;
         const proxyTipHtml = isTipHidden ? '' : `
@@ -1583,10 +1810,15 @@ function renderDashboardContent(section) {
                 <div id="buySlotMsg" style="margin-top: 6px; font-size:12px;"></div>
             </div>
             <div class="dashboard-card">
+                <h3 style="color: #fff; margin-top: 0; font-size: 16px;">${t.walletConnectTitle}</h3>
+                <p style="color: var(--text-muted); font-size: 13px; line-height: 1.5; margin-bottom: 10px;">${t.walletConnectDesc}</p>
+                <button type="button" onclick="connectBaseWallet()" class="btn-dark-sm" style="width:auto; padding:10px 14px;">${t.btnConnectBase}</button>
+                <div id="baseWalletConnectionStatus" style="display:none; color:#86efac; font-size:12px; margin-top:8px;"></div>
+            </div>
+            <div class="dashboard-card">
                 <h3 style="color: #fff; margin-top: 0; font-size: 16px;">${t.walAddTitle}</h3>
                 <div style="display: flex; flex-direction: column; gap: 10px;">
                     <input type="text" id="newWalletAddress" placeholder="${t.phAddr}" class="auth-input" style="font-size: 13px; padding: 10px 12px;">
-                    <input type="password" id="newWalletPk" placeholder="${t.phPk}" class="auth-input" style="font-size: 13px; padding: 10px 12px;">
                     ${proxyTipHtml}
                     <input type="text" id="newWalletProxy" placeholder="${t.phProxy}" class="auth-input" style="font-size: 13px; padding: 10px 12px;">
                     <button type="button" onclick="addNewWalletToDB()" class="btn-modal-primary" style="margin-top:4px; padding: 12px; font-size: 14px;">${t.btnAddWal}</button>
@@ -1594,7 +1826,10 @@ function renderDashboardContent(section) {
                 <div id="walletResponseMsg" style="margin-top: 8px; font-size:12px;"></div>
             </div>
         `;
-        setTimeout(loadWalletsFromDB, 50);
+        setTimeout(() => {
+            updateBaseWalletConnectionState();
+            loadWalletsFromDB();
+        }, 50);
     } else if (section === 'Networks') {
         const networksHtml = NETWORKS_CONFIG.map(net => `
             <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-main); padding:16px 20px; border-radius:16px; margin-bottom:10px; border:1px solid var(--border-color);">
@@ -1602,7 +1837,7 @@ function renderDashboardContent(section) {
                     <div style="display:flex; align-items:center; justify-content:center; width:32px; height:32px;">${net.icon}</div>
                     <div style="display: flex; flex-direction: column; gap: 4px;">
                         <div style="color:#fff; font-weight:700; font-size:15px;">${net.name} <span style="font-size: 12px; color: var(--text-muted); font-weight: normal;">(${net.symbol})</span></div>
-                        <div style="font-size:13px; color: var(--text-muted);">${t.gasLabel} <span id="gas-${net.key}" style="color:#eab308; font-weight:bold;">${t.loading}</span></div>
+                        <div style="font-size:13px; color: var(--text-muted);">${t.gasLabel} <span id="gas-${net.key}" style="color:#eab308; font-weight:bold;">${t.loading}</span> <span id="gas-status-${net.key}" style="font-size:11px; font-weight:700;"></span></div>
                         <div style="color: #38bdf8; font-size: 13px; font-weight: 600; font-family: monospace;" id="timer-${net.key}">${formatCountdown(net.deadline)}</div>
                     </div>
                 </div>
@@ -1627,6 +1862,7 @@ function renderDashboardContent(section) {
             <div class="dashboard-card">
                 <h3 style="color: #fff; margin-top: 0; font-size: 16px; margin-bottom: 6px;">${t.netTitle}</h3>
                 <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 14px; line-height: 1.5;">${t.netDesc}</p>
+                <p style="color: var(--text-muted); font-size: 12px; margin: -6px 0 14px; line-height: 1.5;">${t.gasStatusNote}</p>
                 
                 ${networkGuideHtml}
 
@@ -1651,9 +1887,22 @@ function renderDashboardContent(section) {
                     const data = await res.json();
                     const el = document.getElementById(`gas-${net.key}`);
                     if (el) el.innerText = data.gas || "N/A";
+                    const statusEl = document.getElementById(`gas-status-${net.key}`);
+                    if (statusEl) {
+                        const level = data.gas_level || 'unavailable';
+                        const levelKey = `gas${level.charAt(0).toUpperCase()}${level.slice(1)}`;
+                        const colors = { low: '#22c55e', medium: '#eab308', high: '#ef4444', unavailable: '#a3a3a3' };
+                        statusEl.innerText = translations[currentLang][levelKey] || translations[currentLang].gasUnavailable;
+                        statusEl.style.color = colors[level] || colors.unavailable;
+                    }
                 } catch(e) {
                     const el = document.getElementById(`gas-${net.key}`);
                     if (el) el.innerText = "N/A";
+                    const statusEl = document.getElementById(`gas-status-${net.key}`);
+                    if (statusEl) {
+                        statusEl.innerText = translations[currentLang].gasUnavailable;
+                        statusEl.style.color = '#a3a3a3';
+                    }
                 }
             }
         }, 100);
