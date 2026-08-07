@@ -1249,7 +1249,11 @@ async function createTelegramLink() {
     if (!resultEl) return;
     resultEl.textContent = t('tgPreparingLink');
     try {
-        const response = await fetch('/api/telegram/link-code', { method: 'POST' });
+        const response = await fetch('/api/telegram/link-code', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ language: getActiveLang() })
+        });
         const data = await response.json();
         if (!response.ok) throw new Error(data.detail || 'link unavailable');
         resultEl.innerHTML = '';

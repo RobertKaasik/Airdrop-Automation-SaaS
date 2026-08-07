@@ -133,6 +133,7 @@ class TelegramLinkCode(Base):
     __tablename__ = "telegram_link_codes"
     code = Column(String, primary_key=True)
     username = Column(String, index=True, nullable=False)
+    language = Column(String, nullable=False, default="ru")
     expires_at = Column(Integer, nullable=False)
     used = Column(Boolean, nullable=False, default=False)
     created_at = Column(Integer, nullable=False)
@@ -141,6 +142,7 @@ class TelegramSubscription(Base):
     __tablename__ = "telegram_subscriptions"
     username = Column(String, primary_key=True)
     chat_id = Column(String, unique=True, index=True, nullable=False)
+    language = Column(String, nullable=False, default="ru")
     last_test_at = Column(Integer, nullable=True)
     linked_at = Column(Integer, nullable=False)
     updated_at = Column(Integer, nullable=False)
@@ -158,6 +160,14 @@ def ensure_schema_columns():
             conn.commit()
         if "onboarding_purchased" not in columns:
             conn.execute(text("ALTER TABLE users ADD COLUMN onboarding_purchased BOOLEAN DEFAULT 0"))
+            conn.commit()
+        telegram_code_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(telegram_link_codes)"))}
+        if telegram_code_columns and "language" not in telegram_code_columns:
+            conn.execute(text("ALTER TABLE telegram_link_codes ADD COLUMN language VARCHAR DEFAULT 'ru'"))
+            conn.commit()
+        telegram_subscription_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(telegram_subscriptions)"))}
+        if telegram_subscription_columns and "language" not in telegram_subscription_columns:
+            conn.execute(text("ALTER TABLE telegram_subscriptions ADD COLUMN language VARCHAR DEFAULT 'ru'"))
             conn.commit()
 
 ensure_schema_columns()
@@ -361,6 +371,7 @@ class ProfileSettingsRequest(BaseModel):
     notifyStart: Optional[bool] = True
     notifySuccess: Optional[bool] = True
     notifyError: Optional[bool] = True
+    language: Optional[str] = "ru"
 
 class PaymentRecoverReq(BaseModel):
     txid: str
@@ -421,6 +432,12 @@ class BudgetPlanRequest(BaseModel):
     extra_cost_reserve: float
     daily_cap: float
     monthly_cap: float
+
+class TelegramLinkRequest(BaseModel):
+    language: Optional[str] = "ru"
+
+def normalize_language(language: Optional[str]) -> str:
+    return language if language in {"ru", "en", "zh"} else "ru"
 
 def issue_payment_token(client_session_id: str, plan: str, amount: float, onboarding: bool = False) -> str:
     token = secrets.token_urlsafe(32)
@@ -595,6 +612,11 @@ async def save_user_settings(data: ProfileSettingsRequest, current_user: User = 
                 raise HTTPException(status_code=400, detail=f"Delay limit exceeded for day {day}: max 7200 seconds")
 
         USER_SETTINGS_DB[data.username] = data.dict()
+        subscription = get_telegram_subscription(db, data.username)
+        if subscription:
+            subscription.language = normalize_language(data.language)
+            subscription.updated_at = int(time.time())
+            db.commit()
         
         return {"status": "success", "message": "Settings saved successfully"}
     except HTTPException as he:
@@ -611,7 +633,11 @@ def telegram_status(current_user: User = Depends(get_current_user), db: Session 
     }
 
 @app.post("/api/telegram/link-code")
-def create_telegram_link_code(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def create_telegram_link_code(
+    data: TelegramLinkRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_BOT_USERNAME:
         raise HTTPException(status_code=503, detail="Telegram bot is not configured")
 
@@ -624,6 +650,7 @@ def create_telegram_link_code(current_user: User = Depends(get_current_user), db
     db.add(TelegramLinkCode(
         code=code,
         username=current_user.username,
+        language=normalize_language(data.language),
         expires_at=now_ts + TELEGRAM_LINK_TTL_SECONDS,
         used=False,
         created_at=now_ts,
@@ -644,7 +671,12 @@ def send_telegram_test(current_user: User = Depends(get_current_user), db: Sessi
     now_ts = int(time.time())
     if subscription.last_test_at and now_ts - subscription.last_test_at < TELEGRAM_TEST_COOLDOWN_SECONDS:
         raise HTTPException(status_code=429, detail="Please wait before sending another test")
-    if not send_telegram_notification(subscription.chat_id, "AIRDROP-X: Telegram connection is active. You will only receive notifications that you enabled."):
+    messages = {
+        "ru": "AIRDROP-X: Telegram подключён. Вы будете получать только выбранные вами уведомления.",
+        "en": "AIRDROP-X: Telegram connection is active. You will only receive notifications that you enabled.",
+        "zh": "AIRDROP-X：Telegram 已连接。您只会收到自己启用的通知。",
+    }
+    if not send_telegram_notification(subscription.chat_id, messages[normalize_language(subscription.language)]):
         raise HTTPException(status_code=502, detail="Telegram message could not be delivered")
     subscription.last_test_at = now_ts
     subscription.updated_at = now_ts

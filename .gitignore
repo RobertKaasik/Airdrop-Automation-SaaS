@@ -11,6 +11,7 @@ __pycache__/
 
 wallets.txt
 airdrop_x_backend_report.json
+telegram-bot*.log
 
 .pytest_cache/
 .mypy_cache/
