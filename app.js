@@ -915,7 +915,7 @@ async function connectBaseWallet() {
         return;
     }
     try {
-        const accounts = await provider.request({ method: 'eth_requestAccounts' });
+        const accounts = await provider.enable();
         if (!Array.isArray(accounts) || !accounts[0]) throw new Error('No account returned');
         let chainId = await provider.request({ method: 'eth_chainId' });
         if (chainId !== BASE_MAINNET_CHAIN_ID) {
