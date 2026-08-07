@@ -173,6 +173,8 @@ window.AIRDROP_LOCALES.en = {
   walletConnectQrDesc: 'Open your mobile wallet, scan the QR code, and approve the connection only.',
   walletConnectQrUnavailable: 'WalletConnect QR code could not be displayed.',
   walletConnectClose: 'Close',
+  walletConnectProjectError: 'Check the Project ID and allowed domains in Reown Dashboard.',
+  walletConnectNetworkError: 'WalletConnect network is unavailable. Check your internet or VPN and try again later.',
   phAddr: 'Wallet address (0x...)',
   phPk: 'Private key',
   phProxy: 'Proxy (ip:port:login:pass)',

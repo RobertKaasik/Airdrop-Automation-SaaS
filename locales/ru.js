@@ -173,6 +173,8 @@ window.AIRDROP_LOCALES.ru = {
   walletConnectQrDesc: 'Откройте кошелёк на телефоне, отсканируйте QR-код и подтвердите только подключение.',
   walletConnectQrUnavailable: 'Не удалось показать QR-код WalletConnect.',
   walletConnectClose: 'Закрыть',
+  walletConnectProjectError: 'Проверьте Project ID и разрешённые домены в Reown Dashboard.',
+  walletConnectNetworkError: 'Нет связи с сетью WalletConnect. Проверьте интернет, VPN или повторите позже.',
   phAddr: 'Адрес кошелька (0x...)',
   phPk: 'Приватный ключ',
   phProxy: 'Прокси (ip:port:login:pass)',

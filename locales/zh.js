@@ -173,6 +173,8 @@ window.AIRDROP_LOCALES.zh = {
   walletConnectQrDesc: '在手机钱包中扫描二维码，并且只确认连接请求。',
   walletConnectQrUnavailable: '无法显示 WalletConnect 二维码。',
   walletConnectClose: '关闭',
+  walletConnectProjectError: '请检查 Reown Dashboard 中的 Project ID 和允许的域名。',
+  walletConnectNetworkError: 'WalletConnect 网络不可用。请检查网络或 VPN 后重试。',
   phAddr: '钱包地址 (0x...)',
   phPk: '私钥',
   phProxy: '代理 (ip:port:login:pass)',

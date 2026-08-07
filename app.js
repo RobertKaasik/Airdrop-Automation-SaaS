@@ -954,6 +954,7 @@ async function getWalletConnectProvider() {
 
     walletConnectProvider = await EthereumProvider.init({
         projectId: config.project_id,
+        showQrModal: false,
         optionalChains: [config.chain_id],
         optionalMethods: ['eth_requestAccounts', 'eth_accounts', 'eth_chainId', 'wallet_switchEthereumChain'],
         optionalEvents: ['accountsChanged', 'chainChanged'],
@@ -998,9 +999,15 @@ async function connectWalletConnectBase() {
         updateBaseWalletConnectionState(address);
     } catch (error) {
         closeWalletConnectModal();
+        console.error('WalletConnect connection failed', error);
+        const reason = String(error?.message || '').toLowerCase();
         const message = error?.message === 'walletconnect_config_missing'
             ? locale.walletConnectConfigMissing
-            : locale.walletConnectRejected;
+            : reason.includes('project') || reason.includes('origin') || reason.includes('allowlist')
+                ? locale.walletConnectProjectError
+                : reason.includes('relay') || reason.includes('websocket') || reason.includes('network')
+                    ? locale.walletConnectNetworkError
+                    : locale.walletConnectRejected;
         showNotification(message, 'error');
     }
 }
