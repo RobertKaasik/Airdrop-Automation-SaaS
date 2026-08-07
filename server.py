@@ -62,7 +62,6 @@ BASE_SLOT_LIMITS = {"Standard": 5, "Pro": 15, "Premium": 30}
 payment_sessions = {}
 payment_tokens = {}
 gas_cache = {}
-walletconnect_diagnostics = {}
 AUTH_SESSION_DURATION_SECONDS = 12 * 60 * 60
 EMAIL_CODE_TTL_SECONDS = 10 * 60
 EMAIL_CODE_RESEND_SECONDS = 60
@@ -438,11 +437,6 @@ class BudgetPlanRequest(BaseModel):
 class TelegramLinkRequest(BaseModel):
     language: Optional[str] = "ru"
 
-class WalletConnectDiagnosticRequest(BaseModel):
-    stage: str
-    error_name: str = "Error"
-    error_message: str = ""
-
 def normalize_language(language: Optional[str]) -> str:
     return language if language in {"ru", "en", "zh"} else "ru"
 
@@ -644,25 +638,6 @@ def walletconnect_config(current_user: User = Depends(get_current_user)):
     if not WALLETCONNECT_PROJECT_ID:
         raise HTTPException(status_code=503, detail="WalletConnect is not configured")
     return {"project_id": WALLETCONNECT_PROJECT_ID, "chain_id": 8453}
-
-@app.post("/api/walletconnect/diagnostic")
-def save_walletconnect_diagnostic(
-    data: WalletConnectDiagnosticRequest,
-    current_user: User = Depends(get_current_user),
-):
-    walletconnect_diagnostics[current_user.username] = {
-        "stage": data.stage[:40],
-        "error_name": data.error_name[:80],
-        "error_message": data.error_message.replace("\n", " ").replace("\r", " ")[:300],
-        "created_at": int(time.time()),
-    }
-    return {"status": "saved"}
-
-@app.get("/api/walletconnect/diagnostic/latest")
-def get_walletconnect_diagnostic():
-    if os.getenv("APP_ENV", "development").lower() != "development":
-        raise HTTPException(status_code=404, detail="Not found")
-    return walletconnect_diagnostics
 
 @app.post("/api/telegram/link-code")
 def create_telegram_link_code(

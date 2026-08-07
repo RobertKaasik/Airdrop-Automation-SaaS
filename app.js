@@ -983,27 +983,12 @@ async function getWalletConnectProvider() {
     return walletConnectProvider;
 }
 
-function reportWalletConnectDiagnostic(stage, error) {
-    const errorName = String(error?.name || 'Error').slice(0, 80);
-    const errorMessage = String(error?.message || error || 'Unknown error')
-        .replace(/wc:[^\s]+/gi, '[walletconnect-uri-redacted]')
-        .slice(0, 300);
-    fetch('/api/walletconnect/diagnostic', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stage, error_name: errorName, error_message: errorMessage })
-    }).catch(() => {});
-}
-
 async function connectWalletConnectBase() {
     const locale = translations[getActiveLang()];
-    let stage = 'provider_initialization';
     try {
         showNotification(locale.walletConnectLoading);
         const provider = await getWalletConnectProvider();
-        stage = 'wallet_approval';
         const accounts = await provider.enable();
-        stage = 'network_check';
         const chainId = await provider.request({ method: 'eth_chainId' });
         if (chainId !== BASE_MAINNET_CHAIN_ID) {
             await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: BASE_MAINNET_CHAIN_ID }] });
@@ -1015,7 +1000,6 @@ async function connectWalletConnectBase() {
     } catch (error) {
         closeWalletConnectModal();
         console.error('WalletConnect connection failed', error);
-        reportWalletConnectDiagnostic(stage, error);
         const reason = String(error?.message || '').toLowerCase();
         const message = error?.message === 'walletconnect_config_missing'
             ? locale.walletConnectConfigMissing
