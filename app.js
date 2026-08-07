@@ -225,12 +225,6 @@ function generateDeviceFingerprint() {
     }
 }
 
-function hashCode(str) {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) { hash = str.charCodeAt(i) + ((hash << 5) - hash); }
-    return hash;
-}
-
 function showNotification(text, type = 'success') {
     let container = document.getElementById('toastNotificationContainer');
     if (!container) {
@@ -899,11 +893,28 @@ function switchMenu(element, sectionName) {
 function updateBaseWalletConnectionState(address = sessionStorage.getItem('ax_base_wallet_address') || '') {
     const status = document.getElementById('baseWalletConnectionStatus');
     const addressInput = document.getElementById('newWalletAddress');
+    const disconnectButton = document.getElementById('disconnectBaseWalletButton');
     if (addressInput && address) addressInput.value = address;
     if (status) {
         const t = translations[currentLang];
         status.innerText = address ? t.walletConnected.replace('{address}', `${address.slice(0, 6)}…${address.slice(-4)}`) : '';
         status.style.display = address ? 'block' : 'none';
+    }
+    if (disconnectButton) disconnectButton.style.display = address ? 'inline-flex' : 'none';
+}
+
+async function disconnectBaseWalletSession() {
+    const t = translations[currentLang];
+    try {
+        if (walletConnectProvider?.session) await walletConnectProvider.disconnect();
+    } catch (error) {
+        console.warn('WalletConnect session disconnect failed', error);
+    } finally {
+        walletConnectProvider = null;
+        sessionStorage.removeItem('ax_base_wallet_address');
+        updateBaseWalletConnectionState('');
+        if (document.getElementById('walletsListContainer')) loadWalletsFromDB();
+        showNotification(t.walletSessionDisconnected);
     }
 }
 
@@ -1015,18 +1026,20 @@ async function connectWalletConnectBase() {
 async function addNewWalletToDB() {
     const username = localStorage.getItem('airdrop_username') || "Robert";
     const address = document.getElementById('newWalletAddress').value.trim();
+    const label = document.getElementById('newWalletLabel').value.trim();
     const proxy = document.getElementById('newWalletProxy').value.trim();
     const msg = document.getElementById('walletResponseMsg');
 
     const res = await fetch('/api/wallets/add', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, wallet_address: address, proxy })
+        body: JSON.stringify({ username, wallet_address: address, label, proxy })
     });
     const data = await res.json();
     if(res.ok) {
-        showNotification("OK!");
+        showNotification(translations[currentLang].walletAddSuccess);
         document.getElementById('newWalletAddress').value = '';
+        document.getElementById('newWalletLabel').value = '';
         document.getElementById('newWalletProxy').value = '';
         loadWalletsFromDB();
     } else {
@@ -1048,18 +1061,23 @@ async function loadWalletsFromDB() {
     if(badge) badge.innerText = `${t.slotsLabel}: ${data.wallets.length} / ${data.max_slots} (${data.plan})`;
     
     if(data.wallets.length > 0) {
-        container.id = 'walletsListContainer';
+        const connectedAddress = (sessionStorage.getItem('ax_base_wallet_address') || '').toLowerCase();
         container.innerHTML = data.wallets.map(w => {
-            const mockBalance = (Math.abs(hashCode(w.wallet_address)) % 1500 + 45).toFixed(2);
+            const isConnected = connectedAddress && w.wallet_address.toLowerCase() === connectedAddress;
+            const walletName = escapeHtml(w.label || `${t.walletDefaultName} ${w.id}`);
+            const address = escapeHtml(w.wallet_address);
+            const proxyStatus = w.proxy ? t.walletProxyConfigured : t.walletNoProxy;
             return `
-                <div style="background: var(--bg-main); border: 1px solid var(--border-color); padding: 14px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center;">
+                <div style="background: var(--bg-main); border: 1px solid var(--border-color); padding: 14px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; gap:12px;">
                     <div>
-                        <div style="color: #fff; font-weight: 600; font-size: 13px; font-family:monospace;">${w.wallet_address}</div>
-                        <div style="color: var(--text-muted); font-size: 12px; margin-top:2px;">${t.balLabel} <b style="color:#fff;">$${mockBalance}</b> | ${t.proxyLabel} ${w.proxy || t.proxyNone}</div>
+                        <div style="color: #fff; font-weight: 600; font-size: 13px;">${walletName}</div>
+                        <div style="color: #d1d5db; font-size: 12px; margin-top:4px; font-family:monospace;">${address}</div>
+                        <div style="color: ${isConnected ? '#86efac' : 'var(--text-muted)'}; font-size: 12px; margin-top:5px;">${isConnected ? t.walletSessionActive : t.walletBaseMonitoring}</div>
+                        <div style="color: var(--text-muted); font-size: 12px; margin-top:3px;">${proxyStatus}</div>
                     </div>
-                    <div style="display:flex; gap:6px;">
-                        <button type="button" onclick="testWalletProxy(${w.id}, this)" style="background: rgba(34,197,94,0.1); color: #22c55e; border: 1px solid rgba(34,197,94,0.2); padding: 6px 10px; border-radius: 8px; font-size: 12px; cursor:pointer;">${t.btnTest}</button>
-                        <button type="button" onclick="deleteWallet(${w.id})" style="background: rgba(239,68,68,0.1); color: #ef4444; border: 1px solid rgba(239,68,68,0.2); padding: 6px 10px; border-radius: 8px; font-size: 12px; cursor:pointer;">${t.btnDel}</button>
+                    <div style="display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end;">
+                        ${w.proxy ? `<button type="button" onclick="testWalletProxy(${w.id}, this)" style="background: rgba(34,197,94,0.1); color: #22c55e; border: 1px solid rgba(34,197,94,0.2); padding: 6px 10px; border-radius: 8px; font-size: 12px; cursor:pointer;">${t.walletProxyTest}</button>` : ''}
+                        <button type="button" onclick="deleteWallet(${w.id})" style="background: rgba(239,68,68,0.1); color: #ef4444; border: 1px solid rgba(239,68,68,0.2); padding: 6px 10px; border-radius: 8px; font-size: 12px; cursor:pointer;">${t.walletRemove}</button>
                     </div>
                 </div>
             `;
@@ -1110,6 +1128,7 @@ async function testWalletProxy(walletId, btn) {
 }
 
 async function deleteWallet(id) {
+    if (!window.confirm(translations[currentLang].walletRemoveConfirm)) return;
     await fetch(`/api/wallets/delete/${id}`, { method: 'DELETE' });
     loadWalletsFromDB();
 }
@@ -1927,12 +1946,14 @@ function renderDashboardContent(section) {
                 <div style="display:flex; flex-wrap:wrap; gap:8px;">
                     <button type="button" onclick="connectBaseWallet()" class="btn-dark-sm" style="width:auto; padding:10px 14px;">${t.btnConnectBase}</button>
                     <button type="button" onclick="connectWalletConnectBase()" class="btn-dark-sm" style="width:auto; padding:10px 14px; border-color:#7c3aed;">${t.btnConnectWalletConnect}</button>
+                    <button type="button" id="disconnectBaseWalletButton" onclick="disconnectBaseWalletSession()" class="btn-dark-sm" style="display:none; width:auto; padding:10px 14px; border-color:#ef4444; color:#fca5a5;">${t.walletDisconnect}</button>
                 </div>
                 <div id="baseWalletConnectionStatus" style="display:none; color:#86efac; font-size:12px; margin-top:8px;"></div>
             </div>
             <div class="dashboard-card">
                 <h3 style="color: #fff; margin-top: 0; font-size: 16px;">${t.walAddTitle}</h3>
                 <div style="display: flex; flex-direction: column; gap: 10px;">
+                    <input type="text" id="newWalletLabel" maxlength="40" placeholder="${t.walletLabelPlaceholder}" class="auth-input" style="font-size: 13px; padding: 10px 12px;">
                     <input type="text" id="newWalletAddress" placeholder="${t.phAddr}" class="auth-input" style="font-size: 13px; padding: 10px 12px;">
                     ${proxyTipHtml}
                     <input type="text" id="newWalletProxy" placeholder="${t.phProxy}" class="auth-input" style="font-size: 13px; padding: 10px 12px;">

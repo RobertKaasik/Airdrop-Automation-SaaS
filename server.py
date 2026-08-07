@@ -93,6 +93,7 @@ class Wallet(Base):
     username = Column(String, index=True)
     wallet_address = Column(String)
     encrypted_pk = Column(String)
+    label = Column(String, nullable=True)
     proxy = Column(String)
 
 class Transaction(Base):
@@ -161,6 +162,10 @@ def ensure_schema_columns():
             conn.commit()
         if "onboarding_purchased" not in columns:
             conn.execute(text("ALTER TABLE users ADD COLUMN onboarding_purchased BOOLEAN DEFAULT 0"))
+            conn.commit()
+        wallet_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(wallets)"))}
+        if wallet_columns and "label" not in wallet_columns:
+            conn.execute(text("ALTER TABLE wallets ADD COLUMN label VARCHAR"))
             conn.commit()
         telegram_code_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(telegram_link_codes)"))}
         if telegram_code_columns and "language" not in telegram_code_columns:
@@ -397,6 +402,7 @@ class UserLogin(BaseModel):
 class WalletAdd(BaseModel):
     username: str
     wallet_address: str
+    label: Optional[str] = None
     proxy: str
 
 class StartFarmReq(BaseModel):
@@ -904,6 +910,9 @@ async def add_wallet(wallet: WalletAdd, db: Session = Depends(get_db), current_u
     require_owned_username(wallet.username, current_user)
     user = current_user
     wallet_address = wallet.wallet_address.strip()
+    wallet_label = (wallet.label or "").strip()
+    if len(wallet_label) > 40 or any(ord(char) < 32 for char in wallet_label):
+        raise HTTPException(status_code=400, detail="Wallet label is invalid")
     if not (wallet_address.startswith("0x") and len(wallet_address) == 42 and all(char in "0123456789abcdefABCDEF" for char in wallet_address[2:])):
         raise HTTPException(status_code=400, detail="Enter a valid EVM wallet address")
     if db.query(Wallet).filter(Wallet.username == wallet.username, Wallet.wallet_address.ilike(wallet_address)).first():
@@ -917,7 +926,7 @@ async def add_wallet(wallet: WalletAdd, db: Session = Depends(get_db), current_u
     if current_count >= max_allowed:
         raise HTTPException(status_code=400, detail=f"⚠️ Plan limit reached: {max_allowed} slots allowed for {plan}")
 
-    new_wallet = Wallet(username=wallet.username, wallet_address=wallet_address, encrypted_pk=None, proxy=wallet.proxy)
+    new_wallet = Wallet(username=wallet.username, wallet_address=wallet_address, encrypted_pk=None, label=wallet_label or None, proxy=wallet.proxy)
     db.add(new_wallet)
     db.commit()
     return {"status": "success", "message": "Wallet added"}
@@ -952,7 +961,7 @@ async def get_wallets(username: str, db: Session = Depends(get_db), current_user
         "status": "success", 
         "plan": plan,
         "max_slots": max_allowed,
-        "wallets": [{"id": w.id, "wallet_address": w.wallet_address, "proxy": w.proxy} for w in wallets]
+        "wallets": [{"id": w.id, "wallet_address": w.wallet_address, "label": w.label, "proxy": w.proxy} for w in wallets]
     }
 
 @app.post("/api/wallets/test-proxy/{wallet_id}")
