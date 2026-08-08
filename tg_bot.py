@@ -10,7 +10,14 @@ from aiogram.enums import ChatType, ParseMode
 from aiogram.filters import Command, CommandStart
 from aiogram.types import Message
 
-from server import SessionLocal, TelegramLinkCode, TelegramSubscription
+from server import (
+    OfficialOpportunitySource,
+    SessionLocal,
+    TelegramLinkCode,
+    TelegramSubscription,
+    classify_gas_level,
+    get_live_gas_price,
+)
 from telegram_locales import get_text, normalize_language
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -130,6 +137,47 @@ async def unlink_handler(message: Message) -> None:
         db.delete(subscription)
         db.commit()
         await message.answer(get_text(subscription.language, "unlinked"))
+    finally:
+        db.close()
+
+
+@dp.message(Command("opportunities"))
+async def opportunities_handler(message: Message) -> None:
+    if not await private_chat_only(message):
+        return
+    db = SessionLocal()
+    try:
+        subscription = db.query(TelegramSubscription).filter(
+            TelegramSubscription.chat_id == str(message.chat.id)
+        ).first()
+        language = subscription.language if subscription else fallback_language(message)
+        lines = [get_text(language, "opportunities_title")]
+        sources = db.query(OfficialOpportunitySource).order_by(OfficialOpportunitySource.id.asc()).all()
+        for source in sources:
+            summary = getattr(source, f"summary_{language}", source.summary_en)
+            lines.append(
+                f"\n<b>{html.quote(source.name)}</b> ({html.quote(source.network)})\n"
+                f"{html.quote(summary)}\n{source.official_url}"
+            )
+        await message.answer("\n".join(lines), disable_web_page_preview=True)
+    finally:
+        db.close()
+
+
+@dp.message(Command("gas"))
+async def gas_handler(message: Message) -> None:
+    if not await private_chat_only(message):
+        return
+    db = SessionLocal()
+    try:
+        subscription = db.query(TelegramSubscription).filter(
+            TelegramSubscription.chat_id == str(message.chat.id)
+        ).first()
+        language = subscription.language if subscription else fallback_language(message)
+        gas = get_live_gas_price("Base")
+        level = classify_gas_level("Base", gas)
+        level_key = f"gas_level_{level}"
+        await message.answer(get_text(language, "gas_report", gas=html.quote(str(gas)), level=get_text(language, level_key)))
     finally:
         db.close()
 

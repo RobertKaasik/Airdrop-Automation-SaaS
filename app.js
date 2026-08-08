@@ -93,9 +93,6 @@ let deviceFingerprint = generateDeviceFingerprint();
 let subscriptionDaysLeft = 29;
 let showWelcomeGuide = true;
 
-let userInternalBalance = 0.00;
-let transactionHistory = [];
-
 let codeCooldownTimer = null;
 let codeCooldownSeconds = 0;
 let confirmedRegistrationEmail = "";
@@ -284,7 +281,6 @@ const STATIC_TEXT_BINDINGS = [
     ['p-title-modal', 'pTitleModal'], ['p-desc-modal', 'pDescModal'], ['p-std-top', 'subTop'], ['p-std-name', 'stdName'], ['p-std-per', 'stdPer'], ['p-std-f1', 'stdF1'], ['p-std-f2', 'stdF2'], ['p-std-f3', 'stdF3'], ['p-std-btn', 'stdBtn'],
     ['p-pro-badge', 'proBadge'], ['p-pro-top', 'subTop'], ['p-pro-name', 'proName'], ['p-pro-per', 'proPer'], ['p-pro-f1', 'proF1'], ['p-pro-f2', 'proF2'], ['p-pro-f3', 'proF3'], ['p-pro-f4', 'proF4'], ['p-pro-btn', 'proBtn'],
     ['p-prem-top', 'subTop'], ['p-prem-name', 'premName'], ['p-prem-per', 'premPer'], ['p-prem-f1', 'premF1'], ['p-prem-f2', 'premF2'], ['p-prem-f3', 'premF3'], ['p-prem-f4', 'premF4'], ['p-prem-btn', 'premBtn'],
-    ['walletModalTitle', 'walletModalTitle'], ['wm-dep-title', 'wmDepTitle'], ['wm-master-lbl', 'wmMasterLbl'], ['wm-net-lbl', 'wmNetLbl'], ['wm-amt-lbl', 'wmAmtLbl'], ['wm-dep-btn', 'wmDepBtn'], ['wm-edit-title', 'wmEditTitle'], ['wm-save-btn', 'wmSaveBtn'], ['wm-del-btn', 'wmDelBtn'],
     ['onboarding-title', 'onboardingTitle'], ['onboarding-desc', 'onboardingDesc'],
     ['footer-rights', 'footerRights'], ['footer-privacy', 'footerPrivacy'], ['footer-terms', 'footerTerms'], ['page-title', 'pageTitle']
 ];
@@ -1475,59 +1471,6 @@ async function saveTransactionPlan() {
     }
 }
 
-async function startAutoFarming() {
-    const netSelect = document.getElementById('farmNetwork');
-    const net = netSelect ? netSelect.value : '';
-    const log = document.getElementById('farm-console-logs');
-    const t = translations[currentLang];
-
-    if (!net) {
-        showNotification(t.logErrNet, "error");
-        if (log) log.innerHTML += `<br><span style="color: #ef4444; font-weight: bold;">⛔ ${t.logErrNet}</span>`;
-        return;
-    }
-
-    if (userInternalBalance < 1.50) {
-        showNotification(t.logErrBal, "error");
-        if (log) log.innerHTML += `<br><span style="color: #ef4444; font-weight: bold;">⛔ ${t.logErrBal}</span>`;
-        return;
-    }
-
-    if (log) log.innerHTML += `<br><span style="color: var(--text-muted);">${t.logStart} ${net}... ${t.logCost}: $1.50</span>`;
-    
-    const username = localStorage.getItem('airdrop_username') || "Robert";
-    try {
-        const res = await fetch('/api/start', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ wallet: "all", network: net, username })
-        });
-        const data = await res.json();
-        
-        if (res.ok) {
-            if (log) log.innerHTML += `<br><span style="color: #22c55e;">✅ Фарм-сессия успешно завершена!</span>`;
-            
-            if (data.telegram_sent) {
-                if (log) log.innerHTML += `<br><span style="color: #22c55e;">📤 Отчет успешно доставлен в Telegram!</span>`;
-            } else if (!data.chat_id_configured) {
-                if (log) log.innerHTML += `<br><span style="color: #eab308;">⚠️ Telegram пропущен: укажите Chat ID в настройках профиля.</span>`;
-            } else {
-                if (log) log.innerHTML += `<br><span style="color: #ef4444;">❌ Ошибка отправки в Telegram (проверьте, отправлен ли /start боту).</span>`;
-            }
-
-            if (data.new_balance !== undefined) {
-                userInternalBalance = data.new_balance;
-                const balEl = document.getElementById('userBalanceValue');
-                if (balEl) balEl.innerText = `$${userInternalBalance.toFixed(2)}`;
-            }
-        } else {
-            if (log) log.innerHTML += `<br><span style="color: #ef4444;">❌ Ошибка: ${translateBackendDetail(data.detail)}</span>`;
-        }
-    } catch (e) {
-        showNotification("Error", "error");
-    }
-}
-
 async function startScanningDrops() {
     const log = document.getElementById('drop-logs');
     const username = localStorage.getItem('airdrop_username') || "Robert";
@@ -1549,107 +1492,105 @@ async function startScanningDrops() {
     }
 }
 
-async function topUpBalanceModal() {
-    const modal = document.getElementById('authModal');
-    const container = document.getElementById('modalContainer');
-    if (!modal || !container) return;
-
-    modal.classList.add('show');
-    const defaultAmount = "25";
+async function loadOfficialOpportunities() {
+    const container = document.getElementById('officialOpportunitiesContainer');
+    if (!container) return;
     const t = translations[currentLang];
-
-    container.innerHTML = `
-        <div class="modal-logo" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-            <span style="font-weight:bold; font-size:16px;">💳 ${t.btnTopUp}</span>
-            <span onclick="closeAuthModal()" style="cursor: pointer; color: #a3a3a3; font-size: 18px;">✕</span>
-        </div>
-        
-        <div class="input-group" style="margin-bottom:12px;">
-            <label style="font-size: 12px; color: #a3a3a3; display: block; margin-bottom: 4px;">USD</label>
-            <input type="number" class="auth-input" value="25" id="topupAmountInput" min="1" max="10000" style="padding: 10px; font-size: 14px;" oninput="updateTopupQR(this.value)">
-        </div>
-
-        <div style="margin-bottom: 12px;">
-            <label style="font-size: 12px; color: #a3a3a3; display: block; margin-bottom: 4px;">${t.payNetwork}</label>
-            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;">
-                <button type="button" class="btn-dark-sm auth-input" id="net-base" onclick="setTopupNetwork('Base', '${MASTER_WALLET}')" style="background:#1f1f1f; border-color:#fff; cursor:pointer;">Base L2</button>
-                <button type="button" class="btn-dark-sm auth-input" id="net-arb" onclick="setTopupNetwork('Arbitrum', '${MASTER_WALLET}')" style="cursor:pointer;">Arbitrum</button>
-                <button type="button" class="btn-dark-sm auth-input" id="net-eth" onclick="setTopupNetwork('Ethereum', '${MASTER_WALLET}')" style="cursor:pointer;">Ethereum</button>
-            </div>
-        </div>
-
-        <div style="background:#0a0a0a; border:1px solid var(--border-color); border-radius:12px; padding:12px; margin-bottom:12px; text-align:center;">
-            <div style="font-size:12px; color:#a3a3a3; margin-bottom:2px;">${t.payWallet} (<span id="activeTopupNet">Base L2</span>):</div>
-            <div style="background:#181818; padding:6px 8px; border-radius:8px; font-family:monospace; font-size:12px; color:#fff; word-break:break-all; margin-bottom:6px;">${MASTER_WALLET}</div>
-            <button type="button" class="auth-input" style="margin: 0 auto; font-size: 12px; padding: 6px 12px; width:auto; cursor:pointer;" onclick="copyWalletAddress('${MASTER_WALLET}', this)">${t.payCopy}</button>
-            <div id="qrcodeTopupContainer" style="display:flex; justify-content:center; align-items:center; margin:10px auto 0 auto; background:#fff; padding:8px; border-radius:8px; width:110px; height:110px; box-sizing:border-box; overflow:hidden;"></div>
-        </div>
-
-        <div class="input-group" style="margin-bottom:12px;">
-            <label style="font-size: 12px; color: #a3a3a3; display: block; margin-bottom: 4px;">${t.payTxid}</label>
-            <input type="text" class="auth-input" placeholder="0x..." id="topupTxidInput">
-        </div>
-
-        <button type="button" class="btn-modal-primary" onclick="submitTopUpBalance()" style="width:100%; padding:10px;">OK</button>
-        <div id="topupStatusContainer"></div>
-    `;
-    setTimeout(() => renderTopupQR(MASTER_WALLET, defaultAmount), 100);
-}
-
-function setTopupNetwork(netName, address) {
-    document.getElementById('activeTopupNet').innerText = netName;
-    const amount = document.getElementById('topupAmountInput').value || '25';
-    renderTopupQR(address, amount);
-}
-
-function updateTopupQR(amount) {
-    renderTopupQR(MASTER_WALLET, amount || '25');
-}
-
-function renderTopupQR(walletAddress, displayAmount) {
-    const qrEl = document.getElementById('qrcodeTopupContainer');
-    if (qrEl && window.qrcode) {
-        try {
-            qrEl.innerHTML = '';
-            const qr = qrcode(0, 'M');
-            qr.addData(`ethereum:${walletAddress}?value=${displayAmount}`);
-            qr.make();
-            qrEl.innerHTML = qr.createSvgTag({cellSize: 4, margin: 1});
-            const svg = qrEl.querySelector('svg');
-            if (svg) { svg.style.width = '100%'; svg.style.height = '100%'; svg.style.display = 'block'; }
-        } catch(e) {}
+    try {
+        const response = await fetch('/api/opportunities');
+        const data = await response.json();
+        if (!response.ok || !Array.isArray(data.sources)) throw new Error('opportunities_unavailable');
+        container.innerHTML = data.sources.map((source) => {
+            const summary = source.summaries?.[getActiveLang()] || source.summaries?.en || t[`opportunity_${source.summary_key}`] || t.opportunitySummaryFallback;
+            const status = source.status === 'official_updates' ? t.opportunityStatusOfficial : t.opportunityStatusPending;
+            const deleteButton = data.can_manage && !source.is_system
+                ? `<button type="button" class="btn-dark-sm" onclick="deleteOfficialOpportunity(${Number(source.id)})" style="white-space:nowrap; padding:8px 11px; color:#fca5a5;">${t.opportunityDelete}</button>`
+                : '';
+            return `
+                <div style="background:var(--bg-main); border:1px solid var(--border-color); border-radius:12px; padding:14px; display:flex; justify-content:space-between; gap:12px; align-items:center;">
+                    <div>
+                        <div style="color:#fff; font-weight:700; font-size:14px;">${escapeHtml(source.name)} <span style="color:var(--text-muted); font-weight:400;">(${escapeHtml(source.network)})</span></div>
+                        <div style="color:#93c5fd; font-size:12px; margin-top:5px;">${status}</div>
+                        <div style="color:var(--text-muted); font-size:12px; line-height:1.45; margin-top:4px;">${escapeHtml(summary)}</div>
+                    </div>
+                    <div style="display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end;">
+                        <a href="${escapeHtml(source.official_url)}" target="_blank" rel="noopener noreferrer" class="btn-dark-sm" style="white-space:nowrap; padding:8px 11px; text-decoration:none;">${t.opportunityOfficialLink}</a>
+                        ${deleteButton}
+                    </div>
+                </div>
+            `;
+        }).join('') || `<div style="color:var(--text-muted); font-size:13px;">${t.opportunityEmpty}</div>`;
+        renderOpportunityAdminControls(Boolean(data.can_manage));
+    } catch (error) {
+        container.innerHTML = `<div style="color:#fca5a5; font-size:13px;">${t.opportunityLoadError}</div>`;
     }
 }
 
-async function submitTopUpBalance() {
-    const amountInput = document.getElementById('topupAmountInput').value.trim();
-    const txidInput = document.getElementById('topupTxidInput').value.trim();
-    const status = document.getElementById('topupStatusContainer');
-
-    const amount = parseFloat(amountInput);
-    if (isNaN(amount) || amount <= 0 || !txidInput) {
-        status.innerHTML = `<div style="color:#ef4444; font-size:12px; margin-top:8px;">Error!</div>`;
+function renderOpportunityAdminControls(canManage) {
+    const container = document.getElementById('officialOpportunityAdminContainer');
+    if (!container) return;
+    if (!canManage) {
+        container.innerHTML = '';
         return;
     }
+    const t = translations[currentLang];
+    const fieldStyle = 'class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"';
+    container.innerHTML = `
+        <div class="dashboard-card" style="margin-top:18px;">
+            <h3 style="color:#fff; margin-top:0; font-size:16px;">${t.opportunityAdminTitle}</h3>
+            <p style="color:var(--text-muted); font-size:13px; line-height:1.5;">${t.opportunityAdminDesc}</p>
+            <form onsubmit="submitOfficialOpportunity(event)" style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px;">
+                <label style="color:var(--text-muted); font-size:12px;">${t.opportunitySourceKey}<input id="opportunitySourceKey" maxlength="40" required ${fieldStyle}></label>
+                <label style="color:var(--text-muted); font-size:12px;">${t.opportunitySourceName}<input id="opportunitySourceName" maxlength="80" required ${fieldStyle}></label>
+                <label style="color:var(--text-muted); font-size:12px;">${t.opportunitySourceNetwork}<input id="opportunitySourceNetwork" maxlength="80" required ${fieldStyle}></label>
+                <label style="color:var(--text-muted); font-size:12px;">${t.opportunitySourceUrl}<input id="opportunitySourceUrl" type="url" maxlength="500" required ${fieldStyle}></label>
+                <label style="color:var(--text-muted); font-size:12px; grid-column:1 / -1;">${t.opportunitySourceSummaryRu}<textarea id="opportunitySourceSummaryRu" maxlength="500" required ${fieldStyle}></textarea></label>
+                <label style="color:var(--text-muted); font-size:12px; grid-column:1 / -1;">${t.opportunitySourceSummaryEn}<textarea id="opportunitySourceSummaryEn" maxlength="500" required ${fieldStyle}></textarea></label>
+                <label style="color:var(--text-muted); font-size:12px; grid-column:1 / -1;">${t.opportunitySourceSummaryZh}<textarea id="opportunitySourceSummaryZh" maxlength="500" required ${fieldStyle}></textarea></label>
+                <button type="submit" class="btn-purple-lg" style="grid-column:1 / -1; font-size:13px; padding:12px 20px;">${t.opportunityPublish}</button>
+            </form>
+        </div>
+    `;
+}
 
-    const username = localStorage.getItem('airdrop_username') || "Robert";
+async function submitOfficialOpportunity(event) {
+    event.preventDefault();
+    const t = translations[currentLang];
+    const payload = {
+        source_key: document.getElementById('opportunitySourceKey')?.value || '',
+        name: document.getElementById('opportunitySourceName')?.value || '',
+        network: document.getElementById('opportunitySourceNetwork')?.value || '',
+        official_url: document.getElementById('opportunitySourceUrl')?.value || '',
+        summary_ru: document.getElementById('opportunitySourceSummaryRu')?.value || '',
+        summary_en: document.getElementById('opportunitySourceSummaryEn')?.value || '',
+        summary_zh: document.getElementById('opportunitySourceSummaryZh')?.value || '',
+    };
     try {
-        const res = await fetch('/api/balance/deposit', {
+        const response = await fetch('/api/opportunities', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, amount, txid: txidInput })
+            body: JSON.stringify(payload),
         });
-        const data = await res.json();
-        
-        if (res.ok && data.status === 'success') {
-            userInternalBalance = data.new_balance;
-            closeAuthModal();
-            renderDashboardContent('Account');
-        } else {
-            status.innerHTML = `<div style="color:#ef4444; font-size:12px; margin-top:8px;">${translateBackendDetail(data.detail)}</div>`;
-        }
-    } catch (e) {
-        status.innerHTML = `<div style="color:#ef4444; font-size:12px; margin-top:8px;">Error</div>`;
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'opportunities_unavailable');
+        showNotification(t.opportunityPublished, 'success');
+        await loadOfficialOpportunities();
+    } catch (error) {
+        showNotification(translateBackendDetail(error.message) || t.opportunityManageError, 'error');
+    }
+}
+
+async function deleteOfficialOpportunity(sourceId) {
+    const t = translations[currentLang];
+    if (!Number.isInteger(sourceId) || !window.confirm(t.opportunityDeleteConfirm)) return;
+    try {
+        const response = await fetch(`/api/opportunities/${sourceId}`, { method: 'DELETE' });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'opportunities_unavailable');
+        showNotification(t.opportunityDeleted, 'success');
+        await loadOfficialOpportunities();
+    } catch (error) {
+        showNotification(translateBackendDetail(error.message) || t.opportunityManageError, 'error');
     }
 }
 
@@ -1710,75 +1651,12 @@ function renderDashboardContent(section) {
             ${guideHtml}
 
             <div class="dashboard-card" style="margin-bottom: 16px;">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-                    <h3 style="color: #fff; margin: 0; font-size: 16px;">${t.accTitle}</h3>
-                    <button type="button" onclick="topUpBalanceModal()" class="btn-purple-lg" style="width:auto; padding:8px 16px; font-size:13px;">${t.btnTopUp}</button>
-                </div>
-                <div style="font-size:24px; font-weight:bold; color:#fff; margin-bottom:4px;" id="userBalanceValue">${t.loading}</div>
-                <div style="font-size:13px; color:var(--text-muted);">${t.accDesc}</div>
-            </div>
-
-            <div class="dashboard-card" style="margin-bottom: 16px;">
-                <h3 style="color: #fff; margin-top: 0; font-size: 16px;">${t.txTitle}</h3>
-                <div id="transactionsListContainer" style="max-height:180px; overflow-y:auto; margin-top:10px;">${t.loading}</div>
-            </div>
-
-            <div class="dashboard-card">
                 <h3 style="color: #fff; margin-top: 0; font-size: 16px;">${t.subTitle}</h3>
                 <p style="color: var(--text-muted); font-size: 13px; line-height: 1.5;">${t.subPlan}: <b>${userPlan}</b> | ${t.subActive} (${subscriptionDaysLeft} ${t.days})</p>
+                <p style="color: #93c5fd; font-size: 12px; line-height: 1.5; margin: 10px 0 0;">${t.subscriptionPaymentNote}</p>
                 <button type="button" onclick="openPricingModal()" class="btn-dark-sm" style="margin-top:12px;">${t.btnChangePlan}</button>
             </div>
         `;
-
-        const setEmptyState = () => {
-            const balEl = document.getElementById('userBalanceValue');
-            if (balEl) balEl.innerText = '$0.00';
-            const txContainer = document.getElementById('transactionsListContainer');
-            if (txContainer) {
-                txContainer.innerHTML = `
-                    <div style="color:var(--text-muted); font-size:13px; text-align:center; padding: 24px; border: 1px dashed var(--border-color); border-radius: 12px; background: rgba(255,255,255,0.02);">
-                        ${t.noTx}
-                    </div>
-                `;
-            }
-        };
-
-        setTimeout(async () => {
-            try {
-                const res = await fetch(`/api/balance/${username}`);
-                if (!res.ok) { setEmptyState(); return; }
-                const data = await res.json();
-                
-                if (data.status === 'success') {
-                    userInternalBalance = data.balance || 0;
-                    const balEl = document.getElementById('userBalanceValue');
-                    if (balEl) balEl.innerText = `$${userInternalBalance.toFixed(2)}`;
-
-                    const txContainer = document.getElementById('transactionsListContainer');
-                    if (txContainer) {
-                        if (data.transactions && data.transactions.length > 0) {
-                            txContainer.innerHTML = data.transactions.map(tx => `
-                                <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-main); padding:10px 14px; border-radius:10px; margin-bottom:8px; font-size:13px; border:1px solid var(--border-color);">
-                                    <div>
-                                        <span style="color:#fff; font-weight:600;">${tx.type === 'deposit' ? t.txDep : tx.type === 'slot_purchase' ? t.txSlot : t.txGas}</span>
-                                        <span style="color:var(--text-muted); font-size:12px; margin-left:8px;">${tx.date}</span>
-                                    </div>
-                                    <div style="text-align:right;">
-                                        <span style="color:${tx.type === 'deposit' ? '#22c55e' : '#fff'}; font-weight:bold;">${tx.amount}</span>
-                                    </div>
-                                </div>
-                            `).join('');
-                        } else {
-                            setEmptyState();
-                        }
-                    }
-                } else {
-                    setEmptyState();
-                }
-            } catch (e) {
-                setEmptyState(); 
-            }
-        }, 50);
 
 } else if (section === 'Settings') {
         const notifSettingsChecked = localStorage.getItem('ax_notify_settings') !== 'false' ? 'checked' : '';
@@ -1892,7 +1770,14 @@ function renderDashboardContent(section) {
                 <button type="button" onclick="startScanningDrops()" class="btn-purple-lg" style="font-size: 13px; padding: 12px 20px; width:auto; margin-top: 4px;">${t.btnScan}</button>
                 <div id="drop-logs" style="margin-top: 16px; background: var(--bg-main); padding: 16px; border-radius: 12px; font-family: monospace; font-size: 13px; line-height: 1.5; color: var(--text-muted); min-height: 250px; max-height: 380px; overflow-y: auto; border: 1px solid var(--border-color);">${t.logInitLoot}</div>
             </div>
+            <div class="dashboard-card">
+                <h3 style="color:#fff; margin-top:0; font-size:16px;">${t.opportunitiesTitle}</h3>
+                <p style="color:var(--text-muted); font-size:13px; line-height:1.5;">${t.opportunitiesDesc}</p>
+                <div id="officialOpportunitiesContainer" style="display:flex; flex-direction:column; gap:10px;">${t.loading}</div>
+                <div id="officialOpportunityAdminContainer"></div>
+            </div>
         `;
+        setTimeout(loadOfficialOpportunities, 50);
     } else if (section === 'Farming') {
         const plannerNetworkOptions = NETWORKS_CONFIG.map(net => `<option value="${net.key}">${net.name} (${net.symbol})</option>`).join('');
         centerHtml = `
@@ -1939,7 +1824,7 @@ function renderDashboardContent(section) {
                     <span id="slot-info-badge" style="font-size: 12px; background: #1f1f1f; color: #fff; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border-color);">${t.loading}</span>
                 </div>
                 <div id="walletsListContainer" style="display: flex; flex-direction: column; gap: 8px;">${t.loading}</div>
-                <button type="button" onclick="buyExtraSlot()" class="auth-input" style="margin-top: 12px; width: auto; font-size: 13px; background:#1f1f1f; cursor:pointer; padding: 10px 16px;">${t.btnBuySlot}</button>
+                <div style="margin-top: 12px; color: var(--text-muted); font-size: 12px; line-height: 1.5;">${t.slotsPurchaseUnavailable}</div>
                 <div id="buySlotMsg" style="margin-top: 6px; font-size:12px;"></div>
             </div>
             <div class="dashboard-card">

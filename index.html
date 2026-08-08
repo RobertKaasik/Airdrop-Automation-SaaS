@@ -132,64 +132,6 @@
         <div class="auth-modal" id="modalContainer"></div>
     </div>
 
-    <!-- Модалка кошелька -->
-    <div class="modal-overlay" id="walletActionModal" onclick="handleWalletOverlayClick(event)">
-        <div class="auth-modal" style="max-width: 440px;">
-            <div class="modal-logo">
-                <span id="walletModalTitle">⚙️ Меню кошелька</span>
-                <span onclick="closeWalletActionModal()" style="cursor: pointer; color: #b19cd9; font-size: 18px;">✕</span>
-            </div>
-            
-            <div style="display: flex; flex-direction: column; gap: 14px;">
-                <div style="background: #07050c; padding: 14px; border-radius: 14px; border: 1px solid rgba(0,217,95,0.4);">
-                    <div style="font-size: 12px; font-weight: bold; color: #00d95f; margin-bottom: 10px;" id="wm-dep-title">➕ Пополнить баланс воркера:</div>
-                    
-                    <div style="margin-bottom: 12px;">
-                        <label style="font-size: 10px; color: #b19cd9; display: block; margin-bottom: 4px;" id="wm-master-lbl">Ваш мастер-кошелек (отсюда спишется газ):</label>
-                        <div style="display: flex; align-items: center; justify-content: space-between; background: #120c22; padding: 6px 10px; border-radius: 8px; border: 1px solid rgba(157,78,221,0.2);">
-                            <span style="font-family: monospace; font-size: 11px; color: #fff;">0x5e5316Dea1c44d220d4c60A5fcC2949E5A06Fc66</span>
-                            <button type="button" class="btn-dark-sm" style="padding: 4px 8px; font-size: 11px;" onclick="copyWalletAddress('0x5e5316Dea1c44d220d4c60A5fcC2949E5A06Fc66', this)">📋</button>
-                        </div>
-                    </div>
-
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
-                        <div>
-                            <label style="font-size: 10px; color: #b19cd9; display: block; margin-bottom: 2px;" id="wm-net-lbl">Сеть:</label>
-                            <select id="depositNetwork" class="auth-input" style="padding: 8px 10px; font-size: 12px;">
-                                <option value="Base">Base L2</option>
-                                <option value="Arbitrum">Arbitrum</option>
-                                <option value="ZkSync">ZkSync</option>
-                                <option value="Scroll">Scroll</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label style="font-size: 10px; color: #b19cd9; display: block; margin-bottom: 2px;" id="wm-amt-lbl">Сумма (ETH):</label>
-                            <input type="number" step="0.001" id="depositAmount" class="auth-input" value="0.005" style="padding: 8px 10px; font-size: 12px;">
-                        </div>
-                    </div>
-                    <button type="button" onclick="executeWalletDeposit()" class="btn-modal-primary" id="wm-dep-btn" style="background: linear-gradient(135deg, #008833, #00d95f); color: #000; padding: 10px; font-size: 13px;">💳 Пополнить с мастер-аккаунта</button>
-                </div>
-
-                <div style="background: #07050c; padding: 14px; border-radius: 14px; border: 1px solid rgba(157,78,221,0.3);">
-                    <div style="font-size: 12px; font-weight: bold; color: #c77dff; margin-bottom: 10px;" id="wm-edit-title">✏️ Редактировать данные:</div>
-                    <div class="input-group" style="margin-bottom: 8px;">
-                        <input type="text" id="editWalletAddress" class="auth-input" placeholder="Название или адрес" autocomplete="off" name="custom_addr_edit">
-                    </div>
-                    <div class="input-group" style="margin-bottom: 8px;">
-                        <input type="password" id="editWalletPk" class="auth-input" placeholder="Новый приватный ключ" autocomplete="new-password" name="custom_pk_edit">
-                    </div>
-                    <div class="input-group" style="margin-bottom: 10px;">
-                        <input type="text" id="editWalletProxy" class="auth-input" placeholder="Прокси" autocomplete="off" name="custom_proxy_edit">
-                    </div>
-                    <button type="button" onclick="executeWalletUpdate()" class="btn-modal-primary" id="wm-save-btn" style="padding: 10px; font-size: 13px;">💾 Сохранить изменения</button>
-                </div>
-
-                <button type="button" onclick="executeWalletDeleteFromModal()" class="btn-modal-secondary" id="wm-del-btn" style="border-color: rgba(255, 51, 102, 0.5); color: #ff88aa; padding: 10px; font-size: 13px; background: transparent; border-radius: 14px;">🗑️ Удалить кошелек навсегда</button>
-            </div>
-            <div id="walletActionMsg" style="margin-top: 10px; font-size: 12px; text-align: center;"></div>
-        </div>
-    </div>
-
     <div class="modal-overlay" id="walletConnectModal" onclick="handleWalletConnectOverlayClick(event)">
         <div class="auth-modal" style="max-width: 380px; text-align:center;">
             <div class="modal-logo" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">

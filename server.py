@@ -11,8 +11,10 @@ import logging
 import hashlib
 import hmac
 import bcrypt
+import re
 from email.message import EmailMessage
 from pathlib import Path
+from urllib.parse import urlparse
 from dotenv import load_dotenv
 
 # Securely load environment variables from .env
@@ -26,9 +28,27 @@ SENDER_PASSWORD = os.getenv("SMTP_PASSWORD")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_BOT_USERNAME = os.getenv("TELEGRAM_BOT_USERNAME", "").strip().lstrip("@")
 WALLETCONNECT_PROJECT_ID = os.getenv("WALLETCONNECT_PROJECT_ID", "").strip()
+ADMIN_USERNAMES = {
+    username.strip()
+    for username in os.getenv("AIRDROP_ADMIN_USERNAMES", "").split(",")
+    if username.strip()
+}
 
 MASTER_WALLET_ADDRESS = "0x5e5316Dea1c44d220d4c60A5fcC2949E5A06Fc66"
 BASE_RPC_URL = "https://mainnet.base.org"
+
+DEFAULT_OFFICIAL_OPPORTUNITY_SOURCES = [
+    {
+        "source_key": "base",
+        "name": "Base",
+        "network": "Base",
+        "official_url": "https://www.base.org/",
+        "status": "official_updates",
+        "summary_ru": "Следите за новостями и объявлениями Base на официальном сайте. Сейчас AIRDROP-X не заявляет о подтверждённом аирдропе.",
+        "summary_en": "Follow Base news and announcements on the official website. AIRDROP-X does not claim a confirmed airdrop at this time.",
+        "summary_zh": "请在 Base 官方网站关注新闻和公告。AIRDROP-X 目前不声称存在已确认的空投。",
+    },
+]
 
 from fastapi import FastAPI, APIRouter, Depends, HTTPException, Header
 from fastapi.staticfiles import StaticFiles
@@ -149,6 +169,21 @@ class TelegramSubscription(Base):
     linked_at = Column(Integer, nullable=False)
     updated_at = Column(Integer, nullable=False)
 
+class OfficialOpportunitySource(Base):
+    __tablename__ = "official_opportunity_sources"
+    id = Column(Integer, primary_key=True, index=True)
+    source_key = Column(String, unique=True, index=True, nullable=False)
+    name = Column(String, nullable=False)
+    network = Column(String, nullable=False)
+    official_url = Column(String, nullable=False)
+    status = Column(String, nullable=False, default="official_updates")
+    summary_ru = Column(String, nullable=False)
+    summary_en = Column(String, nullable=False)
+    summary_zh = Column(String, nullable=False)
+    is_system = Column(Boolean, nullable=False, default=False)
+    created_at = Column(Integer, nullable=False)
+    updated_at = Column(Integer, nullable=False)
+
 Base.metadata.create_all(bind=engine)
 
 def ensure_schema_columns():
@@ -177,6 +212,27 @@ def ensure_schema_columns():
             conn.commit()
 
 ensure_schema_columns()
+
+def ensure_default_opportunity_sources() -> None:
+    db = SessionLocal()
+    try:
+        now_ts = int(time.time())
+        for source in DEFAULT_OFFICIAL_OPPORTUNITY_SOURCES:
+            existing = db.query(OfficialOpportunitySource).filter(
+                OfficialOpportunitySource.source_key == source["source_key"]
+            ).first()
+            if not existing:
+                db.add(OfficialOpportunitySource(
+                    **source,
+                    is_system=True,
+                    created_at=now_ts,
+                    updated_at=now_ts,
+                ))
+        db.commit()
+    finally:
+        db.close()
+
+ensure_default_opportunity_sources()
 
 app = FastAPI(title="AIRDROP-X Backend API")
 
@@ -443,6 +499,15 @@ class BudgetPlanRequest(BaseModel):
 class TelegramLinkRequest(BaseModel):
     language: Optional[str] = "ru"
 
+class OpportunitySourceCreateRequest(BaseModel):
+    source_key: str
+    name: str
+    network: str
+    official_url: str
+    summary_ru: str
+    summary_en: str
+    summary_zh: str
+
 def normalize_language(language: Optional[str]) -> str:
     return language if language in {"ru", "en", "zh"} else "ru"
 
@@ -516,6 +581,53 @@ def get_current_user(
 def require_owned_username(username: str, current_user: User) -> None:
     if username != current_user.username:
         raise HTTPException(status_code=403, detail="You do not have access to this account")
+
+def require_admin_user(current_user: User) -> None:
+    if current_user.username not in ADMIN_USERNAMES:
+        raise HTTPException(status_code=403, detail="Administrator access required")
+
+def serialize_opportunity_source(source: OfficialOpportunitySource) -> dict:
+    return {
+        "id": source.id,
+        "source_key": source.source_key,
+        "name": source.name,
+        "network": source.network,
+        "official_url": source.official_url,
+        "status": source.status,
+        "is_system": source.is_system,
+        "summaries": {
+            "ru": source.summary_ru,
+            "en": source.summary_en,
+            "zh": source.summary_zh,
+        },
+    }
+
+def validate_opportunity_source(payload: OpportunitySourceCreateRequest) -> dict:
+    source_key = payload.source_key.strip().lower()
+    if not re.fullmatch(r"[a-z0-9-]{2,40}", source_key):
+        raise HTTPException(status_code=422, detail="Source key must use 2-40 lowercase letters, digits, or hyphens")
+
+    parsed_url = urlparse(payload.official_url.strip())
+    if parsed_url.scheme != "https" or not parsed_url.netloc or parsed_url.username or parsed_url.password:
+        raise HTTPException(status_code=422, detail="Official source URL must be a valid HTTPS address")
+
+    fields = {
+        "name": payload.name.strip(),
+        "network": payload.network.strip(),
+        "summary_ru": payload.summary_ru.strip(),
+        "summary_en": payload.summary_en.strip(),
+        "summary_zh": payload.summary_zh.strip(),
+    }
+    limits = {"name": 80, "network": 80, "summary_ru": 500, "summary_en": 500, "summary_zh": 500}
+    for field_name, value in fields.items():
+        if not value or len(value) > limits[field_name] or any(ord(char) < 32 for char in value):
+            raise HTTPException(status_code=422, detail=f"Invalid {field_name} value")
+
+    return {
+        "source_key": source_key,
+        "official_url": payload.official_url.strip(),
+        **fields,
+    }
 
 def reserve_verified_transaction(
     db: Session, txid: str, expected_amount: float, purpose: str, username: Optional[str] = None
@@ -934,19 +1046,10 @@ async def add_wallet(wallet: WalletAdd, db: Session = Depends(get_db), current_u
 @app.post("/api/wallets/buy-slot")
 async def buy_extra_slot(req: BuyExtraSlotReq, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     require_owned_username(req.username, current_user)
-    user = current_user
-    if user.balance < 10.0:
-        raise HTTPException(status_code=400, detail="Insufficient balance ($10 required)")
-        
-    user.balance -= 10.0
-    user.extra_slots += 1
-    
-    date_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-    new_tx = Transaction(username=req.username, tx_type="slot_purchase", amount=10.0, date_str=date_str, status="Success")
-    db.add(new_tx)
-    db.commit()
-    
-    return {"status": "success", "message": f"Slot purchased! Total slots: {user.extra_slots}", "balance": user.balance}
+    raise HTTPException(
+        status_code=503,
+        detail="Additional slots are temporarily unavailable. Choose a subscription plan with the required wallet limit.",
+    )
 
 @app.get("/api/wallets/{username}")
 async def get_wallets(username: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -1128,6 +1231,64 @@ async def scan_wallets(username: str, db: Session = Depends(get_db), current_use
             "notice_key": "eligibility_integrations_pending",
         }
     }
+
+@app.get("/api/opportunities")
+async def get_official_opportunities(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    sources = db.query(OfficialOpportunitySource).order_by(OfficialOpportunitySource.id.asc()).all()
+    return {
+        "status": "success",
+        "sources": [serialize_opportunity_source(source) for source in sources],
+        "can_manage": current_user.username in ADMIN_USERNAMES,
+    }
+
+@app.post("/api/opportunities")
+async def create_official_opportunity(
+    payload: OpportunitySourceCreateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    require_admin_user(current_user)
+    source_data = validate_opportunity_source(payload)
+    if db.query(OfficialOpportunitySource).filter(
+        OfficialOpportunitySource.source_key == source_data["source_key"]
+    ).first():
+        raise HTTPException(status_code=409, detail="A source with this key already exists")
+
+    now_ts = int(time.time())
+    source = OfficialOpportunitySource(
+        **source_data,
+        status="official_updates",
+        is_system=False,
+        created_at=now_ts,
+        updated_at=now_ts,
+    )
+    db.add(source)
+    try:
+        db.commit()
+        db.refresh(source)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="A source with this key already exists")
+    return {"status": "success", "source": serialize_opportunity_source(source)}
+
+@app.delete("/api/opportunities/{source_id}")
+async def delete_official_opportunity(
+    source_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    require_admin_user(current_user)
+    source = db.query(OfficialOpportunitySource).filter(OfficialOpportunitySource.id == source_id).first()
+    if not source:
+        raise HTTPException(status_code=404, detail="Official source not found")
+    if source.is_system:
+        raise HTTPException(status_code=403, detail="System sources cannot be deleted")
+    db.delete(source)
+    db.commit()
+    return {"status": "success"}
 
 @app.get("/api/stats")
 def get_platform_stats(db: Session = Depends(get_db)):
