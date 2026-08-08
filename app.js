@@ -138,15 +138,15 @@ let walletConnectProvider = null;
 let walletConnectModulePromise = null;
 
 const NETWORKS_CONFIG = [
-    { name: "Ethereum", symbol: "ETH", key: "Ethereum", icon: '<img src="https://cryptologos.cc/logos/ethereum-eth-logo.svg?v=032" style="width:32px; height:32px;">', explorer: "https://etherscan.io", deadline: "2026-10-15T00:00:00" },
-    { name: "Base", symbol: "ETH", key: "Base", icon: '<img src="https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/base/info/logo.png" style="width:32px; height:32px; border-radius:50%;">', explorer: "https://basescan.org", deadline: "2026-09-01T23:59:59" },
-    { name: "Arbitrum", symbol: "ARB", key: "Arbitrum", icon: '<img src="https://cryptologos.cc/logos/arbitrum-arb-logo.svg?v=032" style="width:32px; height:32px;">', explorer: "https://arbiscan.io", deadline: "2026-11-20T18:00:00" },
-    { name: "Linea", symbol: "ETH", key: "Linea", icon: '<img src="https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/linea/info/logo.png" style="width:32px; height:32px; border-radius:50%;">', explorer: "https://lineascan.build", deadline: "2026-09-30T23:59:59" },
-    { name: "Solana", symbol: "SOL", key: "Solana", icon: '<img src="https://cryptologos.cc/logos/solana-sol-logo.svg?v=032" style="width:32px; height:32px;">', explorer: "https://solscan.io", deadline: "2026-12-31T23:59:59" },
-    { name: "BNB Chain", symbol: "BNB", key: "BNB Chain", icon: '<img src="https://cryptologos.cc/logos/bnb-bnb-logo.svg?v=032" style="width:32px; height:32px;">', explorer: "https://bscscan.com", deadline: "2026-08-25T12:00:00" },
-    { name: "Polygon", symbol: "POL", key: "Polygon", icon: '<img src="https://cryptologos.cc/logos/polygon-matic-logo.svg?v=032" style="width:32px; height:32px;">', explorer: "https://polygonscan.com", deadline: "2026-10-31T23:59:59" },
-    { name: "Optimism", symbol: "OP", key: "Optimism", icon: '<img src="https://cryptologos.cc/logos/optimism-ethereum-op-logo.svg?v=032" style="width:32px; height:32px;">', explorer: "https://optimistic.etherscan.io", deadline: "2026-09-15T23:59:59" },
-    { name: "Tron", symbol: "TRX", key: "Tron", icon: '<img src="https://cryptologos.cc/logos/tron-trx-logo.svg?v=032" style="width:32px; height:32px;">', explorer: "https://tronscan.org", deadline: "2026-11-10T23:59:59" }
+    { name: "Ethereum", symbol: "ETH", key: "Ethereum", icon: '<img src="https://cryptologos.cc/logos/ethereum-eth-logo.svg?v=032" style="width:32px; height:32px;">', explorer: "https://etherscan.io" },
+    { name: "Base", symbol: "ETH", key: "Base", icon: '<img src="https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/base/info/logo.png" style="width:32px; height:32px; border-radius:50%;">', explorer: "https://basescan.org" },
+    { name: "Arbitrum", symbol: "ARB", key: "Arbitrum", icon: '<img src="https://cryptologos.cc/logos/arbitrum-arb-logo.svg?v=032" style="width:32px; height:32px;">', explorer: "https://arbiscan.io" },
+    { name: "Linea", symbol: "ETH", key: "Linea", icon: '<img src="https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/linea/info/logo.png" style="width:32px; height:32px; border-radius:50%;">', explorer: "https://lineascan.build" },
+    { name: "Solana", symbol: "SOL", key: "Solana", icon: '<img src="https://cryptologos.cc/logos/solana-sol-logo.svg?v=032" style="width:32px; height:32px;">', explorer: "https://solscan.io" },
+    { name: "BNB Chain", symbol: "BNB", key: "BNB Chain", icon: '<img src="https://cryptologos.cc/logos/bnb-bnb-logo.svg?v=032" style="width:32px; height:32px;">', explorer: "https://bscscan.com" },
+    { name: "Polygon", symbol: "POL", key: "Polygon", icon: '<img src="https://cryptologos.cc/logos/polygon-matic-logo.svg?v=032" style="width:32px; height:32px;">', explorer: "https://polygonscan.com" },
+    { name: "Optimism", symbol: "OP", key: "Optimism", icon: '<img src="https://cryptologos.cc/logos/optimism-ethereum-op-logo.svg?v=032" style="width:32px; height:32px;">', explorer: "https://optimistic.etherscan.io" },
+    { name: "Tron", symbol: "TRX", key: "Tron", icon: '<img src="https://cryptologos.cc/logos/tron-trx-logo.svg?v=032" style="width:32px; height:32px;">', explorer: "https://tronscan.org" }
 ];
 
 // --- Инициализация при загрузке ---
@@ -183,17 +183,6 @@ window.addEventListener('DOMContentLoaded', () => {
         renderDashboardContent(currentSection);
     }
 });
-
-function formatCountdown(deadlineStr) {
-    const total = Date.parse(new Date(deadlineStr)) - Date.now();
-    if (total <= 0) return t('countdown.ended');
-    const days = Math.floor(total / (1000 * 60 * 60 * 24));
-    const hours = Math.floor((total / (1000 * 60 * 60)) % 24);
-    const minutes = Math.floor((total / 1000 / 60) % 60);
-    const seconds = Math.floor((total / 1000) % 60);
-    
-    return `⏳ ${t('countdown.label')} ${days}${t('countdown.d')} ${hours}${t('countdown.h')} ${minutes}${t('countdown.m')} ${seconds}${t('countdown.s')}`;
-}
 
 // --- Вспомогательные функции ---
 function getOrCreateClientSessionId() {
@@ -1542,9 +1531,22 @@ async function startAutoFarming() {
 async function startScanningDrops() {
     const log = document.getElementById('drop-logs');
     const username = localStorage.getItem('airdrop_username') || "Robert";
-    const res = await fetch(`/api/scan/${username}`, { method: 'POST' });
-    const data = await res.json();
-    if (log) log.innerHTML += `<br><span style="color: #22c55e;">✅ Checked: ${data.data.total_wallets_scanned} | Found: ${data.data.found_drops.length}</span>`;
+    const t = translations[currentLang];
+    if (log) log.innerHTML += `<br><span style="color: var(--text-muted);">${t.lootChecking}</span>`;
+    try {
+        const res = await fetch(`/api/scan/${username}`, { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'scan_failed');
+        const summary = t.lootScanSummary
+            .replace('{total}', data.data.total_wallets_scanned)
+            .replace('{valid}', data.data.valid_wallets_checked);
+        if (log) {
+            log.innerHTML += `<br><span style="color: #86efac;">${summary}</span>`;
+            log.innerHTML += `<br><span style="color: #fbbf24;">${t.lootIntegrationsPending}</span>`;
+        }
+    } catch (error) {
+        if (log) log.innerHTML += `<br><span style="color: #fca5a5;">${translateBackendDetail(error.message)}</span>`;
+    }
 }
 
 async function topUpBalanceModal() {
@@ -1974,7 +1976,7 @@ function renderDashboardContent(section) {
                     <div style="display: flex; flex-direction: column; gap: 4px;">
                         <div style="color:#fff; font-weight:700; font-size:15px;">${net.name} <span style="font-size: 12px; color: var(--text-muted); font-weight: normal;">(${net.symbol})</span></div>
                         <div style="font-size:13px; color: var(--text-muted);">${t.gasLabel} <span id="gas-${net.key}" style="color:#eab308; font-weight:bold;">${t.loading}</span> <span id="gas-status-${net.key}" style="font-size:11px; font-weight:700;"></span></div>
-                        <div style="color: #38bdf8; font-size: 13px; font-weight: 600; font-family: monospace;" id="timer-${net.key}">${formatCountdown(net.deadline)}</div>
+                        <div style="color: #93c5fd; font-size: 12px; line-height:1.4;">${t.networkEligibilityStatus}</div>
                     </div>
                 </div>
                 <div>
@@ -2005,16 +2007,6 @@ function renderDashboardContent(section) {
                 <div>${networksHtml}</div>
             </div>
         `;
-
-        if (window.networksTimerInterval) clearInterval(window.networksTimerInterval);
-        window.networksTimerInterval = setInterval(() => {
-            NETWORKS_CONFIG.forEach(net => {
-                const timerEl = document.getElementById(`timer-${net.key}`);
-                if (timerEl) {
-                    timerEl.innerText = formatCountdown(net.deadline);
-                }
-            });
-        }, 1000);
 
         setTimeout(async () => {
             for (let net of NETWORKS_CONFIG) {

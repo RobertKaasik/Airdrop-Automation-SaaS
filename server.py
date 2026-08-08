@@ -1125,7 +1125,7 @@ async def scan_wallets(username: str, db: Session = Depends(get_db), current_use
             "total_wallets_scanned": len(wallets),
             "valid_wallets_checked": len(valid_wallets),
             "found_drops": [],
-            "notice": "Eligibility scanning is not available until verified protocol integrations are implemented.",
+            "notice_key": "eligibility_integrations_pending",
         }
     }
 
