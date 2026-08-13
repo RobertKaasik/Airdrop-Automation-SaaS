@@ -130,6 +130,14 @@ const BASE_MAINNET_CONFIG = {
     rpcUrls: ['https://mainnet.base.org'],
     blockExplorerUrls: ['https://base.blockscout.com'],
 };
+const BASE_SEPOLIA_CHAIN_ID = '0x14a34';
+const BASE_SEPOLIA_CONFIG = {
+    chainId: BASE_SEPOLIA_CHAIN_ID,
+    chainName: 'Base Sepolia',
+    nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+    rpcUrls: ['https://sepolia.base.org'],
+    blockExplorerUrls: ['https://sepolia-explorer.base.org'],
+};
 const WALLETCONNECT_PROVIDER_MODULE_URL = 'https://esm.sh/@walletconnect/ethereum-provider@2.23.10?bundle&target=es2022';
 let walletConnectProvider = null;
 let walletConnectModulePromise = null;
@@ -935,6 +943,207 @@ async function connectBaseWallet() {
     }
 }
 
+function parseTestEthAmount(value) {
+    const normalized = String(value || '').trim();
+    if (!/^(?:0|[1-9]\d*)(?:\.\d{1,18})?$/.test(normalized)) return null;
+    const [whole, fraction = ''] = normalized.split('.');
+    const wei = BigInt(whole) * (10n ** 18n) + BigInt((fraction + '0'.repeat(18)).slice(0, 18));
+    return wei > 0n ? wei : null;
+}
+
+async function switchToBaseSepolia(provider) {
+    let chainId = await provider.request({ method: 'eth_chainId' });
+    if (chainId === BASE_SEPOLIA_CHAIN_ID) return;
+    try {
+        await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: BASE_SEPOLIA_CHAIN_ID }] });
+    } catch (switchError) {
+        if (switchError?.code !== 4902) throw switchError;
+        await provider.request({ method: 'wallet_addEthereumChain', params: [BASE_SEPOLIA_CONFIG] });
+    }
+    chainId = await provider.request({ method: 'eth_chainId' });
+    if (chainId !== BASE_SEPOLIA_CHAIN_ID) throw new Error('test_network_not_selected');
+}
+
+async function switchToBaseMainnet(provider) {
+    let chainId = await provider.request({ method: 'eth_chainId' });
+    if (chainId === BASE_MAINNET_CHAIN_ID) return;
+    try {
+        await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: BASE_MAINNET_CHAIN_ID }] });
+    } catch (switchError) {
+        if (switchError?.code !== 4902) throw switchError;
+        await provider.request({ method: 'wallet_addEthereumChain', params: [BASE_MAINNET_CONFIG] });
+    }
+    chainId = await provider.request({ method: 'eth_chainId' });
+    if (chainId !== BASE_MAINNET_CHAIN_ID) throw new Error('base_mainnet_not_selected');
+}
+
+async function sendBaseSepoliaTestTransfer() {
+    const locale = translations[getActiveLang()];
+    const provider = window.ethereum;
+    const result = document.getElementById('baseSepoliaTestResult');
+    const recipient = document.getElementById('baseSepoliaTestRecipient')?.value.trim();
+    const amountWei = parseTestEthAmount(document.getElementById('baseSepoliaTestAmount')?.value);
+    const button = document.getElementById('baseSepoliaTestButton');
+    if (!provider?.request) {
+        showNotification(locale.testTransferWalletRequired, 'error');
+        return;
+    }
+    if (!/^0x[0-9a-fA-F]{40}$/.test(recipient) || !amountWei || amountWei > 50000000000000000n) {
+        if (result) result.innerHTML = `<span style="color:#fca5a5;">${locale.testTransferInvalid}</span>`;
+        return;
+    }
+    try {
+        setButtonLoading(button, true, locale.testTransferSigning);
+        const accounts = await provider.request({ method: 'eth_requestAccounts' });
+        if (!Array.isArray(accounts) || !accounts[0]) throw new Error('test_wallet_not_connected');
+        await switchToBaseSepolia(provider);
+        const hash = await provider.request({
+            method: 'eth_sendTransaction',
+            params: [{ from: accounts[0], to: recipient, value: `0x${amountWei.toString(16)}` }],
+        });
+        if (result) {
+            const txUrl = `${BASE_SEPOLIA_CONFIG.blockExplorerUrls[0]}/tx/${encodeURIComponent(hash)}`;
+            result.innerHTML = `<span style="color:#86efac;">${locale.testTransferSent}</span> <a href="${txUrl}" target="_blank" rel="noopener noreferrer" style="color:#c4b5fd;">${locale.testTransferOpenExplorer}</a>`;
+        }
+    } catch (error) {
+        const isRejected = error?.code === 4001 || error?.code === 'ACTION_REJECTED';
+        if (result) result.innerHTML = `<span style="color:#fca5a5;">${isRejected ? locale.testTransferRejected : locale.testTransferFailed}</span>`;
+    } finally {
+        setButtonLoading(button, false, locale.testTransferButton);
+    }
+}
+
+let savedTransferTemplates = [];
+
+function transferTemplateWalletName(wallet) {
+    const locale = translations[getActiveLang()];
+    return wallet.label || `${locale.walletDefaultName} ${wallet.id}`;
+}
+
+async function loadTransferCenter() {
+    const container = document.getElementById('walletTransferCenter');
+    if (!container) return;
+    const locale = translations[getActiveLang()];
+    try {
+        const response = await fetch('/api/transfer-center');
+        const data = await response.json();
+        if (!response.ok || !Array.isArray(data.wallets) || !Array.isArray(data.templates)) throw new Error('transfer_center_unavailable');
+        savedTransferTemplates = data.templates;
+        const walletById = new Map(data.wallets.map((wallet) => [wallet.id, wallet]));
+        const recipients = data.wallets.length
+            ? data.wallets.map((wallet) => `<option value="${Number(wallet.id)}">${escapeHtml(transferTemplateWalletName(wallet))} — ${escapeHtml(`${wallet.address.slice(0, 6)}…${wallet.address.slice(-4)}`)}</option>`).join('')
+            : '';
+        const createForm = data.wallets.length >= 2
+            ? `<div style="display:grid; grid-template-columns:1.1fr 1.6fr .8fr; gap:10px;">
+                    <input id="transferTemplateName" maxlength="60" class="auth-input" placeholder="${locale.transferTemplateName}" style="font-size:13px; padding:10px 12px;">
+                    <select id="transferTemplateRecipient" class="auth-input" style="font-size:13px; padding:10px 12px;">${recipients}</select>
+                    <input id="transferTemplateAmount" inputmode="decimal" class="auth-input" placeholder="0.001" style="font-size:13px; padding:10px 12px;">
+               </div>
+               <button type="button" onclick="createTransferTemplate()" class="btn-dark-sm" style="margin-top:10px; width:auto; padding:10px 14px; border-color:#7c3aed;">${locale.transferTemplateSave}</button>`
+            : `<div style="color:var(--text-muted); font-size:13px; line-height:1.5;">${locale.transferNeedTwoWallets}</div>`;
+        const templates = data.templates.length
+            ? data.templates.map((template) => {
+                const wallet = walletById.get(template.recipient_wallet_id);
+                const recipientName = wallet ? transferTemplateWalletName(wallet) : `${template.recipient_address.slice(0, 6)}…${template.recipient_address.slice(-4)}`;
+                return `<div style="background:var(--bg-main); border:1px solid var(--border-color); border-radius:12px; padding:13px; display:flex; justify-content:space-between; gap:12px; align-items:center;">
+                    <div>
+                        <div style="color:#fff; font-weight:700; font-size:13px;">${escapeHtml(template.name)}</div>
+                        <div style="color:var(--text-muted); font-size:12px; margin-top:4px;">${escapeHtml(recipientName)} · ${escapeHtml(template.recipient_address.slice(0, 6))}…${escapeHtml(template.recipient_address.slice(-4))}</div>
+                    </div>
+                    <div style="display:flex; gap:7px; align-items:center; flex-wrap:wrap; justify-content:flex-end;">
+                        <input id="transferTemplateAmount-${Number(template.id)}" inputmode="decimal" value="${escapeHtml(template.default_amount)}" class="auth-input" style="width:88px; padding:7px 9px; font-size:12px;">
+                        <button type="button" id="transferTemplateSend-${Number(template.id)}" onclick="sendTransferTemplate(${Number(template.id)})" class="btn-dark-sm" style="padding:7px 10px; border-color:#7c3aed;">${locale.transferSend}</button>
+                        <button type="button" onclick="deleteTransferTemplate(${Number(template.id)})" class="btn-dark-sm" style="padding:7px 10px; color:#fca5a5;">${locale.transferDelete}</button>
+                    </div>
+                </div>`;
+            }).join('')
+            : `<div style="color:var(--text-muted); font-size:13px;">${locale.transferNoTemplates}</div>`;
+        const history = Array.isArray(data.history) && data.history.length
+            ? data.history.map((record) => `<div style="display:flex; justify-content:space-between; gap:10px; font-size:12px; padding:9px 0; border-top:1px solid var(--border-color);">
+                    <span style="color:var(--text-muted);">${escapeHtml(record.amount)} ETH · ${escapeHtml(`${record.to_address.slice(0, 6)}…${record.to_address.slice(-4)}`)}</span>
+                    <a href="${BASE_MAINNET_CONFIG.blockExplorerUrls[0]}/tx/${encodeURIComponent(record.tx_hash)}" target="_blank" rel="noopener noreferrer" style="color:#c4b5fd; text-decoration:none;">${locale.transferOpenTx}</a>
+                </div>`).join('')
+            : `<div style="color:var(--text-muted); font-size:12px;">${locale.transferNoHistory}</div>`;
+        container.innerHTML = `<div style="margin-bottom:14px;">${createForm}</div><div style="display:flex; flex-direction:column; gap:9px;">${templates}</div><div style="margin-top:16px; color:#fff; font-weight:700; font-size:13px;">${locale.transferHistoryTitle}</div><div>${history}</div><div id="transferCenterResult" style="margin-top:10px; font-size:12px;"></div>`;
+    } catch (error) {
+        container.innerHTML = `<div style="color:#fca5a5; font-size:13px;">${locale.transferLoadError}</div>`;
+    }
+}
+
+async function createTransferTemplate() {
+    const locale = translations[getActiveLang()];
+    const payload = {
+        name: document.getElementById('transferTemplateName')?.value || '',
+        recipient_wallet_id: Number(document.getElementById('transferTemplateRecipient')?.value),
+        default_amount: document.getElementById('transferTemplateAmount')?.value || '',
+    };
+    try {
+        const response = await fetch('/api/transfer-templates', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'transfer_template_failed');
+        showNotification(locale.transferTemplateSaved, 'success');
+        await loadTransferCenter();
+    } catch (error) {
+        showNotification(translateBackendDetail(error.message) || locale.transferTemplateError, 'error');
+    }
+}
+
+async function deleteTransferTemplate(templateId) {
+    const locale = translations[getActiveLang()];
+    if (!window.confirm(locale.transferDeleteConfirm)) return;
+    try {
+        const response = await fetch(`/api/transfer-templates/${templateId}`, { method: 'DELETE' });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'transfer_template_failed');
+        await loadTransferCenter();
+    } catch (error) {
+        showNotification(translateBackendDetail(error.message) || locale.transferTemplateError, 'error');
+    }
+}
+
+async function sendTransferTemplate(templateId) {
+    const locale = translations[getActiveLang()];
+    const template = savedTransferTemplates.find((item) => item.id === templateId);
+    const amount = document.getElementById(`transferTemplateAmount-${templateId}`)?.value || '';
+    const amountWei = parseTestEthAmount(amount);
+    const result = document.getElementById('transferCenterResult');
+    const button = document.getElementById(`transferTemplateSend-${templateId}`);
+    const provider = walletConnectProvider?.session ? walletConnectProvider : window.ethereum;
+    if (!template || !amountWei || !provider?.request) {
+        if (result) result.innerHTML = `<span style="color:#fca5a5;">${locale.transferInvalid}</span>`;
+        return;
+    }
+    try {
+        let accounts = await provider.request({ method: 'eth_accounts' });
+        if (!Array.isArray(accounts) || !accounts[0]) accounts = await provider.request({ method: 'eth_requestAccounts' });
+        const fromAddress = accounts?.[0];
+        if (!/^0x[0-9a-fA-F]{40}$/.test(fromAddress || '') || fromAddress.toLowerCase() === template.recipient_address.toLowerCase()) {
+            throw new Error('invalid_transfer_wallet');
+        }
+        if (!window.confirm(locale.transferConfirm.replace('{amount}', amount).replace('{recipient}', `${template.recipient_address.slice(0, 6)}…${template.recipient_address.slice(-4)}`))) return;
+        setButtonLoading(button, true, locale.transferSigning);
+        await switchToBaseMainnet(provider);
+        const txHash = await provider.request({
+            method: 'eth_sendTransaction',
+            params: [{ from: fromAddress, to: template.recipient_address, value: `0x${amountWei.toString(16)}` }],
+        });
+        const recordResponse = await fetch('/api/transfer-records', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ template_id: template.id, from_address: fromAddress, to_address: template.recipient_address, amount, tx_hash: txHash }),
+        });
+        const txUrl = `${BASE_MAINNET_CONFIG.blockExplorerUrls[0]}/tx/${encodeURIComponent(txHash)}`;
+        if (result) result.innerHTML = `<span style="color:#86efac;">${locale.transferSubmitted}</span> <a href="${txUrl}" target="_blank" rel="noopener noreferrer" style="color:#c4b5fd;">${locale.transferOpenTx}</a>`;
+        if (recordResponse.ok) await loadTransferCenter();
+    } catch (error) {
+        const isRejected = error?.code === 4001 || error?.code === 'ACTION_REJECTED';
+        if (result) result.innerHTML = `<span style="color:#fca5a5;">${isRejected ? locale.transferRejected : locale.transferFailed}</span>`;
+    } finally {
+        setButtonLoading(button, false, locale.transferSend);
+    }
+}
+
 async function getWalletConnectProvider() {
     if (walletConnectProvider) return walletConnectProvider;
     const configResponse = await fetch('/api/walletconnect/config');
@@ -952,7 +1161,7 @@ async function getWalletConnectProvider() {
         projectId: config.project_id,
         showQrModal: false,
         optionalChains: [config.chain_id],
-        optionalMethods: ['eth_requestAccounts', 'eth_accounts', 'eth_chainId', 'wallet_switchEthereumChain'],
+        optionalMethods: ['eth_requestAccounts', 'eth_accounts', 'eth_chainId', 'eth_sendTransaction', 'wallet_switchEthereumChain'],
         optionalEvents: ['accountsChanged', 'chainChanged'],
         rpcMap: { [config.chain_id]: BASE_MAINNET_CONFIG.rpcUrls[0] },
         metadata: {
@@ -1893,10 +2102,26 @@ function renderDashboardContent(section) {
                 </div>
                 <div id="walletResponseMsg" style="margin-top: 8px; font-size:12px;"></div>
             </div>
+            <div class="dashboard-card">
+                <h3 style="color:#fff; margin-top:0; font-size:16px;">${t.transferTemplatesTitle}</h3>
+                <p style="color:var(--text-muted); font-size:13px; line-height:1.5;">${t.transferTemplatesDesc}</p>
+                <div id="walletTransferCenter" style="display:flex; flex-direction:column; gap:10px;">${t.loading}</div>
+            </div>
+            <div class="dashboard-card">
+                <h3 style="color:#fff; margin-top:0; font-size:16px;">${t.testTransferTitle}</h3>
+                <p style="color:var(--text-muted); font-size:13px; line-height:1.5;">${t.testTransferDesc}</p>
+                <div style="display:grid; grid-template-columns:2fr 1fr; gap:10px;">
+                    <input type="text" id="baseSepoliaTestRecipient" placeholder="${t.testTransferRecipient}" class="auth-input" style="font-size:13px; padding:10px 12px;">
+                    <input type="text" inputmode="decimal" id="baseSepoliaTestAmount" placeholder="0.001" class="auth-input" style="font-size:13px; padding:10px 12px;">
+                </div>
+                <button type="button" id="baseSepoliaTestButton" onclick="sendBaseSepoliaTestTransfer()" class="btn-dark-sm" style="margin-top:10px; width:auto; padding:10px 14px; border-color:#7c3aed;">${t.testTransferButton}</button>
+                <div id="baseSepoliaTestResult" style="font-size:12px; line-height:1.5; margin-top:9px;"></div>
+            </div>
         `;
         setTimeout(() => {
             updateBaseWalletConnectionState();
             loadWalletsFromDB();
+            loadTransferCenter();
         }, 50);
     } else if (section === 'Networks') {
         const networksHtml = NETWORKS_CONFIG.map(net => `

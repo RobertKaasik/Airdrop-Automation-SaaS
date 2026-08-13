@@ -245,6 +245,30 @@ class OfficialOpportunitySource(Base):
     created_at = Column(Integer, nullable=False)
     updated_at = Column(Integer, nullable=False)
 
+class WalletTransferTemplate(Base):
+    __tablename__ = "wallet_transfer_templates"
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, index=True, nullable=False)
+    name = Column(String, nullable=False)
+    recipient_wallet_id = Column(Integer, nullable=False)
+    recipient_address = Column(String, nullable=False)
+    default_amount = Column(String, nullable=False)
+    network = Column(String, nullable=False, default="Base")
+    created_at = Column(Integer, nullable=False)
+    updated_at = Column(Integer, nullable=False)
+
+class WalletTransferRecord(Base):
+    __tablename__ = "wallet_transfer_records"
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, index=True, nullable=False)
+    template_id = Column(Integer, nullable=True)
+    from_address = Column(String, nullable=False)
+    to_address = Column(String, nullable=False)
+    amount = Column(String, nullable=False)
+    tx_hash = Column(String, unique=True, index=True, nullable=False)
+    network = Column(String, nullable=False, default="Base")
+    created_at = Column(Integer, nullable=False)
+
 Base.metadata.create_all(bind=engine)
 
 def ensure_schema_columns():
@@ -574,6 +598,18 @@ class OpportunitySourceCreateRequest(BaseModel):
     summary_en: str
     summary_zh: str
 
+class TransferTemplateCreateRequest(BaseModel):
+    name: str
+    recipient_wallet_id: int
+    default_amount: str
+
+class TransferRecordCreateRequest(BaseModel):
+    template_id: int
+    from_address: str
+    to_address: str
+    amount: str
+    tx_hash: str
+
 def normalize_language(language: Optional[str]) -> str:
     return language if language in {"ru", "en", "zh"} else "ru"
 
@@ -707,6 +743,28 @@ def validate_opportunity_source(payload: OpportunitySourceCreateRequest) -> dict
         "official_url": payload.official_url.strip(),
         "claim_url": claim_url or None,
         **fields,
+    }
+
+def is_valid_evm_address(value: str) -> bool:
+    return bool(re.fullmatch(r"0x[a-fA-F0-9]{40}", value.strip()))
+
+def normalize_eth_amount(value: str) -> str:
+    clean_value = value.strip()
+    if not re.fullmatch(r"(?:0|[1-9]\d*)(?:\.\d{1,18})?", clean_value):
+        raise HTTPException(status_code=422, detail="Transfer amount must be a positive ETH value")
+    whole, _, fraction = clean_value.partition(".")
+    if int(whole) > 1000000 or (int(whole) == 0 and not fraction.strip("0")):
+        raise HTTPException(status_code=422, detail="Transfer amount is outside the permitted range")
+    return clean_value.rstrip("0").rstrip(".") if "." in clean_value else clean_value
+
+def serialize_transfer_template(template: WalletTransferTemplate) -> dict:
+    return {
+        "id": template.id,
+        "name": template.name,
+        "recipient_wallet_id": template.recipient_wallet_id,
+        "recipient_address": template.recipient_address,
+        "default_amount": template.default_amount,
+        "network": template.network,
     }
 
 def reserve_verified_transaction(
@@ -1340,6 +1398,127 @@ async def get_airdrop_eligibility_center(
         "confirmed_claims": [],
         "notice_key": "official_claim_check_required",
     }
+
+@app.get("/api/transfer-center")
+async def get_transfer_center(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    wallets = db.query(Wallet).filter(Wallet.username == current_user.username).all()
+    templates = db.query(WalletTransferTemplate).filter(
+        WalletTransferTemplate.username == current_user.username
+    ).order_by(WalletTransferTemplate.updated_at.desc()).all()
+    history = db.query(WalletTransferRecord).filter(
+        WalletTransferRecord.username == current_user.username
+    ).order_by(WalletTransferRecord.created_at.desc()).limit(20).all()
+    return {
+        "status": "success",
+        "wallets": [{"id": wallet.id, "address": wallet.wallet_address, "label": wallet.label} for wallet in wallets],
+        "templates": [serialize_transfer_template(template) for template in templates],
+        "history": [
+            {
+                "id": record.id,
+                "from_address": record.from_address,
+                "to_address": record.to_address,
+                "amount": record.amount,
+                "tx_hash": record.tx_hash,
+                "network": record.network,
+                "created_at": record.created_at,
+            }
+            for record in history
+        ],
+    }
+
+@app.post("/api/transfer-templates")
+async def create_transfer_template(
+    payload: TransferTemplateCreateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    name = payload.name.strip()
+    if not name or len(name) > 60 or any(ord(char) < 32 for char in name):
+        raise HTTPException(status_code=422, detail="Transfer template name is invalid")
+    recipient = db.query(Wallet).filter(
+        Wallet.id == payload.recipient_wallet_id,
+        Wallet.username == current_user.username,
+    ).first()
+    if not recipient or not is_valid_evm_address(recipient.wallet_address):
+        raise HTTPException(status_code=422, detail="Choose one of your saved EVM wallets as recipient")
+    amount = normalize_eth_amount(payload.default_amount)
+    now_ts = int(time.time())
+    template = WalletTransferTemplate(
+        username=current_user.username,
+        name=name,
+        recipient_wallet_id=recipient.id,
+        recipient_address=recipient.wallet_address,
+        default_amount=amount,
+        network="Base",
+        created_at=now_ts,
+        updated_at=now_ts,
+    )
+    db.add(template)
+    db.commit()
+    db.refresh(template)
+    return {"status": "success", "template": serialize_transfer_template(template)}
+
+@app.delete("/api/transfer-templates/{template_id}")
+async def delete_transfer_template(
+    template_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    template = db.query(WalletTransferTemplate).filter(
+        WalletTransferTemplate.id == template_id,
+        WalletTransferTemplate.username == current_user.username,
+    ).first()
+    if not template:
+        raise HTTPException(status_code=404, detail="Transfer template not found")
+    db.delete(template)
+    db.commit()
+    return {"status": "success"}
+
+@app.post("/api/transfer-records")
+async def save_transfer_record(
+    payload: TransferRecordCreateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    template = db.query(WalletTransferTemplate).filter(
+        WalletTransferTemplate.id == payload.template_id,
+        WalletTransferTemplate.username == current_user.username,
+    ).first()
+    if not template:
+        raise HTTPException(status_code=404, detail="Transfer template not found")
+    from_address = payload.from_address.strip()
+    to_address = payload.to_address.strip()
+    if not is_valid_evm_address(from_address) or not is_valid_evm_address(to_address):
+        raise HTTPException(status_code=422, detail="Transfer contains an invalid EVM address")
+    if from_address.lower() == to_address.lower():
+        raise HTTPException(status_code=422, detail="Sender and recipient must be different wallets")
+    if to_address.lower() != template.recipient_address.lower():
+        raise HTTPException(status_code=403, detail="Recipient does not match the saved template")
+    if not db.query(Wallet).filter(
+        Wallet.username == current_user.username,
+        Wallet.wallet_address.ilike(from_address),
+    ).first():
+        raise HTTPException(status_code=403, detail="Connect one of your saved wallets before sending")
+    tx_hash = payload.tx_hash.strip()
+    if not re.fullmatch(r"0x[a-fA-F0-9]{64}", tx_hash):
+        raise HTTPException(status_code=422, detail="Transaction hash is invalid")
+    if db.query(WalletTransferRecord).filter(WalletTransferRecord.tx_hash == tx_hash).first():
+        return {"status": "success", "already_saved": True}
+    db.add(WalletTransferRecord(
+        username=current_user.username,
+        template_id=template.id,
+        from_address=from_address,
+        to_address=to_address,
+        amount=normalize_eth_amount(payload.amount),
+        tx_hash=tx_hash,
+        network="Base",
+        created_at=int(time.time()),
+    ))
+    db.commit()
+    return {"status": "success"}
 
 @app.get("/api/opportunities")
 async def get_official_opportunities(
