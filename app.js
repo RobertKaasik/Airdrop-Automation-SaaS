@@ -1526,6 +1526,41 @@ async function loadOfficialOpportunities() {
     }
 }
 
+async function loadAirdropEligibility() {
+    const container = document.getElementById('airdropEligibilityContainer');
+    if (!container) return;
+    const locale = translations[currentLang];
+    const username = localStorage.getItem('airdrop_username');
+    if (!username) {
+        container.innerHTML = `<div style="color:var(--text-muted); font-size:13px;">${locale.eligibilityNoWallets}</div>`;
+        return;
+    }
+    try {
+        const response = await fetch(`/api/eligibility/${encodeURIComponent(username)}`);
+        const data = await response.json();
+        if (!response.ok || !Array.isArray(data.wallets) || !Array.isArray(data.claim_checks)) {
+            throw new Error('eligibility_unavailable');
+        }
+        const wallets = data.wallets.length
+            ? `<div style="color:var(--text-muted); font-size:12px; line-height:1.5; margin-bottom:12px;">${locale.eligibilityWallets}: ${data.wallets.map((wallet) => escapeHtml(wallet.label || `${wallet.address.slice(0, 6)}…${wallet.address.slice(-4)}`)).join(', ')}</div>`
+            : `<div style="color:var(--text-muted); font-size:13px; line-height:1.5;">${locale.eligibilityNoWallets}</div>`;
+        const checks = data.claim_checks.length
+            ? data.claim_checks.map((source) => `
+                <div style="background:var(--bg-main); border:1px solid var(--border-color); border-radius:12px; padding:13px; display:flex; justify-content:space-between; gap:12px; align-items:center;">
+                    <div>
+                        <div style="color:#fff; font-size:14px; font-weight:700;">${escapeHtml(source.name)} <span style="color:var(--text-muted); font-weight:400;">(${escapeHtml(source.network)})</span></div>
+                        <div style="color:var(--text-muted); font-size:12px; margin-top:4px;">${escapeHtml(source.summaries?.[getActiveLang()] || source.summaries?.en || '')}</div>
+                    </div>
+                    <a href="${escapeHtml(source.claim_url)}" target="_blank" rel="noopener noreferrer" class="btn-dark-sm" style="white-space:nowrap; padding:8px 11px; text-decoration:none;">${locale.eligibilityOpenCheck}</a>
+                </div>
+            `).join('')
+            : `<div style="color:var(--text-muted); font-size:13px; line-height:1.5;">${locale.eligibilityNoChecks}</div>`;
+        container.innerHTML = `${wallets}<div style="display:flex; flex-direction:column; gap:10px;">${checks}</div><div style="color:#fbbf24; font-size:12px; line-height:1.5; margin-top:12px;">${locale.eligibilityCheckedNotice}</div>`;
+    } catch (error) {
+        container.innerHTML = `<div style="color:#fca5a5; font-size:13px;">${locale.eligibilityLoadError}</div>`;
+    }
+}
+
 function renderOpportunityAdminControls(canManage) {
     const container = document.getElementById('officialOpportunityAdminContainer');
     if (!container) return;
@@ -1544,6 +1579,7 @@ function renderOpportunityAdminControls(canManage) {
                 <label style="color:var(--text-muted); font-size:12px;">${t.opportunitySourceName}<input id="opportunitySourceName" maxlength="80" required ${fieldStyle}></label>
                 <label style="color:var(--text-muted); font-size:12px;">${t.opportunitySourceNetwork}<input id="opportunitySourceNetwork" maxlength="80" required ${fieldStyle}></label>
                 <label style="color:var(--text-muted); font-size:12px;">${t.opportunitySourceUrl}<input id="opportunitySourceUrl" type="url" maxlength="500" required ${fieldStyle}></label>
+                <label style="color:var(--text-muted); font-size:12px; grid-column:1 / -1;">${t.opportunityClaimUrl}<input id="opportunityClaimUrl" type="url" maxlength="500" ${fieldStyle}></label>
                 <label style="color:var(--text-muted); font-size:12px; grid-column:1 / -1;">${t.opportunitySourceSummaryRu}<textarea id="opportunitySourceSummaryRu" maxlength="500" required ${fieldStyle}></textarea></label>
                 <label style="color:var(--text-muted); font-size:12px; grid-column:1 / -1;">${t.opportunitySourceSummaryEn}<textarea id="opportunitySourceSummaryEn" maxlength="500" required ${fieldStyle}></textarea></label>
                 <label style="color:var(--text-muted); font-size:12px; grid-column:1 / -1;">${t.opportunitySourceSummaryZh}<textarea id="opportunitySourceSummaryZh" maxlength="500" required ${fieldStyle}></textarea></label>
@@ -1561,6 +1597,7 @@ async function submitOfficialOpportunity(event) {
         name: document.getElementById('opportunitySourceName')?.value || '',
         network: document.getElementById('opportunitySourceNetwork')?.value || '',
         official_url: document.getElementById('opportunitySourceUrl')?.value || '',
+        claim_url: document.getElementById('opportunityClaimUrl')?.value || '',
         summary_ru: document.getElementById('opportunitySourceSummaryRu')?.value || '',
         summary_en: document.getElementById('opportunitySourceSummaryEn')?.value || '',
         summary_zh: document.getElementById('opportunitySourceSummaryZh')?.value || '',
@@ -1771,13 +1808,21 @@ function renderDashboardContent(section) {
                 <div id="drop-logs" style="margin-top: 16px; background: var(--bg-main); padding: 16px; border-radius: 12px; font-family: monospace; font-size: 13px; line-height: 1.5; color: var(--text-muted); min-height: 250px; max-height: 380px; overflow-y: auto; border: 1px solid var(--border-color);">${t.logInitLoot}</div>
             </div>
             <div class="dashboard-card">
+                <h3 style="color:#fff; margin-top:0; font-size:16px;">${t.eligibilityTitle}</h3>
+                <p style="color:var(--text-muted); font-size:13px; line-height:1.5;">${t.eligibilityDesc}</p>
+                <div id="airdropEligibilityContainer" style="display:flex; flex-direction:column; gap:10px;">${t.loading}</div>
+            </div>
+            <div class="dashboard-card">
                 <h3 style="color:#fff; margin-top:0; font-size:16px;">${t.opportunitiesTitle}</h3>
                 <p style="color:var(--text-muted); font-size:13px; line-height:1.5;">${t.opportunitiesDesc}</p>
                 <div id="officialOpportunitiesContainer" style="display:flex; flex-direction:column; gap:10px;">${t.loading}</div>
                 <div id="officialOpportunityAdminContainer"></div>
             </div>
         `;
-        setTimeout(loadOfficialOpportunities, 50);
+        setTimeout(() => {
+            loadOfficialOpportunities();
+            loadAirdropEligibility();
+        }, 50);
     } else if (section === 'Farming') {
         const plannerNetworkOptions = NETWORKS_CONFIG.map(net => `<option value="${net.key}">${net.name} (${net.symbol})</option>`).join('');
         centerHtml = `

@@ -48,6 +48,66 @@ DEFAULT_OFFICIAL_OPPORTUNITY_SOURCES = [
         "summary_en": "Follow Base news and announcements on the official website. AIRDROP-X does not claim a confirmed airdrop at this time.",
         "summary_zh": "请在 Base 官方网站关注新闻和公告。AIRDROP-X 目前不声称存在已确认的空投。",
     },
+    {
+        "source_key": "arbitrum",
+        "name": "Arbitrum",
+        "network": "Arbitrum",
+        "official_url": "https://arbitrum.io/",
+        "status": "official_updates",
+        "summary_ru": "Официальный сайт Arbitrum. Следите за новостями и объявлениями проекта только через его официальные каналы.",
+        "summary_en": "Official Arbitrum website. Follow project news and announcements only through its official channels.",
+        "summary_zh": "Arbitrum 官方网站。请仅通过项目官方渠道关注新闻和公告。",
+    },
+    {
+        "source_key": "optimism",
+        "name": "Optimism",
+        "network": "Optimism",
+        "official_url": "https://optimism.io/",
+        "status": "official_updates",
+        "summary_ru": "Официальный сайт Optimism. Страница не означает наличие активного аирдропа или права на получение токенов.",
+        "summary_en": "Official Optimism website. This page does not mean an active airdrop or token eligibility exists.",
+        "summary_zh": "Optimism 官方网站。此页面不表示存在活跃空投或代币领取资格。",
+    },
+    {
+        "source_key": "zksync",
+        "name": "ZKsync",
+        "network": "ZKsync",
+        "official_url": "https://www.zksync.io/",
+        "status": "official_updates",
+        "summary_ru": "Официальный сайт ZKsync для новостей и объявлений. Проверяйте условия распределений только в официальных сообщениях.",
+        "summary_en": "Official ZKsync website for news and announcements. Verify distribution terms only in official communications.",
+        "summary_zh": "ZKsync 官方新闻与公告网站。仅在官方公告中核实分发条件。",
+    },
+    {
+        "source_key": "polygon",
+        "name": "Polygon",
+        "network": "Polygon",
+        "official_url": "https://polygon.technology/",
+        "status": "official_updates",
+        "summary_ru": "Официальный сайт Polygon. Не вводите seed-фразу или приватный ключ на сторонних страницах.",
+        "summary_en": "Official Polygon website. Never enter a seed phrase or private key on third-party pages.",
+        "summary_zh": "Polygon 官方网站。切勿在第三方页面输入助记词或私钥。",
+    },
+    {
+        "source_key": "bnb-chain",
+        "name": "BNB Chain",
+        "network": "BNB Chain",
+        "official_url": "https://www.bnbchain.org/en",
+        "status": "official_updates",
+        "summary_ru": "Официальный сайт BNB Chain. Используйте его для проверки новостей и ссылок на официальные приложения.",
+        "summary_en": "Official BNB Chain website. Use it to verify news and links to official applications.",
+        "summary_zh": "BNB Chain 官方网站。请用它核实新闻和官方应用链接。",
+    },
+    {
+        "source_key": "solana",
+        "name": "Solana",
+        "network": "Solana",
+        "official_url": "https://solana.com/",
+        "status": "official_updates",
+        "summary_ru": "Официальный сайт Solana. Наличие источника не означает подтверждённый аирдроп.",
+        "summary_en": "Official Solana website. A listed source does not mean an airdrop is confirmed.",
+        "summary_zh": "Solana 官方网站。列出来源并不表示空投已确认。",
+    },
 ]
 
 from fastapi import FastAPI, APIRouter, Depends, HTTPException, Header
@@ -176,6 +236,7 @@ class OfficialOpportunitySource(Base):
     name = Column(String, nullable=False)
     network = Column(String, nullable=False)
     official_url = Column(String, nullable=False)
+    claim_url = Column(String, nullable=True)
     status = Column(String, nullable=False, default="official_updates")
     summary_ru = Column(String, nullable=False)
     summary_en = Column(String, nullable=False)
@@ -209,6 +270,10 @@ def ensure_schema_columns():
         telegram_subscription_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(telegram_subscriptions)"))}
         if telegram_subscription_columns and "language" not in telegram_subscription_columns:
             conn.execute(text("ALTER TABLE telegram_subscriptions ADD COLUMN language VARCHAR DEFAULT 'ru'"))
+            conn.commit()
+        opportunity_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(official_opportunity_sources)"))}
+        if opportunity_columns and "claim_url" not in opportunity_columns:
+            conn.execute(text("ALTER TABLE official_opportunity_sources ADD COLUMN claim_url VARCHAR"))
             conn.commit()
 
 ensure_schema_columns()
@@ -504,6 +569,7 @@ class OpportunitySourceCreateRequest(BaseModel):
     name: str
     network: str
     official_url: str
+    claim_url: Optional[str] = None
     summary_ru: str
     summary_en: str
     summary_zh: str
@@ -593,6 +659,7 @@ def serialize_opportunity_source(source: OfficialOpportunitySource) -> dict:
         "name": source.name,
         "network": source.network,
         "official_url": source.official_url,
+        "claim_url": source.claim_url,
         "status": source.status,
         "is_system": source.is_system,
         "summaries": {
@@ -611,6 +678,18 @@ def validate_opportunity_source(payload: OpportunitySourceCreateRequest) -> dict
     if parsed_url.scheme != "https" or not parsed_url.netloc or parsed_url.username or parsed_url.password:
         raise HTTPException(status_code=422, detail="Official source URL must be a valid HTTPS address")
 
+    claim_url = (payload.claim_url or "").strip()
+    if claim_url:
+        parsed_claim_url = urlparse(claim_url)
+        if (
+            parsed_claim_url.scheme != "https"
+            or not parsed_claim_url.netloc
+            or parsed_claim_url.username
+            or parsed_claim_url.password
+            or len(claim_url) > 500
+        ):
+            raise HTTPException(status_code=422, detail="Claim check URL must be a valid HTTPS address")
+
     fields = {
         "name": payload.name.strip(),
         "network": payload.network.strip(),
@@ -626,6 +705,7 @@ def validate_opportunity_source(payload: OpportunitySourceCreateRequest) -> dict
     return {
         "source_key": source_key,
         "official_url": payload.official_url.strip(),
+        "claim_url": claim_url or None,
         **fields,
     }
 
@@ -1230,6 +1310,35 @@ async def scan_wallets(username: str, db: Session = Depends(get_db), current_use
             "found_drops": [],
             "notice_key": "eligibility_integrations_pending",
         }
+    }
+
+@app.get("/api/eligibility/{username}")
+async def get_airdrop_eligibility_center(
+    username: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    require_owned_username(username, current_user)
+    wallets = db.query(Wallet).filter(Wallet.username == username).all()
+    public_wallets = [
+        {
+            "id": wallet.id,
+            "address": wallet.wallet_address,
+            "label": wallet.label,
+        }
+        for wallet in wallets
+        if wallet.wallet_address.startswith("0x") and len(wallet.wallet_address) == 42
+    ]
+    claim_sources = db.query(OfficialOpportunitySource).filter(
+        OfficialOpportunitySource.claim_url.isnot(None)
+    ).order_by(OfficialOpportunitySource.id.asc()).all()
+
+    return {
+        "status": "success",
+        "wallets": public_wallets,
+        "claim_checks": [serialize_opportunity_source(source) for source in claim_sources],
+        "confirmed_claims": [],
+        "notice_key": "official_claim_check_required",
     }
 
 @app.get("/api/opportunities")
