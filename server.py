@@ -28,6 +28,7 @@ SENDER_PASSWORD = os.getenv("SMTP_PASSWORD")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_BOT_USERNAME = os.getenv("TELEGRAM_BOT_USERNAME", "").strip().lstrip("@")
 WALLETCONNECT_PROJECT_ID = os.getenv("WALLETCONNECT_PROJECT_ID", "").strip()
+UNISWAP_API_KEY = os.getenv("UNISWAP_API_KEY", "").strip()
 ADMIN_USERNAMES = {
     username.strip()
     for username in os.getenv("AIRDROP_ADMIN_USERNAMES", "").split(",")
@@ -148,6 +149,12 @@ EMAIL_CODE_RESEND_SECONDS = 60
 PAYMENT_SESSION_TTL_SECONDS = 30 * 60
 TELEGRAM_LINK_TTL_SECONDS = 10 * 60
 TELEGRAM_TEST_COOLDOWN_SECONDS = 60
+BASE_CHAIN_ID = 8453
+BASE_NATIVE_TOKEN_ADDRESS = "0x0000000000000000000000000000000000000000"
+BASE_USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+UNISWAP_TRADE_API_URL = "https://trade-api.gateway.uniswap.org/v1"
+SWAP_QUOTE_TTL_SECONDS = 45
+swap_quote_sessions = {}
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///./airdrop_x.db"
 engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
@@ -610,6 +617,14 @@ class TransferRecordCreateRequest(BaseModel):
     amount: str
     tx_hash: str
 
+class BaseSwapQuoteRequest(BaseModel):
+    wallet_address: str
+    amount: str
+    slippage: float = 0.5
+
+class BaseSwapBuildRequest(BaseModel):
+    quote_id: str
+
 def normalize_language(language: Optional[str]) -> str:
     return language if language in {"ru", "en", "zh"} else "ru"
 
@@ -756,6 +771,34 @@ def normalize_eth_amount(value: str) -> str:
     if int(whole) > 1000000 or (int(whole) == 0 and not fraction.strip("0")):
         raise HTTPException(status_code=422, detail="Transfer amount is outside the permitted range")
     return clean_value.rstrip("0").rstrip(".") if "." in clean_value else clean_value
+
+def eth_to_wei(amount: str) -> str:
+    whole, _, fraction = amount.partition(".")
+    return str(int(whole) * 10**18 + int((fraction + "0" * 18)[:18]))
+
+def uniswap_headers() -> dict:
+    if not UNISWAP_API_KEY:
+        raise HTTPException(status_code=503, detail="Base Swap is not configured. Add UNISWAP_API_KEY on the server")
+    return {
+        "x-api-key": UNISWAP_API_KEY,
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "x-erc20eth-enabled": "true",
+        "x-permit2-disabled": "true",
+        "x-universal-router-version": "2.0",
+    }
+
+def get_saved_base_wallet(db: Session, username: str, address: str) -> str:
+    clean_address = address.strip()
+    if not is_valid_evm_address(clean_address):
+        raise HTTPException(status_code=422, detail="Connect a valid Base wallet")
+    wallet = db.query(Wallet).filter(
+        Wallet.username == username,
+        Wallet.wallet_address.ilike(clean_address),
+    ).first()
+    if not wallet:
+        raise HTTPException(status_code=403, detail="Save this wallet in AIRDROP-X before requesting a swap")
+    return wallet.wallet_address
 
 def serialize_transfer_template(template: WalletTransferTemplate) -> dict:
     return {
@@ -1519,6 +1562,138 @@ async def save_transfer_record(
     ))
     db.commit()
     return {"status": "success"}
+
+@app.post("/api/base-swap/quote")
+async def get_base_swap_quote(
+    payload: BaseSwapQuoteRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    wallet_address = get_saved_base_wallet(db, current_user.username, payload.wallet_address)
+    amount = normalize_eth_amount(payload.amount)
+    if payload.slippage < 0.1 or payload.slippage > 1.0:
+        raise HTTPException(status_code=422, detail="Slippage must be between 0.1% and 1%")
+
+    quote_payload = {
+        "tokenIn": BASE_NATIVE_TOKEN_ADDRESS,
+        "tokenOut": BASE_USDC_ADDRESS,
+        "tokenInChainId": BASE_CHAIN_ID,
+        "tokenOutChainId": BASE_CHAIN_ID,
+        "type": "EXACT_INPUT",
+        "amount": eth_to_wei(amount),
+        "swapper": wallet_address,
+        "slippageTolerance": payload.slippage,
+    }
+    try:
+        response = requests.post(
+            f"{UNISWAP_TRADE_API_URL}/quote",
+            headers=uniswap_headers(),
+            json=quote_payload,
+            timeout=15,
+        )
+    except requests.RequestException:
+        raise HTTPException(status_code=503, detail="Base Swap quote service is temporarily unavailable")
+    if not response.ok:
+        logging.warning("Uniswap quote rejected with status %s", response.status_code)
+        raise HTTPException(status_code=502, detail="Unable to get a Base Swap quote")
+    try:
+        quote_response = response.json()
+        quote = quote_response["quote"]
+    except (ValueError, KeyError, TypeError):
+        raise HTTPException(status_code=502, detail="Base Swap returned an invalid quote")
+
+    # ETH input needs no token approval. Refuse any unexpected permit request.
+    if quote_response.get("permitData"):
+        raise HTTPException(status_code=502, detail="This quote requires an unsupported token approval")
+    now_ts = int(time.time())
+    quote_id = secrets.token_urlsafe(24)
+    swap_quote_sessions[quote_id] = {
+        "username": current_user.username,
+        "wallet_address": wallet_address.lower(),
+        "quote": quote,
+        "created_at": now_ts,
+    }
+    # Keep this in-memory cache small even if a user repeatedly refreshes a quote.
+    stale_before = now_ts - SWAP_QUOTE_TTL_SECONDS
+    for session_id, session in list(swap_quote_sessions.items()):
+        if session["created_at"] < stale_before:
+            swap_quote_sessions.pop(session_id, None)
+
+    output = quote.get("output") or {}
+    return {
+        "status": "success",
+        "quote_id": quote_id,
+        "expires_in": SWAP_QUOTE_TTL_SECONDS,
+        "amount_in": amount,
+        "amount_out": str(output.get("amount", "")),
+        "routing": quote.get("routing") or quote_response.get("routing") or "UNISWAP",
+        "token_out": "USDC",
+    }
+
+@app.post("/api/base-swap/build")
+async def build_base_swap_transaction(
+    payload: BaseSwapBuildRequest,
+    current_user: User = Depends(get_current_user),
+):
+    quote_id = payload.quote_id.strip()
+    session = swap_quote_sessions.get(quote_id)
+    now_ts = int(time.time())
+    if not session or session["username"] != current_user.username or session["created_at"] < now_ts - SWAP_QUOTE_TTL_SECONDS:
+        swap_quote_sessions.pop(quote_id, None)
+        raise HTTPException(status_code=410, detail="The Base Swap quote expired. Request a new quote")
+
+    try:
+        response = requests.post(
+            f"{UNISWAP_TRADE_API_URL}/swap",
+            headers=uniswap_headers(),
+            json={
+                "quote": session["quote"],
+                "deadline": now_ts + 180,
+                "refreshGasPrice": True,
+                "simulateTransaction": True,
+                "safetyMode": "SAFE",
+            },
+            timeout=15,
+        )
+    except requests.RequestException:
+        raise HTTPException(status_code=503, detail="Base Swap transaction service is temporarily unavailable")
+    if not response.ok:
+        logging.warning("Uniswap swap build rejected with status %s", response.status_code)
+        raise HTTPException(status_code=502, detail="Unable to prepare the Base Swap transaction")
+    try:
+        swap = response.json()["swap"]
+        chain_id = int(swap["chainId"])
+        to_address = swap["to"]
+        from_address = swap["from"]
+        calldata = swap["data"]
+        value = str(swap.get("value", "0"))
+    except (ValueError, KeyError, TypeError):
+        raise HTTPException(status_code=502, detail="Base Swap returned an invalid transaction")
+
+    if (
+        chain_id != BASE_CHAIN_ID
+        or not is_valid_evm_address(to_address)
+        or not is_valid_evm_address(from_address)
+        or from_address.lower() != session["wallet_address"]
+        or not isinstance(calldata, str)
+        or not calldata.startswith("0x")
+        or len(calldata) <= 2
+        or not re.fullmatch(r"(?:0|[1-9]\d*|0x[0-9a-fA-F]+)", value)
+    ):
+        raise HTTPException(status_code=502, detail="Base Swap transaction validation failed")
+
+    # A quote can be built once; another click always begins with a fresh quote.
+    swap_quote_sessions.pop(quote_id, None)
+    return {
+        "status": "success",
+        "transaction": {
+            "chain_id": BASE_CHAIN_ID,
+            "from": from_address,
+            "to": to_address,
+            "data": calldata,
+            "value": value,
+        },
+    }
 
 @app.get("/api/opportunities")
 async def get_official_opportunities(

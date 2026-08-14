@@ -1144,6 +1144,103 @@ async function sendTransferTemplate(templateId) {
     }
 }
 
+let activeBaseSwapQuote = null;
+
+function formatUsdcAmount(rawAmount) {
+    try {
+        const raw = BigInt(String(rawAmount || '0'));
+        const whole = raw / 1000000n;
+        const fraction = (raw % 1000000n).toString().padStart(6, '0').slice(0, 4).replace(/0+$/, '');
+        return `${whole.toString()}${fraction ? `.${fraction}` : ''}`;
+    } catch (_) {
+        return '';
+    }
+}
+
+async function requestBaseSwapQuote() {
+    const locale = translations[getActiveLang()];
+    const amount = document.getElementById('baseSwapAmount')?.value.trim() || '';
+    const connectedAddress = sessionStorage.getItem('ax_base_wallet_address') || '';
+    const result = document.getElementById('baseSwapResult');
+    const button = document.getElementById('baseSwapQuoteButton');
+    if (!parseTestEthAmount(amount) || !/^0x[0-9a-fA-F]{40}$/.test(connectedAddress)) {
+        if (result) result.innerHTML = `<span style="color:#fca5a5;">${locale.baseSwapWalletRequired}</span>`;
+        return;
+    }
+    try {
+        setButtonLoading(button, true, locale.baseSwapQuoting);
+        const response = await fetch('/api/base-swap/quote', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ wallet_address: connectedAddress, amount, slippage: 0.5 }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'base_swap_quote_failed');
+        activeBaseSwapQuote = data;
+        const amountOut = formatUsdcAmount(data.amount_out);
+        if (result) {
+            result.innerHTML = `<div style="color:#86efac; font-weight:600;">${locale.baseSwapQuoteReady.replace('{amount}', amountOut || '—')}</div><div style="color:var(--text-muted); margin-top:4px;">${locale.baseSwapQuoteExpiry.replace('{seconds}', data.expires_in)}</div><button type="button" id="baseSwapSubmitButton" onclick="submitBaseSwap()" class="btn-purple-lg" style="font-size:13px; padding:10px 14px; width:auto; margin-top:10px;">${locale.baseSwapReview}</button>`;
+        }
+    } catch (error) {
+        activeBaseSwapQuote = null;
+        const errorMessage = String(error?.message || '');
+        const displayMessage = errorMessage.includes('not configured')
+            ? locale.baseSwapNotConfigured
+            : (errorMessage.includes('Save this wallet in AIRDROP-X')
+                ? locale.baseSwapWalletRequired
+                : (translateBackendDetail(errorMessage) || locale.baseSwapQuoteError));
+        if (result) result.innerHTML = `<span style="color:#fca5a5;">${displayMessage}</span>`;
+    } finally {
+        setButtonLoading(button, false, locale.baseSwapGetQuote);
+    }
+}
+
+async function submitBaseSwap() {
+    const locale = translations[getActiveLang()];
+    const quote = activeBaseSwapQuote;
+    const provider = walletConnectProvider?.session ? walletConnectProvider : window.ethereum;
+    const result = document.getElementById('baseSwapResult');
+    const button = document.getElementById('baseSwapSubmitButton');
+    if (!quote || !provider?.request) {
+        if (result) result.innerHTML = `<span style="color:#fca5a5;">${locale.baseSwapExpired}</span>`;
+        return;
+    }
+    try {
+        let accounts = await provider.request({ method: 'eth_accounts' });
+        if (!Array.isArray(accounts) || !accounts[0]) accounts = await provider.request({ method: 'eth_requestAccounts' });
+        const fromAddress = accounts?.[0];
+        const connectedAddress = sessionStorage.getItem('ax_base_wallet_address') || '';
+        if (!/^0x[0-9a-fA-F]{40}$/.test(fromAddress || '') || fromAddress.toLowerCase() !== connectedAddress.toLowerCase()) {
+            throw new Error('base_swap_wallet_mismatch');
+        }
+        const expectedOutput = formatUsdcAmount(quote.amount_out) || '—';
+        if (!window.confirm(locale.baseSwapConfirm.replace('{amount}', quote.amount_in).replace('{output}', expectedOutput))) return;
+        setButtonLoading(button, true, locale.baseSwapPreparing);
+        const response = await fetch('/api/base-swap/build', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ quote_id: quote.quote_id }),
+        });
+        const data = await response.json();
+        if (!response.ok || !data.transaction) throw new Error(data.detail || 'base_swap_build_failed');
+        const tx = data.transaction;
+        if (tx.chain_id !== 8453 || tx.from.toLowerCase() !== fromAddress.toLowerCase() || !/^0x[0-9a-fA-F]{40}$/.test(tx.to) || !/^0x[0-9a-fA-F]+$/.test(tx.data) || !/^(?:0|[1-9]\d*|0x[0-9a-fA-F]+)$/.test(String(tx.value))) {
+            throw new Error('base_swap_transaction_invalid');
+        }
+        await switchToBaseMainnet(provider);
+        setButtonLoading(button, true, locale.baseSwapSigning);
+        const txHash = await provider.request({
+            method: 'eth_sendTransaction',
+            params: [{ from: fromAddress, to: tx.to, data: tx.data, value: `0x${BigInt(tx.value).toString(16)}` }],
+        });
+        activeBaseSwapQuote = null;
+        const txUrl = `${BASE_MAINNET_CONFIG.blockExplorerUrls[0]}/tx/${encodeURIComponent(txHash)}`;
+        if (result) result.innerHTML = `<span style="color:#86efac;">${locale.baseSwapSubmitted}</span> <a href="${txUrl}" target="_blank" rel="noopener noreferrer" style="color:#c4b5fd;">${locale.baseSwapOpenTx}</a>`;
+    } catch (error) {
+        const rejected = error?.code === 4001 || error?.code === 'ACTION_REJECTED';
+        if (result) result.innerHTML = `<span style="color:#fca5a5;">${rejected ? locale.baseSwapRejected : (translateBackendDetail(error.message) || locale.baseSwapFailed)}</span>`;
+    } finally {
+        setButtonLoading(button, false, locale.baseSwapReview);
+    }
+}
+
 async function getWalletConnectProvider() {
     if (walletConnectProvider) return walletConnectProvider;
     const configResponse = await fetch('/api/walletconnect/config');
@@ -2036,6 +2133,19 @@ function renderDashboardContent(section) {
         const plannerNetworkOptions = NETWORKS_CONFIG.map(net => `<option value="${net.key}">${net.name} (${net.symbol})</option>`).join('');
         centerHtml = `
             <div class="dashboard-card">
+                <h3 style="color:#fff; margin-top:0; font-size:16px;">${t.baseSwapTitle}</h3>
+                <p style="color:var(--text-muted); font-size:13px; line-height:1.5;">${t.baseSwapDesc}</p>
+                <div style="background:rgba(59,130,246,.08); border:1px solid rgba(59,130,246,.25); color:#bfdbfe; padding:10px 12px; border-radius:10px; font-size:12px; line-height:1.5; margin:12px 0;">${t.baseSwapSafety}</div>
+                <div style="display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); gap:10px; align-items:end;">
+                    <label style="color:var(--text-muted); font-size:12px;">${t.baseSwapYouPay}<input id="baseSwapAmount" inputmode="decimal" class="auth-input" placeholder="0.01" style="font-size:13px; padding:10px 12px; margin-top:5px;"></label>
+                    <div style="color:#c4b5fd; padding:0 0 11px; font-size:18px;">→</div>
+                    <div style="background:var(--bg-main); border:1px solid var(--border-color); border-radius:10px; padding:10px 12px;"><div style="color:var(--text-muted); font-size:11px;">${t.baseSwapYouReceive}</div><div style="color:#fff; margin-top:4px; font-weight:700;">USDC</div></div>
+                </div>
+                <div style="color:var(--text-muted); font-size:12px; margin-top:10px;">${t.baseSwapSlippage}</div>
+                <button type="button" id="baseSwapQuoteButton" onclick="requestBaseSwapQuote()" class="btn-purple-lg" style="font-size:13px; padding:12px 18px; width:auto; margin-top:12px;">${t.baseSwapGetQuote}</button>
+                <div id="baseSwapResult" style="font-size:12px; line-height:1.5; margin-top:12px;"></div>
+            </div>
+            <div class="dashboard-card">
                 <h3 style="color: #fff; margin-top: 0; font-size: 16px;">${t.farmTitle}</h3>
                 <p style="color: var(--text-muted); font-size: 13px; line-height: 1.5; margin-bottom: 12px;">${t.farmDesc}</p>
                 <div style="background:rgba(59,130,246,.08); border:1px solid rgba(59,130,246,.25); color:#bfdbfe; padding:10px 12px; border-radius:10px; font-size:12px; line-height:1.5; margin-bottom:14px;">${t.planSigningNote}</div>
@@ -2056,7 +2166,9 @@ function renderDashboardContent(section) {
                 <button type="button" onclick="saveTransactionPlan()" class="btn-purple-lg" style="font-size:13px; padding:12px 20px; width:auto; margin-top:14px;">${t.planSave}</button>
             </div>
         `;
-        setTimeout(loadTransactionPlan, 50);
+        setTimeout(() => {
+            loadTransactionPlan();
+        }, 50);
     } else if (section === 'Wallets') {
         const isTipHidden = localStorage.getItem('hideProxyTip') === 'true' || hideAllBanners;
         const proxyTipHtml = isTipHidden ? '' : `
