@@ -214,7 +214,7 @@ window.AIRDROP_LOCALES.en = {
   walAddTitle: '➕ Add a wallet for monitoring',
   walletConnectTitle: 'Connect a Base wallet',
   walletConnectDesc: 'Connect an EVM wallet to prefill its public address. Private keys never leave your wallet.',
-  btnConnectBase: 'Connect MetaMask / Base wallet',
+  btnConnectBase: 'Choose MetaMask wallet',
   walletConnected: 'Connected: {address}',
   walletConnectUnsupported: 'No compatible browser wallet was found.',
   walletConnectRejected: 'Wallet connection was cancelled or failed.',

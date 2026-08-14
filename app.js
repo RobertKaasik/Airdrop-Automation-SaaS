@@ -938,6 +938,20 @@ async function connectBaseWallet() {
         return;
     }
     try {
+        // MetaMask keeps the previously permitted account by default. Requesting the
+        // eth_accounts permission again opens its account chooser when supported.
+        if (provider.isMetaMask) {
+            try {
+                await provider.request({
+                    method: 'wallet_requestPermissions',
+                    params: [{ eth_accounts: {} }],
+                });
+            } catch (permissionError) {
+                if (permissionError?.code === 4001) throw permissionError;
+                // Some injected wallets do not implement the MetaMask permission API.
+                if (permissionError?.code !== -32601) throw permissionError;
+            }
+        }
         const accounts = await provider.request({ method: 'eth_requestAccounts' });
         if (!Array.isArray(accounts) || !accounts[0]) throw new Error('No account returned');
         let chainId = await provider.request({ method: 'eth_chainId' });

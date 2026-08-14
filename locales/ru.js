@@ -214,7 +214,7 @@ window.AIRDROP_LOCALES.ru = {
   walAddTitle: '➕ Добавить кошелёк для мониторинга',
   walletConnectTitle: 'Подключить кошелёк Base',
   walletConnectDesc: 'Подключите EVM-кошелёк, чтобы подставить его публичный адрес. Приватный ключ всегда остаётся в кошельке.',
-  btnConnectBase: 'Подключить MetaMask / Base-кошелёк',
+  btnConnectBase: 'Выбрать MetaMask-кошелёк',
   walletConnected: 'Подключён: {address}',
   walletConnectUnsupported: 'Совместимый браузерный кошелёк не найден.',
   walletConnectRejected: 'Подключение кошелька отменено или не выполнено.',

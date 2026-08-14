@@ -214,7 +214,7 @@ window.AIRDROP_LOCALES.zh = {
   walAddTitle: '➕ 添加用于监控的钱包',
   walletConnectTitle: '连接 Base 钱包',
   walletConnectDesc: '连接 EVM 钱包以填入公开地址。私钥始终留在您的钱包中。',
-  btnConnectBase: '连接 MetaMask / Base 钱包',
+  btnConnectBase: '选择 MetaMask 钱包',
   walletConnected: '已连接：{address}',
   walletConnectUnsupported: '未找到兼容的浏览器钱包。',
   walletConnectRejected: '钱包连接已取消或失败。',
