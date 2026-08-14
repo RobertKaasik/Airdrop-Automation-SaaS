@@ -901,6 +901,35 @@ function setConnectedBaseWalletAddress(address) {
     sessionStorage.setItem('ax_active_wallet_address', normalized);
 }
 
+function selectedEvmWalletAddresses(accounts) {
+    const seen = new Set();
+    return (Array.isArray(accounts) ? accounts : []).filter((address) => {
+        if (!/^0x[0-9a-fA-F]{40}$/.test(address || '')) return false;
+        const key = address.toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+    });
+}
+
+async function saveSelectedWalletAccounts(accounts) {
+    const locale = translations[getActiveLang()];
+    const addresses = selectedEvmWalletAddresses(accounts);
+    if (!addresses.length) return;
+    try {
+        const response = await fetch('/api/wallets/add-batch', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ wallet_addresses: addresses }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'wallet_batch_add_failed');
+        if (data.added > 0) showNotification(locale.walletBatchSaved.replace('{count}', data.added), 'success');
+        if (document.getElementById('walletsListContainer')) await loadWalletsFromDB();
+    } catch (error) {
+        showNotification(translateBackendDetail(error.message) || locale.walletBatchFailed, 'error');
+    }
+}
+
 function updateBaseWalletConnectionState(address = sessionStorage.getItem('ax_base_wallet_address') || '') {
     const status = document.getElementById('baseWalletConnectionStatus');
     const addressInput = document.getElementById('newWalletAddress');
@@ -953,7 +982,8 @@ async function connectBaseWallet() {
             }
         }
         const accounts = await provider.request({ method: 'eth_requestAccounts' });
-        if (!Array.isArray(accounts) || !accounts[0]) throw new Error('No account returned');
+        const selectedAccounts = selectedEvmWalletAddresses(accounts);
+        if (!selectedAccounts[0]) throw new Error('No account returned');
         let chainId = await provider.request({ method: 'eth_chainId' });
         if (chainId !== BASE_MAINNET_CHAIN_ID) {
             try {
@@ -968,9 +998,10 @@ async function connectBaseWallet() {
             showNotification(t.walletBaseRequired, 'error');
             return;
         }
-        const address = accounts[0];
+        const address = selectedAccounts[0];
         setConnectedBaseWalletAddress(address);
         updateBaseWalletConnectionState(address);
+        await saveSelectedWalletAccounts(selectedAccounts);
     } catch (error) {
         showNotification(t.walletConnectRejected, 'error');
     }
@@ -1237,6 +1268,17 @@ async function requestBaseSwapQuote() {
         if (result) result.innerHTML = `<span style="color:#fca5a5;">${locale.baseSwapInvalidAmount}</span>`;
         return;
     }
+    const provider = walletConnectProvider?.session ? walletConnectProvider : window.ethereum;
+    try {
+        const accounts = provider?.request ? await provider.request({ method: 'eth_accounts' }) : [];
+        if (!Array.isArray(accounts) || !accounts[0] || accounts[0].toLowerCase() !== connectedAddress.toLowerCase()) {
+            if (result) result.innerHTML = `<span style="color:#fca5a5;">${locale.baseSwapActiveWalletMismatch}</span>`;
+            return;
+        }
+    } catch (_) {
+        if (result) result.innerHTML = `<span style="color:#fca5a5;">${locale.baseSwapActiveWalletMismatch}</span>`;
+        return;
+    }
     try {
         setButtonLoading(button, true, locale.baseSwapQuoting);
         const response = await fetch('/api/base-swap/quote', {
@@ -1280,7 +1322,8 @@ async function submitBaseSwap() {
         const fromAddress = accounts?.[0];
         const connectedAddress = getActiveBaseWalletAddress();
         if (!/^0x[0-9a-fA-F]{40}$/.test(fromAddress || '') || fromAddress.toLowerCase() !== connectedAddress.toLowerCase()) {
-            throw new Error('base_swap_wallet_mismatch');
+            if (result) result.innerHTML = `<span style="color:#fca5a5;">${locale.baseSwapActiveWalletMismatch}</span>`;
+            return;
         }
         const expectedOutput = formatUsdcAmount(quote.amount_out) || '—';
         if (!window.confirm(locale.baseSwapConfirm.replace('{amount}', quote.amount_in).replace('{output}', expectedOutput))) return;
@@ -1377,10 +1420,12 @@ async function connectWalletConnectBase() {
         if (chainId !== BASE_MAINNET_CHAIN_ID) {
             await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: BASE_MAINNET_CHAIN_ID }] });
         }
-        const address = Array.isArray(accounts) ? accounts[0] : '';
+        const selectedAccounts = selectedEvmWalletAddresses(accounts);
+        const address = selectedAccounts[0] || '';
         if (!address) throw new Error('walletconnect_no_address');
         setConnectedBaseWalletAddress(address);
         updateBaseWalletConnectionState(address);
+        await saveSelectedWalletAccounts(selectedAccounts);
     } catch (error) {
         closeWalletConnectModal();
         console.error('WalletConnect connection failed', error);
@@ -1435,8 +1480,10 @@ async function loadWalletsFromDB() {
     
     if(data.wallets.length > 0) {
         const activeAddress = getActiveBaseWalletAddress().toLowerCase();
+        const connectedAddress = (sessionStorage.getItem('ax_base_wallet_address') || '').toLowerCase();
         container.innerHTML = data.wallets.map(w => {
             const isActive = activeAddress && w.wallet_address.toLowerCase() === activeAddress;
+            const isConnectedForActions = isActive && connectedAddress === w.wallet_address.toLowerCase();
             const walletName = escapeHtml(w.label || `${t.walletDefaultName} ${w.id}`);
             const address = escapeHtml(w.wallet_address);
             const proxyStatus = w.proxy ? t.walletProxyConfigured : t.walletNoProxy;
@@ -1445,12 +1492,14 @@ async function loadWalletsFromDB() {
                     <div>
                         <div style="color: #fff; font-weight: 600; font-size: 13px;">${walletName}</div>
                         <div style="color: #d1d5db; font-size: 12px; margin-top:4px; font-family:monospace;">${address}</div>
-                        <div style="color: ${isActive ? '#86efac' : 'var(--text-muted)'}; font-size: 12px; margin-top:5px;">${isActive ? t.walletSessionActive : t.walletBaseMonitoring}</div>
+                        <div style="color: ${isActive ? '#86efac' : 'var(--text-muted)'}; font-size: 12px; margin-top:5px;">${isActive ? (isConnectedForActions ? t.walletSessionActive : t.walletActiveNeedsConnection) : t.walletBaseMonitoring}</div>
                         <div style="color: var(--text-muted); font-size: 12px; margin-top:3px;">${proxyStatus}</div>
                         <div id="walletHealthResult-${w.id}" style="font-size:12px; line-height:1.45; margin-top:7px;"></div>
+                        <div id="walletEditPanel-${w.id}" style="display:none; margin-top:9px; max-width:360px;"><input id="walletEditLabel-${w.id}" value="${walletName}" maxlength="40" class="auth-input" style="font-size:12px; padding:8px 10px;" aria-label="${t.walletEditLabel}"><button type="button" onclick="saveWalletLabel(${w.id})" class="btn-dark-sm" style="margin-top:6px; padding:7px 10px; border-color:#7c3aed;">${t.walletEditSave}</button></div>
                     </div>
                     <div style="display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end;">
                         <button type="button" onclick="activateSavedWallet(${w.id}, '${w.wallet_address}')" ${isActive ? 'disabled' : ''} style="background:${isActive ? 'rgba(34,197,94,0.12)' : 'rgba(124,58,237,0.12)'}; color:${isActive ? '#86efac' : '#c4b5fd'}; border:1px solid ${isActive ? 'rgba(34,197,94,0.28)' : 'rgba(124,58,237,0.32)'}; padding:6px 10px; border-radius:8px; font-size:12px; cursor:${isActive ? 'default' : 'pointer'};">${isActive ? t.walletActive : t.walletActivate}</button>
+                        <button type="button" onclick="toggleWalletEditor(${w.id})" style="background:rgba(255,255,255,.06); color:#e5e7eb; border:1px solid var(--border-color); padding:6px 10px; border-radius:8px; font-size:12px; cursor:pointer;">${t.walletEdit}</button>
                         <button type="button" onclick="checkWalletHealth(${w.id}, this)" style="background:rgba(59,130,246,0.1); color:#93c5fd; border:1px solid rgba(59,130,246,0.28); padding:6px 10px; border-radius:8px; font-size:12px; cursor:pointer;">${t.walletHealthCheck}</button>
                         ${w.proxy ? `<button type="button" onclick="testWalletProxy(${w.id}, this)" style="background: rgba(34,197,94,0.1); color: #22c55e; border: 1px solid rgba(34,197,94,0.2); padding: 6px 10px; border-radius: 8px; font-size: 12px; cursor:pointer;">${t.walletProxyTest}</button>` : ''}
                         <button type="button" onclick="deleteWallet(${w.id})" style="background: rgba(239,68,68,0.1); color: #ef4444; border: 1px solid rgba(239,68,68,0.2); padding: 6px 10px; border-radius: 8px; font-size: 12px; cursor:pointer;">${t.walletRemove}</button>
@@ -1465,27 +1514,34 @@ async function loadWalletsFromDB() {
 
 async function activateSavedWallet(walletId, walletAddress) {
     const locale = translations[getActiveLang()];
-    const provider = walletConnectProvider?.session ? walletConnectProvider : window.ethereum;
-    if (!provider?.request) {
-        showNotification(locale.walletActivateConnect, 'error');
+    if (!/^0x[0-9a-fA-F]{40}$/.test(walletAddress || '')) return;
+    sessionStorage.setItem('ax_active_wallet_address', walletAddress);
+    await loadWalletsFromDB();
+    showNotification(locale.walletActivated, 'success');
+}
+
+function toggleWalletEditor(walletId) {
+    const panel = document.getElementById(`walletEditPanel-${walletId}`);
+    if (panel) panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+}
+
+async function saveWalletLabel(walletId) {
+    const locale = translations[getActiveLang()];
+    const label = document.getElementById(`walletEditLabel-${walletId}`)?.value.trim() || '';
+    if (!label) {
+        showNotification(locale.walletEditInvalid, 'error');
         return;
     }
     try {
-        let accounts = await provider.request({ method: 'eth_accounts' });
-        if (!Array.isArray(accounts) || !accounts[0]) accounts = await provider.request({ method: 'eth_requestAccounts' });
-        const connectedAddress = accounts?.[0] || '';
-        if (connectedAddress.toLowerCase() !== walletAddress.toLowerCase()) {
-            showNotification(locale.walletActivateMismatch, 'error');
-            return;
-        }
-        await switchToBaseMainnet(provider);
-        sessionStorage.setItem('ax_active_wallet_address', connectedAddress);
-        sessionStorage.setItem('ax_base_wallet_address', connectedAddress);
-        updateBaseWalletConnectionState(connectedAddress);
+        const response = await fetch(`/api/wallets/${walletId}/label`, {
+            method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ label }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'wallet_label_update_failed');
+        showNotification(locale.walletEditSaved, 'success');
         await loadWalletsFromDB();
-        showNotification(locale.walletActivated, 'success');
-    } catch (_) {
-        showNotification(locale.walletActivateFailed, 'error');
+    } catch (error) {
+        showNotification(translateBackendDetail(error.message) || locale.walletEditInvalid, 'error');
     }
 }
 

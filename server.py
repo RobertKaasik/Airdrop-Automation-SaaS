@@ -632,6 +632,12 @@ class TransferRecordCreateRequest(BaseModel):
     amount: str
     tx_hash: str
 
+class WalletBatchAddRequest(BaseModel):
+    wallet_addresses: List[str]
+
+class WalletLabelUpdateRequest(BaseModel):
+    label: str
+
 class BaseSwapQuoteRequest(BaseModel):
     wallet_address: str
     amount: str
@@ -1250,6 +1256,70 @@ async def buy_extra_slot(req: BuyExtraSlotReq, db: Session = Depends(get_db), cu
         status_code=503,
         detail="Additional slots are temporarily unavailable. Choose a subscription plan with the required wallet limit.",
     )
+
+@app.post("/api/wallets/add-batch")
+async def add_wallet_batch(
+    payload: WalletBatchAddRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not payload.wallet_addresses or len(payload.wallet_addresses) > 30:
+        raise HTTPException(status_code=422, detail="Choose between 1 and 30 wallet accounts")
+    addresses = []
+    seen = set()
+    for raw_address in payload.wallet_addresses:
+        address = str(raw_address).strip()
+        if not is_valid_evm_address(address):
+            raise HTTPException(status_code=422, detail="MetaMask returned an invalid wallet address")
+        lowered = address.lower()
+        if lowered not in seen:
+            seen.add(lowered)
+            addresses.append(address)
+
+    existing_wallets = db.query(Wallet).filter(Wallet.username == current_user.username).all()
+    existing_addresses = {wallet.wallet_address.lower() for wallet in existing_wallets}
+    new_addresses = [address for address in addresses if address.lower() not in existing_addresses]
+    max_allowed = BASE_SLOT_LIMITS.get(current_user.subscription_plan, 5) + current_user.extra_slots
+    if len(existing_wallets) + len(new_addresses) > max_allowed:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Selected wallets exceed your plan limit of {max_allowed} slots",
+        )
+    for address in new_addresses:
+        db.add(Wallet(
+            username=current_user.username,
+            wallet_address=address,
+            encrypted_pk=None,
+            label=None,
+            proxy=None,
+        ))
+    if new_addresses:
+        db.commit()
+    return {
+        "status": "success",
+        "added": len(new_addresses),
+        "already_saved": len(addresses) - len(new_addresses),
+    }
+
+@app.patch("/api/wallets/{wallet_id}/label")
+async def update_wallet_label(
+    wallet_id: int,
+    payload: WalletLabelUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    wallet = db.query(Wallet).filter(
+        Wallet.id == wallet_id,
+        Wallet.username == current_user.username,
+    ).first()
+    if not wallet:
+        raise HTTPException(status_code=404, detail="Wallet not found")
+    label = payload.label.strip()
+    if not label or len(label) > 40 or any(ord(char) < 32 for char in label):
+        raise HTTPException(status_code=422, detail="Wallet label is invalid")
+    wallet.label = label
+    db.commit()
+    return {"status": "success", "label": wallet.label}
 
 @app.get("/api/wallets/{wallet_id}/health")
 async def get_wallet_health(wallet_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
