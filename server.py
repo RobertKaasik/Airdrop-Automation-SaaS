@@ -143,6 +143,8 @@ BASE_SLOT_LIMITS = {"Standard": 5, "Pro": 15, "Premium": 30}
 payment_sessions = {}
 payment_tokens = {}
 gas_cache = {}
+wallet_health_cache = {}
+WALLET_HEALTH_CACHE_TTL_SECONDS = 20
 AUTH_SESSION_DURATION_SECONDS = 12 * 60 * 60
 EMAIL_CODE_TTL_SECONDS = 10 * 60
 EMAIL_CODE_RESEND_SECONDS = 60
@@ -155,6 +157,8 @@ BASE_USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
 UNISWAP_TRADE_API_URL = "https://trade-api.gateway.uniswap.org/v1"
 SWAP_QUOTE_TTL_SECONDS = 45
 swap_quote_sessions = {}
+SWAP_SUBMISSION_TTL_SECONDS = 10 * 60
+swap_submission_sessions = {}
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///./airdrop_x.db"
 engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
@@ -274,6 +278,17 @@ class WalletTransferRecord(Base):
     amount = Column(String, nullable=False)
     tx_hash = Column(String, unique=True, index=True, nullable=False)
     network = Column(String, nullable=False, default="Base")
+    created_at = Column(Integer, nullable=False)
+
+class BaseSwapRecord(Base):
+    __tablename__ = "base_swap_records"
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, index=True, nullable=False)
+    wallet_address = Column(String, nullable=False)
+    amount_in = Column(String, nullable=False)
+    amount_out = Column(String, nullable=True)
+    tx_hash = Column(String, unique=True, index=True, nullable=False)
+    status = Column(String, nullable=False, default="submitted")
     created_at = Column(Integer, nullable=False)
 
 Base.metadata.create_all(bind=engine)
@@ -624,6 +639,10 @@ class BaseSwapQuoteRequest(BaseModel):
 
 class BaseSwapBuildRequest(BaseModel):
     quote_id: str
+
+class BaseSwapSubmissionRequest(BaseModel):
+    submission_id: str
+    tx_hash: str
 
 def normalize_language(language: Optional[str]) -> str:
     return language if language in {"ru", "en", "zh"} else "ru"
@@ -1232,6 +1251,41 @@ async def buy_extra_slot(req: BuyExtraSlotReq, db: Session = Depends(get_db), cu
         detail="Additional slots are temporarily unavailable. Choose a subscription plan with the required wallet limit.",
     )
 
+@app.get("/api/wallets/{wallet_id}/health")
+async def get_wallet_health(wallet_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    wallet = db.query(Wallet).filter(
+        Wallet.id == wallet_id,
+        Wallet.username == current_user.username,
+    ).first()
+    if not wallet or not is_valid_evm_address(wallet.wallet_address):
+        raise HTTPException(status_code=404, detail="Wallet not found")
+
+    cache_key = f"{current_user.username}:{wallet.id}"
+    now_ts = int(time.time())
+    cached = wallet_health_cache.get(cache_key)
+    if cached and cached["expires_at"] > now_ts:
+        return {"status": "success", **cached["data"], "cached": True}
+
+    try:
+        web3 = Web3(Web3.HTTPProvider(BASE_RPC_URL, request_kwargs={"timeout": 10}))
+        if not web3.is_connected():
+            raise RuntimeError("Base RPC is unavailable")
+        address = Web3.to_checksum_address(wallet.wallet_address)
+        balance_wei = web3.eth.get_balance(address)
+        transaction_count = web3.eth.get_transaction_count(address, "latest")
+        balance_eth = format(Web3.from_wei(balance_wei, "ether"), ".6f").rstrip("0").rstrip(".") or "0"
+    except Exception:
+        raise HTTPException(status_code=503, detail="Base public data is temporarily unavailable")
+
+    health_data = {
+        "network": "Base Mainnet",
+        "balance_eth": balance_eth,
+        "transaction_count": transaction_count,
+        "checked_at": now_ts,
+    }
+    wallet_health_cache[cache_key] = {"data": health_data, "expires_at": now_ts + WALLET_HEALTH_CACHE_TTL_SECONDS}
+    return {"status": "success", **health_data, "cached": False}
+
 @app.get("/api/wallets/{username}")
 async def get_wallets(username: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     require_owned_username(username, current_user)
@@ -1611,6 +1665,8 @@ async def get_base_swap_quote(
         "username": current_user.username,
         "wallet_address": wallet_address.lower(),
         "quote": quote,
+        "amount_in": amount,
+        "amount_out": str((quote.get("output") or {}).get("amount", "")),
         "created_at": now_ts,
     }
     # Keep this in-memory cache small even if a user repeatedly refreshes a quote.
@@ -1682,10 +1738,23 @@ async def build_base_swap_transaction(
     ):
         raise HTTPException(status_code=502, detail="Base Swap transaction validation failed")
 
+    submission_id = secrets.token_urlsafe(24)
+    swap_submission_sessions[submission_id] = {
+        "username": current_user.username,
+        "wallet_address": from_address.lower(),
+        "amount_in": session["amount_in"],
+        "amount_out": session["amount_out"],
+        "created_at": now_ts,
+    }
+    for session_id, submission in list(swap_submission_sessions.items()):
+        if submission["created_at"] < now_ts - SWAP_SUBMISSION_TTL_SECONDS:
+            swap_submission_sessions.pop(session_id, None)
+
     # A quote can be built once; another click always begins with a fresh quote.
     swap_quote_sessions.pop(quote_id, None)
     return {
         "status": "success",
+        "submission_id": submission_id,
         "transaction": {
             "chain_id": BASE_CHAIN_ID,
             "from": from_address,
@@ -1693,6 +1762,79 @@ async def build_base_swap_transaction(
             "data": calldata,
             "value": value,
         },
+    }
+
+@app.post("/api/base-swap/submissions")
+async def save_base_swap_submission(
+    payload: BaseSwapSubmissionRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    submission_id = payload.submission_id.strip()
+    submission = swap_submission_sessions.get(submission_id)
+    now_ts = int(time.time())
+    if (
+        not submission
+        or submission["username"] != current_user.username
+        or submission["created_at"] < now_ts - SWAP_SUBMISSION_TTL_SECONDS
+    ):
+        swap_submission_sessions.pop(submission_id, None)
+        raise HTTPException(status_code=410, detail="The Base Swap submission session expired")
+    tx_hash = payload.tx_hash.strip()
+    if not re.fullmatch(r"0x[a-fA-F0-9]{64}", tx_hash):
+        raise HTTPException(status_code=422, detail="Transaction hash is invalid")
+
+    existing = db.query(BaseSwapRecord).filter(BaseSwapRecord.tx_hash == tx_hash).first()
+    if not existing:
+        db.add(BaseSwapRecord(
+            username=current_user.username,
+            wallet_address=submission["wallet_address"],
+            amount_in=submission["amount_in"],
+            amount_out=submission["amount_out"] or None,
+            tx_hash=tx_hash,
+            status="submitted",
+            created_at=now_ts,
+        ))
+        db.commit()
+
+    subscription = get_telegram_subscription(db, current_user.username)
+    telegram_sent = False
+    if subscription:
+        messages = {
+            "ru": f"🔄 *AIRDROP-X: обмен отправлен*\nСеть: `Base`\nСумма: `{submission['amount_in']} ETH`\nTX: `{tx_hash}`",
+            "en": f"🔄 *AIRDROP-X: swap submitted*\nNetwork: `Base`\nAmount: `{submission['amount_in']} ETH`\nTX: `{tx_hash}`",
+            "zh": f"🔄 *AIRDROP-X：兑换已提交*\n网络：`Base`\n金额：`{submission['amount_in']} ETH`\n交易：`{tx_hash}`",
+        }
+        telegram_sent = send_telegram_notification(
+            subscription.chat_id,
+            messages[normalize_language(subscription.language)],
+        )
+
+    swap_submission_sessions.pop(submission_id, None)
+    return {"status": "success", "telegram_sent": telegram_sent}
+
+@app.get("/api/base-swap/history")
+async def get_base_swap_history(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    records = db.query(BaseSwapRecord).filter(
+        BaseSwapRecord.username == current_user.username
+    ).order_by(BaseSwapRecord.created_at.desc()).limit(20).all()
+    return {
+        "status": "success",
+        "records": [
+            {
+                "id": record.id,
+                "wallet_address": record.wallet_address,
+                "amount_in": record.amount_in,
+                "amount_out": record.amount_out,
+                "tx_hash": record.tx_hash,
+                "status": record.status,
+                "created_at": record.created_at,
+            }
+            for record in records
+        ],
     }
 
 @app.get("/api/opportunities")
