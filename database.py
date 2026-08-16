@@ -1,5 +1,4 @@
-import hashlib
-import os
+import bcrypt
 from sqlalchemy import create_engine, Column, Integer, String, Boolean, ForeignKey
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 
@@ -12,17 +11,14 @@ engine = create_engine(
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
-# 2. Хеширование паролей через hashlib
+# 2. Legacy compatibility helpers. The running app authenticates in server.py.
+# These helpers use bcrypt as well, so this file cannot introduce weaker hashes.
 def get_password_hash(password: str) -> str:
-    salt = os.urandom(16).hex()
-    pwd_hash = hashlib.sha256((password + salt).encode('utf-8')).hexdigest()
-    return f"{salt}${pwd_hash}"
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt(rounds=12)).decode("utf-8")
 
 def verify_password(plain_password: str, stored_password: str) -> bool:
     try:
-        salt, pwd_hash = stored_password.split('$')
-        check_hash = hashlib.sha256((plain_password + salt).encode('utf-8')).hexdigest()
-        return check_hash == pwd_hash
+        return bcrypt.checkpw(plain_password.encode("utf-8"), stored_password.encode("utf-8"))
     except Exception:
         return False
 
@@ -40,14 +36,13 @@ class User(Base):
     # Связь с кошельками пользователя
     wallets = relationship("Wallet", back_populates="owner", cascade="all, delete-orphan")
 
-# 4. 🔥 НОВАЯ МОДЕЛЬ: Кошельки и прокси пользователей
+# 4. Legacy read-only wallet model. The production model is declared in server.py.
 class Wallet(Base):
     __tablename__ = "wallets"
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))
     wallet_address = Column(String, index=True)  # Публичный адрес или метка
-    encrypted_pk = Column(String)                # Зашифрованный приватный ключ
     proxy = Column(String)                       # Индивидуальный прокси (http/socks5)
 
     owner = relationship("User", back_populates="wallets")

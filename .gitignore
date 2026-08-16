@@ -15,3 +15,6 @@ telegram-bot*.log
 
 .pytest_cache/
 .mypy_cache/
+
+# Persistent Chromium data can contain authenticated browser sessions.
+browser_profiles/

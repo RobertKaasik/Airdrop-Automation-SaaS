@@ -168,6 +168,20 @@
         </div>
     </div>
 
+    <div class="modal-overlay" id="appConfirmModal" onclick="handleAppConfirmOverlayClick(event)">
+        <div class="auth-modal" style="max-width:390px; width:calc(100% - 32px); border:1px solid rgba(239,68,68,.45); box-shadow:0 22px 70px rgba(0,0,0,.65), 0 0 28px rgba(239,68,68,.1);">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:14px; margin-bottom:12px;">
+                <div id="appConfirmTitle" style="font-size:17px; color:#fff; font-weight:800;"></div>
+                <button type="button" onclick="finishAppConfirm(false)" aria-label="Close" style="background:transparent; border:0; color:#b19cd9; cursor:pointer; font-size:22px; line-height:1; padding:2px 5px;">×</button>
+            </div>
+            <div id="appConfirmMessage" style="background:rgba(239,68,68,.07); border:1px solid rgba(239,68,68,.24); color:#fecaca; border-radius:10px; padding:11px 12px; font-size:13px; line-height:1.5;"></div>
+            <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:18px;">
+                <button type="button" onclick="finishAppConfirm(false)" id="appConfirmCancel" class="btn-dark-sm" style="padding:10px 14px;"></button>
+                <button type="button" onclick="finishAppConfirm(true)" id="appConfirmProceed" class="btn-dark-sm" style="padding:10px 14px; border-color:#ef4444; color:#fecaca; background:rgba(239,68,68,.1);"></button>
+            </div>
+        </div>
+    </div>
+
     <!-- Мобильное нижнее меню -->
     <div class="bottom-sheet-overlay" id="bottomSheetOverlay" onclick="handleSheetOverlayClick(event)">
         <div class="bottom-sheet" id="bottomSheetContent">

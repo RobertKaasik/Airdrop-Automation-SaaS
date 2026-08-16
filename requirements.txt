@@ -7,3 +7,4 @@ requests>=2.31,<3.0
 SQLAlchemy>=2.0,<3.0
 uvicorn[standard]>=0.27,<1.0
 web3>=6.0,<8.0
+playwright>=1.45,<2.0

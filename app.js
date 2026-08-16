@@ -34,7 +34,10 @@ function setFormError(containerId, message, type = 'error', fieldId = '') {
     const container = document.getElementById(containerId);
     if (!container) return;
     const cls = type === 'success' ? 'form-feedback success' : 'form-feedback error';
-    container.innerHTML = `<div class="${cls}">${message}</div>`;
+    const feedback = document.createElement('div');
+    feedback.className = cls;
+    feedback.textContent = String(message || '');
+    container.replaceChildren(feedback);
     if (fieldId) {
         setFieldValidationState(fieldId, false, message);
     }
@@ -77,15 +80,16 @@ function clearFieldValidationState(fieldId) {
 function setButtonLoading(button, isLoading, text = '') {
     if (!button) return;
     if (isLoading) {
+        if (!button.dataset.defaultText) button.dataset.defaultText = button.innerText;
         button.classList.add('btn-loading');
         button.disabled = true;
-        if (text) button.dataset.defaultText = button.innerText;
         button.innerText = text || t('loading');
     } else {
         button.classList.remove('btn-loading');
         button.disabled = false;
-        const defaultText = button.dataset.defaultText || text || '';
+        const defaultText = text || button.dataset.defaultText || '';
         if (defaultText) button.innerText = defaultText;
+        delete button.dataset.defaultText;
     }
 }
 let userPlan = 'Standard';
@@ -95,7 +99,9 @@ let showWelcomeGuide = true;
 
 let codeCooldownTimer = null;
 let codeCooldownSeconds = 0;
-let confirmedRegistrationEmail = "";
+let confirmedRegistrationEmail = sessionStorage.getItem('ax_registration_email') || '';
+let passwordResetCooldownTimer = null;
+let passwordResetCooldownSeconds = 0;
 let currentEditingWallet = null;
 let activeOperationWalletId = null;
 let activeOperationBalanceData = null;
@@ -208,7 +214,7 @@ const NETWORKS_CONFIG = [
 // --- Инициализация при загрузке ---
 document.getElementById('main-logo-btn').addEventListener('click', function(e) {
     e.preventDefault();
-    returnToMainSite();
+    logoutUser();
 });
 
 window.addEventListener('DOMContentLoaded', () => {
@@ -238,14 +244,28 @@ window.addEventListener('DOMContentLoaded', () => {
         currentSection = localStorage.getItem('airdrop_current_section') || 'Account';
         renderDashboardContent(currentSection);
     }
+    syncEmailCodeCooldown();
+    updateRegistrationContinueAction();
+    if (!isLoggedIn && !paymentUnlocked && !isPendingRegistrationDismissed()) void restorePaidRegistrationAccess();
 });
 
 // --- Вспомогательные функции ---
 function getOrCreateClientSessionId() {
-    let existing = sessionStorage.getItem('ax_client_session_id');
-    if (existing) return existing;
-    existing = `sess_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+    let existing = sessionStorage.getItem('ax_client_session_id') || localStorage.getItem('ax_client_session_id');
+    if (existing) {
+        sessionStorage.setItem('ax_client_session_id', existing);
+        localStorage.setItem('ax_client_session_id', existing);
+        return existing;
+    }
+    if (window.crypto?.randomUUID) {
+        existing = `sess_${window.crypto.randomUUID()}`;
+    } else {
+        const bytes = new Uint8Array(16);
+        window.crypto.getRandomValues(bytes);
+        existing = `sess_${Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('')}`;
+    }
     sessionStorage.setItem('ax_client_session_id', existing);
+    localStorage.setItem('ax_client_session_id', existing);
     return existing;
 }
 
@@ -255,18 +275,46 @@ function clearPaymentAccess() {
     sessionStorage.removeItem('ax_payment_token');
     sessionStorage.removeItem('ax_paid_session_id');
     sessionStorage.removeItem('ax_paid_plan');
+    sessionStorage.removeItem('ax_subscription_payment_pending');
+    updateRegistrationContinueAction();
+}
+
+function getPendingRegistrationDismissKey() {
+    return `ax_registration_dismissed_${clientSessionId}`;
+}
+
+function isPendingRegistrationDismissed() {
+    return localStorage.getItem(getPendingRegistrationDismissKey()) === '1';
+}
+
+function dismissPendingRegistration() {
+    localStorage.setItem(getPendingRegistrationDismissKey(), '1');
+    clearPaymentAccess();
+    closeAuthModal();
+    showNotification(t('auth.registrationDismissed'));
+}
+
+function updateRegistrationContinueAction() {
+    const loginBtn = document.getElementById('login-btn');
+    if (!loginBtn || isLoggedIn) return;
+    const canContinue = paymentUnlocked && !!paymentAccessToken;
+    loginBtn.textContent = canContinue ? t('resumeRegistration') : t('login');
+    loginBtn.onclick = () => openModal(canContinue ? 'register' : 'login');
+    loginBtn.classList.toggle('pending-registration-button', canContinue);
+    loginBtn.title = canContinue ? t('resumeRegistrationHint') : '';
 }
 
 function generateDeviceFingerprint() {
     try {
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        ctx.textBaseline = 'top';
-        ctx.font = '14px Arial';
-        ctx.fillText('AIRDROP-X-fp-' + navigator.userAgent, 2, 2);
-        return 'fp_' + Math.abs([...canvas.toDataURL()].reduce((acc, char) => ((acc << 5) - acc) + char.charCodeAt(0), 0)).toString(16);
+        const stored = localStorage.getItem('ax_device_id');
+        if (stored && /^device_[a-zA-Z0-9_-]{20,}$/.test(stored)) return stored;
+        const value = window.crypto?.randomUUID
+            ? `device_${window.crypto.randomUUID()}`
+            : `device_${Array.from(window.crypto.getRandomValues(new Uint8Array(24)), byte => byte.toString(16).padStart(2, '0')).join('')}`;
+        localStorage.setItem('ax_device_id', value);
+        return value;
     } catch (e) {
-        return 'fp_unknown';
+        return `device_fallback_${navigator.userAgent.length}_${Date.now().toString(36)}`;
     }
 }
 
@@ -287,7 +335,11 @@ function showNotification(text, type = 'success') {
     const borderColor = type === 'success' ? '#22c55e' : '#ef4444';
     const icon = type === 'success' ? '✅' : '⚠️';
     toast.style.cssText = `background: #121212; border: 1px solid ${borderColor}; color: #fff; padding: 12px 16px; border-radius: 12px; font-size: 13px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); display: flex; align-items: center; gap: 10px; animation: fadeIn 0.3s ease;`;
-    toast.innerHTML = `<span>${icon}</span> <span>${text}</span>`;
+    const iconEl = document.createElement('span');
+    iconEl.textContent = icon;
+    const textEl = document.createElement('span');
+    textEl.textContent = String(text || '');
+    toast.replaceChildren(iconEl, textEl);
     container.appendChild(toast);
 
     setTimeout(() => {
@@ -299,8 +351,7 @@ function showNotification(text, type = 'success') {
 
 function renderLanguageAwareText() {
     const lang = setLanguage(currentLang);
-    const loginBtn = document.getElementById('login-btn');
-    if (loginBtn) loginBtn.innerText = t('login');
+    updateRegistrationContinueAction();
 
     const badge = document.getElementById('current-lang-badge');
     const text = document.getElementById('current-lang-text');
@@ -358,6 +409,8 @@ function updateStaticText(lang) {
     if (counterEl && window.cachedStatsData) {
         counterEl.innerHTML = `${t('privateSoftware')}. <b style="color:#fff; margin-left:8px;">${window.cachedStatsData.current_slots} / ${window.cachedStatsData.max_slots} ${t('slotsShort')}</b>`;
     }
+    updateRegistrationContinueAction();
+    syncEmailCodeCooldown();
 }
 
 window.translateBackendMessage = function(msg) {
@@ -367,6 +420,9 @@ window.translateBackendMessage = function(msg) {
     const locale = translations[activeLang] || {};
     const exactMessages = locale.backend || {};
     if (exactMessages[msg]) return exactMessages[msg];
+    if (msg === 'Subscription payments are temporarily unavailable while exact USDC settlement is configured.') {
+        return locale.errors?.subscriptionPaymentsUnavailable || locale.errors?.paymentFailed || msg;
+    }
 
     const dynamicPatterns = [
         ['invalidCodeAttempts', /^Invalid code! Attempts left:\s*(.*)$/],
@@ -374,7 +430,8 @@ window.translateBackendMessage = function(msg) {
         ['slotPurchased', /^Slot purchased! Total slots:\s*(.*)$/],
         ['proxyWorking', /^Proxy is working! Ping:\s*(.*)$/],
         ['connectionError', /^Connection error:\s*(.*)$/],
-        ['delayLimitExceeded', /^Delay limit exceeded for day\s*(.*)$/]
+        ['delayLimitExceeded', /^Delay limit exceeded for day\s*(.*)$/],
+        ['deviceChangeLimit', /^Device change limit reached\. Try again in\s*(.*)$/]
     ];
 
     for (const [key, pattern] of dynamicPatterns) {
@@ -415,12 +472,25 @@ function returnToMainSite() {
     
     const loginBtn = document.getElementById('login-btn');
     if (loginBtn) loginBtn.style.display = '';
+    updateRegistrationContinueAction();
 
     document.getElementById('dashboard-content').style.display = 'none';
     const mobileNav = document.getElementById('mobileNavBar');
     if(mobileNav) mobileNav.style.display = 'none'; 
     document.getElementById('main-content').style.display = 'block';
     window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+async function logoutUser() {
+    const accessToken = sessionStorage.getItem('ax_access_token');
+    if (accessToken) {
+        try {
+            await fetch('/api/logout', { method: 'POST' });
+        } catch (_) {
+            // Local cleanup still protects the current browser if the server is offline.
+        }
+    }
+    returnToMainSite();
 }
 
 function toggleLangMenu(event) {
@@ -473,6 +543,33 @@ function selectPlanAndRegister(planName, price) {
 
 function closeAuthModal() { document.getElementById('authModal').classList.remove('show'); }
 
+let appConfirmResolver = null;
+
+function openAppConfirm({ title, message, confirmText }) {
+    const modal = document.getElementById('appConfirmModal');
+    if (!modal) return Promise.resolve(false);
+    const locale = translations[getActiveLang()] || translations.ru;
+    document.getElementById('appConfirmTitle').textContent = title || '';
+    document.getElementById('appConfirmMessage').textContent = message || '';
+    document.getElementById('appConfirmCancel').textContent = locale.confirmCancel;
+    document.getElementById('appConfirmProceed').textContent = confirmText || locale.walletRemoveAction;
+    modal.classList.add('show');
+    return new Promise((resolve) => { appConfirmResolver = resolve; });
+}
+
+function finishAppConfirm(confirmed) {
+    document.getElementById('appConfirmModal')?.classList.remove('show');
+    const resolve = appConfirmResolver;
+    appConfirmResolver = null;
+    if (resolve) resolve(Boolean(confirmed));
+}
+
+function handleAppConfirmOverlayClick(event) {
+    if (event.target.id === 'appConfirmModal' && mousedownOverlayTarget?.id === 'appConfirmModal') {
+        finishAppConfirm(false);
+    }
+}
+
 function togglePasswordVisibility(fieldId, iconEl) {
     const input = document.getElementById(fieldId);
     if (!input) return;
@@ -507,6 +604,7 @@ function openModal(type) {
                 <div class="input-group" style="margin-bottom:12px;">
                     <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">${t('auth.usernameLabel')}</label>
                     <input type="text" class="auth-input" placeholder="${t('auth.usernamePlaceholder')}" id="loginUsername" oninput="clearFormError('loginErrorContainer', 'loginUsername'); clearFieldValidationState('loginUsername')">
+                    <div style="font-size:11px; color:#a3a3a3; margin-top:6px;">${t('auth.loginWithEmail')}</div>
                 </div>
                 <div class="input-group" style="margin-bottom:16px;">
                     <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">${t('auth.password')}</label>
@@ -516,15 +614,52 @@ function openModal(type) {
                     </div>
                 </div>
                 <button type="submit" class="btn-modal-primary" style="width:100%; padding:12px;">${t('login')}</button>
+                <button type="button" onclick="openModal('reset')" style="width:100%; margin-top:10px; padding:6px; border:0; background:transparent; color:#c4b5fd; cursor:pointer; font-size:12px;">${t('auth.forgotPassword')}</button>
                 <div id="loginErrorContainer" style="margin-top:10px;"></div>
+            </form>
+        `;
+    } else if (type === 'reset') {
+        syncPasswordResetCooldown();
+        const resetButtonDisabled = passwordResetCooldownSeconds > 0 ? 'disabled' : '';
+        const resetButtonText = passwordResetCooldownSeconds > 0
+            ? formatCodeCooldownLabel(passwordResetCooldownSeconds)
+            : t('auth.sendResetCode');
+        container.innerHTML = `
+            <form onsubmit="event.preventDefault(); confirmPasswordReset();">
+                <div class="modal-logo" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                    <span style="font-weight:bold; font-size:16px;">${t('auth.resetPassword')}</span>
+                    <span onclick="closeAuthModal()" style="cursor:pointer; color:#a3a3a3; font-size:18px;">✕</span>
+                </div>
+                <p style="margin:0 0 14px; color:#a3a3a3; font-size:12px; line-height:1.5;">${t('auth.resetInstructions')}</p>
+                <div class="input-group" style="margin-bottom:10px;">
+                    <label style="font-size:11px; color:#a3a3a3; display:block; margin-bottom:4px;">${t('auth.email')}</label>
+                    <input type="email" class="auth-input" placeholder="${t('auth.emailPlaceholder')}" id="resetEmail" oninput="clearFormError('resetErrorContainer', 'resetEmail'); clearFieldValidationState('resetEmail')">
+                </div>
+                <div class="input-group" style="margin-bottom:10px;">
+                    <label style="font-size:11px; color:#a3a3a3; display:block; margin-bottom:4px;">${t('auth.code')}</label>
+                    <div style="display:flex; gap:8px;">
+                        <input type="text" class="auth-input" placeholder="${t('auth.codePlaceholder')}" id="resetCode" style="flex:1; margin:0;" oninput="clearFormError('resetErrorContainer', 'resetCode'); clearFieldValidationState('resetCode')">
+                        <button type="button" id="sendResetCodeBtn" onclick="requestPasswordResetCode()" ${resetButtonDisabled} class="auth-input ${passwordResetCooldownSeconds > 0 ? 'btn-cooldown' : ''}" style="width:auto; background:#1f1f1f; color:#fff; cursor:pointer; font-weight:600;">${resetButtonText}</button>
+                    </div>
+                </div>
+                <div class="input-group" style="margin-bottom:14px;">
+                    <label style="font-size:11px; color:#a3a3a3; display:block; margin-bottom:4px;">${t('auth.newPassword')}</label>
+                    <div class="password-wrapper" style="position:relative;">
+                        <input type="password" class="auth-input" placeholder="${t('auth.passwordPlaceholder')}" id="resetPass" style="padding-right:35px;" oninput="clearFormError('resetErrorContainer', 'resetPass'); clearFieldValidationState('resetPass')">
+                        <span class="password-toggle-icon" onclick="togglePasswordVisibility('resetPass', this)" style="position:absolute; right:12px; top:50%; transform:translateY(-50%); cursor:pointer; font-size:14px;">👁️</span>
+                    </div>
+                </div>
+                <button type="submit" class="btn-modal-primary" style="width:100%; padding:10px;">${t('auth.resetSubmit')}</button>
+                <button type="button" onclick="openModal('login')" style="width:100%; margin-top:8px; padding:5px; border:0; background:transparent; color:#a3a3a3; cursor:pointer; font-size:12px;">${t('auth.backToLogin')}</button>
+                <div id="resetErrorContainer" style="margin-top:10px;"></div>
             </form>
         `;
     } else if (type === 'payment') {
         const chosenPlan = localStorage.getItem('selected_plan') || 'Standard';
         const basePrice = Number(localStorage.getItem('selected_price') || PLAN_PRICES[chosenPlan] || PLAN_PRICES.Standard);
         const withOnboarding = localStorage.getItem('selected_onboarding') === 'true';
-        const displayAmount = (basePrice + (withOnboarding ? ONBOARDING_PRICE : 0) + 0.47).toFixed(2);
-        const planDisplayLabel = chosenPlan === 'Standard' ? t.stdName : chosenPlan === 'Pro' ? t.proName : t.premName;
+        const displayAmount = (basePrice + (withOnboarding ? ONBOARDING_PRICE : 0)).toFixed(2);
+        const planDisplayLabel = chosenPlan === 'Standard' ? t('stdName') : chosenPlan === 'Pro' ? t('proName') : t('premName');
 
         container.innerHTML = `
             <div class="modal-logo" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
@@ -532,41 +667,28 @@ function openModal(type) {
                 <span onclick="closeAuthModal()" style="cursor: pointer; color: #a3a3a3; font-size: 18px;">✕</span>
             </div>
             
-            <div style="margin-bottom: 12px;">
-                <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">${t('payNetwork')}</label>
-                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;">
-                    <button type="button" class="btn-dark-sm auth-input" id="net-base" onclick="setPayNetwork('Base', '${MASTER_WALLET}', '${displayAmount}')" style="background:#1f1f1f; border-color:#fff; cursor:pointer;">Base L2</button>
-                    <button type="button" class="btn-dark-sm auth-input" id="net-arb" onclick="setPayNetwork('Arbitrum', '${MASTER_WALLET}', '${displayAmount}')" style="cursor:pointer;">Arbitrum</button>
-                    <button type="button" class="btn-dark-sm auth-input" id="net-eth" onclick="setPayNetwork('Ethereum', '${MASTER_WALLET}', '${displayAmount}')" style="cursor:pointer;">Ethereum</button>
-                </div>
+            <div style="margin-bottom:12px; padding:10px 12px; border:1px solid rgba(96,165,250,.35); background:rgba(30,58,138,.13); border-radius:10px; color:#dbeafe; font-size:12px; line-height:1.5;">
+                ${t('payWalletInstruction')}
             </div>
 
             <div style="background:#0a0a0a; border:1px solid var(--border-color); border-radius:12px; padding:12px; margin-bottom:12px; text-align:center;">
                 <div style="font-size:11px; color:#a3a3a3; margin-bottom:2px;">${t('payAmount')}</div>
-                <div style="font-size:20px; color:#fff; font-weight:700; margin-bottom:8px;">$${displayAmount}</div>
+                <div id="paymentAmountValue" style="font-size:20px; color:#fff; font-weight:700; margin-bottom:8px;">${displayAmount} USDC</div>
                 ${withOnboarding ? `<div style="font-size:11px; color:#b19cd9; margin-bottom:8px;">${t('onboardingSelected')}</div>` : ''}
-                
-                <div style="font-size:11px; color:#a3a3a3; margin-bottom:2px;">${t('payWallet')} (<span id="activePayNet">Base L2</span>):</div>
-                <div style="background:#181818; padding:6px 8px; border-radius:8px; font-family:monospace; font-size:11px; color:#fff; word-break:break-all; margin-bottom:6px;">${MASTER_WALLET}</div>
-                
-                <button type="button" id="copyWalletBtn" class="auth-input" style="margin: 0 auto; font-size: 11px; padding: 6px 12px; width:auto; cursor:pointer;" onclick="copyWalletAddress('${MASTER_WALLET}', this)">${t('payCopy')}</button>
-                <div id="qrcodeContainer" style="display:flex; justify-content:center; align-items:center; margin:10px auto 0 auto; background:#fff; padding:8px; border-radius:8px; width:110px; height:110px; box-sizing:border-box; overflow:hidden;"></div>
+                <div id="paymentTestModeNotice" style="display:none; font-size:11px; color:#86efac; margin-bottom:8px;"></div>
+                <div style="font-size:11px; color:#a3a3a3;">${t('payAssetNotice')}</div>
             </div>
 
-            <div class="input-group" style="margin-bottom:12px;">
-                <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">${t('payTxid')}</label>
-                <input type="text" class="auth-input" placeholder="0x..." id="txidInput">
-            </div>
-
-            <button type="button" id="paymentActionBtn" class="btn-modal-primary" onclick="startPlanPayment()" style="width:100%; padding:10px;">${t('payConfirm')} ($${displayAmount})</button>
+            <button type="button" id="paymentActionBtn" class="btn-modal-primary" onclick="startPlanPayment()" style="width:100%; padding:10px;">${t('payWithWallet')} · ${displayAmount} USDC</button>
             <div id="paymentStatusContainer"></div>
         `;
-        setTimeout(() => renderPaymentQR(MASTER_WALLET, displayAmount), 100);
+        restorePendingSubscriptionPayment();
     } else if (type === 'register') {
+        syncEmailCodeCooldown();
         const chosenPlan = localStorage.getItem('selected_plan') || 'Standard';
         const chosenPrice = Number(localStorage.getItem('selected_price') || PLAN_PRICES[chosenPlan] || PLAN_PRICES.Standard);
-        const planDisplayLabel = chosenPlan === 'Standard' ? t.stdName : chosenPlan === 'Pro' ? t.proName : t.premName;
-        const btnText = codeCooldownSeconds > 0 ? `${codeCooldownSeconds}s` : t('auth.sendCode');
+        const planDisplayLabel = chosenPlan === 'Standard' ? t('stdName') : chosenPlan === 'Pro' ? t('proName') : t('premName');
+        const btnText = codeCooldownSeconds > 0 ? formatCodeCooldownLabel(codeCooldownSeconds) : t('auth.sendCode');
         const btnDisabled = codeCooldownSeconds > 0 ? 'disabled' : '';
         const emailState = codeCooldownSeconds > 0 ? `readonly style="opacity: 0.7;" value="${confirmedRegistrationEmail}"` : '';
 
@@ -599,22 +721,138 @@ function openModal(type) {
                     <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">${t('auth.code')}</label>
                     <div style="display: flex; gap: 8px;">
                         <input type="text" class="auth-input" placeholder="${t('auth.codePlaceholder')}" id="regCode" style="flex: 1; margin: 0;" oninput="clearFormError('errorContainer', 'regCode'); clearFieldValidationState('regCode')">
-                        <button type="button" id="sendCodeBtn" onclick="sendVerificationEmailCode()" ${btnDisabled} class="auth-input" style="width: auto; background:#1f1f1f; color:#fff; cursor:pointer; font-weight:600;">${btnText}</button>
+                        <button type="button" id="sendCodeBtn" onclick="sendVerificationEmailCode()" ${btnDisabled} class="auth-input ${codeCooldownSeconds > 0 ? 'btn-cooldown' : ''}" style="width: auto; background:#1f1f1f; color:#fff; cursor:pointer; font-weight:600;">${btnText}</button>
                     </div>
                 </div>
                 
                 <button type="submit" class="btn-modal-primary" style="width:100%; padding:10px;">${t('auth.register')}</button>
+                <button type="button" onclick="dismissPendingRegistration()" style="width:100%; margin-top:8px; padding:5px; border:0; background:transparent; color:#a3a3a3; cursor:pointer; font-size:12px;">${t('auth.alreadyRegistered')}</button>
                 <div id="errorContainer" style="margin-top:10px;"></div>
             </form>
         `;
     }
 }
 
+function getEmailCodeCooldownRemaining() {
+    const until = Number(sessionStorage.getItem('ax_email_code_cooldown_until') || 0);
+    return until > Date.now() ? Math.ceil((until - Date.now()) / 1000) : 0;
+}
+
+function formatCodeCooldownLabel(seconds) {
+    return t('auth.resendInSeconds').replace('{seconds}', String(Math.max(0, seconds)));
+}
+
+function applyEmailCodeCooldownUi() {
+    const button = document.getElementById('sendCodeBtn');
+    const emailInput = document.getElementById('regEmail');
+    if (codeCooldownSeconds <= 0) {
+        if (button) {
+            button.disabled = false;
+            button.classList.remove('btn-loading', 'btn-cooldown');
+            button.textContent = t('auth.sendCode');
+        }
+        if (emailInput) {
+            emailInput.readOnly = false;
+            emailInput.style.opacity = '1';
+        }
+        return;
+    }
+    if (button) {
+        button.disabled = true;
+        button.classList.remove('btn-loading');
+        button.classList.add('btn-cooldown');
+        button.textContent = formatCodeCooldownLabel(codeCooldownSeconds);
+    }
+    if (emailInput) {
+        emailInput.readOnly = true;
+        emailInput.style.opacity = '0.7';
+    }
+}
+
+function syncEmailCodeCooldown() {
+    codeCooldownSeconds = getEmailCodeCooldownRemaining();
+    if (codeCooldownSeconds <= 0) {
+        sessionStorage.removeItem('ax_email_code_cooldown_until');
+        if (codeCooldownTimer) clearInterval(codeCooldownTimer);
+        codeCooldownTimer = null;
+        applyEmailCodeCooldownUi();
+        return;
+    }
+    applyEmailCodeCooldownUi();
+    if (codeCooldownTimer) return;
+    codeCooldownTimer = setInterval(() => {
+        codeCooldownSeconds = getEmailCodeCooldownRemaining();
+        if (codeCooldownSeconds <= 0) {
+            sessionStorage.removeItem('ax_email_code_cooldown_until');
+            clearInterval(codeCooldownTimer);
+            codeCooldownTimer = null;
+        }
+        applyEmailCodeCooldownUi();
+    }, 1000);
+}
+
+function startEmailCodeCooldown(email) {
+    confirmedRegistrationEmail = email;
+    sessionStorage.setItem('ax_registration_email', email);
+    sessionStorage.setItem('ax_email_code_cooldown_until', String(Date.now() + 60_000));
+    if (codeCooldownTimer) clearInterval(codeCooldownTimer);
+    codeCooldownTimer = null;
+    syncEmailCodeCooldown();
+}
+
+function getPasswordResetCooldownRemaining() {
+    const until = Number(sessionStorage.getItem('ax_password_reset_cooldown_until') || 0);
+    return until > Date.now() ? Math.ceil((until - Date.now()) / 1000) : 0;
+}
+
+function applyPasswordResetCooldownUi() {
+    const button = document.getElementById('sendResetCodeBtn');
+    if (!button) return;
+    if (passwordResetCooldownSeconds <= 0) {
+        button.disabled = false;
+        button.classList.remove('btn-loading', 'btn-cooldown');
+        button.textContent = t('auth.sendResetCode');
+        return;
+    }
+    button.disabled = true;
+    button.classList.remove('btn-loading');
+    button.classList.add('btn-cooldown');
+    button.textContent = formatCodeCooldownLabel(passwordResetCooldownSeconds);
+}
+
+function syncPasswordResetCooldown() {
+    passwordResetCooldownSeconds = getPasswordResetCooldownRemaining();
+    if (passwordResetCooldownSeconds <= 0) {
+        sessionStorage.removeItem('ax_password_reset_cooldown_until');
+        if (passwordResetCooldownTimer) clearInterval(passwordResetCooldownTimer);
+        passwordResetCooldownTimer = null;
+        applyPasswordResetCooldownUi();
+        return;
+    }
+    applyPasswordResetCooldownUi();
+    if (passwordResetCooldownTimer) return;
+    passwordResetCooldownTimer = setInterval(() => {
+        passwordResetCooldownSeconds = getPasswordResetCooldownRemaining();
+        if (passwordResetCooldownSeconds <= 0) {
+            sessionStorage.removeItem('ax_password_reset_cooldown_until');
+            clearInterval(passwordResetCooldownTimer);
+            passwordResetCooldownTimer = null;
+        }
+        applyPasswordResetCooldownUi();
+    }, 1000);
+}
+
+function startPasswordResetCooldown() {
+    sessionStorage.setItem('ax_password_reset_cooldown_until', String(Date.now() + 60_000));
+    if (passwordResetCooldownTimer) clearInterval(passwordResetCooldownTimer);
+    passwordResetCooldownTimer = null;
+    syncPasswordResetCooldown();
+}
+
 async function sendVerificationEmailCode() {
-    if (codeCooldownSeconds > 0) return;
+    if (getEmailCodeCooldownRemaining() > 0) return;
     const emailInput = document.getElementById('regEmail');
     const email = emailInput.value.trim();
-    const err = document.getElementById('errorContainer');
     const btn = document.getElementById('sendCodeBtn');
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -625,8 +863,7 @@ async function sendVerificationEmailCode() {
 
     emailInput.readOnly = true;
     emailInput.style.opacity = '0.7';
-    confirmedRegistrationEmail = email;
-    setButtonLoading(btn, true, t('auth.sendCode'));
+    setButtonLoading(btn, true, t('auth.codeSending'));
 
     try {
         const response = await fetch('/api/send-code', {
@@ -639,59 +876,85 @@ async function sendVerificationEmailCode() {
         }
         setFormError('errorContainer', t('auth.codeSent'), 'success');
         showNotification(t('auth.codeSent'));
+        setButtonLoading(btn, false, t('auth.sendCode'));
+        startEmailCodeCooldown(email);
     } catch (e) {
         setFormError('errorContainer', t('errors.networkError'));
         showNotification(t('errors.networkError'), 'error');
+        setButtonLoading(btn, false, t('auth.sendCode'));
+        emailInput.readOnly = false;
+        emailInput.style.opacity = '1';
     }
-
-    codeCooldownSeconds = 60;
-    btn.innerText = `${codeCooldownSeconds}s`;
-
-    codeCooldownTimer = setInterval(() => {
-        codeCooldownSeconds--;
-        const currentBtn = document.getElementById('sendCodeBtn');
-        if (codeCooldownSeconds <= 0) {
-            clearInterval(codeCooldownTimer);
-            if (currentBtn) {
-                currentBtn.innerText = t('auth.sendCode');
-                currentBtn.disabled = false;
-                currentBtn.classList.remove('btn-loading');
-            }
-            const currentEmailInput = document.getElementById('regEmail');
-            if (currentEmailInput) {
-                currentEmailInput.readOnly = false;
-                currentEmailInput.style.opacity = '1';
-            }
-        } else if (currentBtn) {
-            currentBtn.innerText = `${codeCooldownSeconds}s`;
-        }
-    }, 1000);
 }
 
-function setPayNetwork(netName, address, amount) {
-    document.getElementById('activePayNet').innerText = netName;
-    renderPaymentQR(address, amount);
+async function requestPasswordResetCode() {
+    if (getPasswordResetCooldownRemaining() > 0) return;
+    const email = document.getElementById('resetEmail')?.value.trim() || '';
+    const button = document.getElementById('sendResetCodeBtn');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        setFormError('resetErrorContainer', t('errors.invalidEmail'), 'error', 'resetEmail');
+        return;
+    }
+    setButtonLoading(button, true, t('auth.codeSending'));
+    try {
+        const response = await fetch('/api/password-reset/request', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email }),
+        });
+        if (!response.ok) throw new Error('reset_code_request_failed');
+        setFormError('resetErrorContainer', t('auth.resetCodeSent'), 'success');
+        startPasswordResetCooldown();
+    } catch (_) {
+        setFormError('resetErrorContainer', t('errors.networkError'));
+        setButtonLoading(button, false, t('auth.sendResetCode'));
+    }
+}
+
+async function confirmPasswordReset() {
+    const email = document.getElementById('resetEmail')?.value.trim() || '';
+    const code = document.getElementById('resetCode')?.value.trim() || '';
+    const password = document.getElementById('resetPass')?.value.trim() || '';
+    const button = document.querySelector('#modalContainer .btn-modal-primary');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        setFormError('resetErrorContainer', t('errors.invalidEmail'), 'error', 'resetEmail');
+        return;
+    }
+    if (!/^\d{6}$/.test(code)) {
+        setFormError('resetErrorContainer', t('auth.invalidResetCode'), 'error', 'resetCode');
+        return;
+    }
+    if (password.length < 12) {
+        setFormError('resetErrorContainer', t('errors.registrationPasswordTooShort'), 'error', 'resetPass');
+        return;
+    }
+    setButtonLoading(button, true, t('auth.resetSubmit'));
+    try {
+        const response = await fetch('/api/password-reset/confirm', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, code, password }),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            setFormError('resetErrorContainer', translateBackendDetail(data.detail, 'auth.invalidResetCode'));
+            return;
+        }
+        sessionStorage.removeItem('ax_password_reset_cooldown_until');
+        setFormError('resetErrorContainer', t('auth.passwordResetSuccess'), 'success');
+        showNotification(t('auth.passwordResetSuccess'));
+        setTimeout(() => openModal('login'), 1100);
+    } catch (_) {
+        setFormError('resetErrorContainer', t('errors.networkError'));
+    } finally {
+        setButtonLoading(button, false, t('auth.resetSubmit'));
+    }
 }
 
 function scrollToFeatures() {
     const heading = document.getElementById('features-heading');
     if (heading) {
         heading.scrollIntoView({ behavior: 'smooth' });
-    }
-}
-
-function renderPaymentQR(walletAddress, displayAmount) {
-    const qrEl = document.getElementById('qrcodeContainer');
-    if (qrEl && window.qrcode) {
-        try {
-            qrEl.innerHTML = '';
-            const qr = qrcode(0, 'M');
-            qr.addData(`ethereum:${walletAddress}?value=${displayAmount}`);
-            qr.make();
-            qrEl.innerHTML = qr.createSvgTag({cellSize: 4, margin: 1});
-            const svg = qrEl.querySelector('svg');
-            if (svg) { svg.style.width = '100%'; svg.style.height = '100%'; svg.style.display = 'block'; }
-        } catch(e) {}
     }
 }
 
@@ -702,51 +965,267 @@ function copyWalletAddress(address, btn) {
     setTimeout(() => { btn.innerHTML = originalText; }, 2000);
 }
 
+function setPaymentStatus(message, type = 'info') {
+    const status = document.getElementById('paymentStatusContainer');
+    if (!status) return;
+    const color = type === 'error' ? '#fca5a5' : type === 'success' ? '#86efac' : '#c4b5fd';
+    const line = document.createElement('div');
+    line.style.cssText = `color:${color}; font-size:12px; line-height:1.5; margin-top:10px;`;
+    line.textContent = String(message || '');
+    status.replaceChildren(line);
+}
+
+function getPendingSubscriptionPayment() {
+    try {
+        const pending = JSON.parse(sessionStorage.getItem('ax_subscription_payment_pending') || 'null');
+        if (pending?.client_session_id === clientSessionId && pending.payment_session_id && /^0x[0-9a-fA-F]{64}$/.test(pending.txid || '')) {
+            return pending;
+        }
+    } catch (_) {}
+    return null;
+}
+
+function setPendingSubscriptionPayment(pending) {
+    sessionStorage.setItem('ax_subscription_payment_pending', JSON.stringify(pending));
+}
+
+function clearPendingSubscriptionPayment() {
+    sessionStorage.removeItem('ax_subscription_payment_pending');
+}
+
+function parseUsdcAtomic(value) {
+    const normalized = String(value || '').trim();
+    if (!/^\d+(?:\.\d{1,6})?$/.test(normalized)) return null;
+    const [whole, fraction = ''] = normalized.split('.');
+    const atomic = BigInt(whole) * 1000000n + BigInt((fraction + '000000').slice(0, 6));
+    return atomic > 0n ? atomic : null;
+}
+
+function buildErc20TransferData(receiver, amountAtomic) {
+    if (!/^0x[0-9a-fA-F]{40}$/.test(receiver || '') || !amountAtomic || amountAtomic <= 0n) return null;
+    const receiverWord = receiver.slice(2).toLowerCase().padStart(64, '0');
+    const amountWord = amountAtomic.toString(16).padStart(64, '0');
+    return `0xa9059cbb${receiverWord}${amountWord}`;
+}
+
+function restorePendingSubscriptionPayment() {
+    const pending = getPendingSubscriptionPayment();
+    if (!pending) return;
+    setPaymentStatus(t('paySubmitted'), 'info');
+    const button = document.getElementById('paymentActionBtn');
+    restorePaymentActionButton(button, t('payCheckStatus'));
+}
+
+function restorePaymentActionButton(button, label) {
+    if (!button) return;
+    button.classList.remove('btn-loading');
+    button.disabled = false;
+    button.dataset.defaultText = label;
+    button.textContent = label;
+}
+
+async function confirmSubscriptionPayment() {
+    const pending = getPendingSubscriptionPayment();
+    if (!pending) return false;
+    const button = document.getElementById('paymentActionBtn');
+    try {
+        setButtonLoading(button, true, t('payConfirming'));
+        setPaymentStatus(t('payConfirming'), 'info');
+        const response = await fetch('/api/payment/confirm', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(pending),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            if (data.detail === 'Payment session not found') {
+                return await recoverTestnetSubscriptionPayment(pending);
+            }
+            const isWaitingForConfirmation = data.detail === 'USDC payment is waiting for Base confirmation';
+            setPaymentStatus(
+                isWaitingForConfirmation ? t('payWaitingConfirmation') : translateBackendDetail(data.detail, 'errors.paymentFailed'),
+                isWaitingForConfirmation ? 'info' : 'error',
+            );
+            return false;
+        }
+        completeSubscriptionPayment(data);
+        return true;
+    } catch (_) {
+        setPaymentStatus(t('errors.networkError'), 'error');
+        return false;
+    } finally {
+        if (!paymentUnlocked) restorePaymentActionButton(button, t('payCheckStatus'));
+    }
+}
+
+function completeSubscriptionPayment(data) {
+    storePaymentAccess(data);
+    clearPendingSubscriptionPayment();
+    setPaymentStatus(t('payConfirmed'), 'success');
+    showNotification(t('payConfirmed'));
+    setTimeout(() => openModal('register'), 800);
+}
+
+function storePaymentAccess(data) {
+    if (!data?.payment_token) return false;
+    localStorage.removeItem(getPendingRegistrationDismissKey());
+    paymentUnlocked = true;
+    paymentAccessToken = data.payment_token;
+    sessionStorage.setItem('ax_payment_token', paymentAccessToken);
+    sessionStorage.setItem('ax_paid_session_id', clientSessionId);
+    updateRegistrationContinueAction();
+    return true;
+}
+
+async function restorePaidRegistrationAccess() {
+    try {
+        const response = await fetch('/api/payment/resume-registration', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ client_session_id: clientSessionId }),
+        });
+        if (!response.ok) return false;
+        const data = await response.json();
+        return storePaymentAccess(data);
+    } catch (_) {
+        return false;
+    }
+}
+
+async function recoverTestnetSubscriptionPayment(pending) {
+    try {
+        setPaymentStatus(t('payConfirming'), 'info');
+        const response = await fetch('/api/payment/recover', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                txid: pending.txid,
+                client_session_id: clientSessionId,
+                plan: localStorage.getItem('selected_plan') || 'Standard',
+                onboarding: localStorage.getItem('selected_onboarding') === 'true',
+            }),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            const isWaitingForConfirmation = data.detail === 'USDC payment is waiting for Base confirmation';
+            setPaymentStatus(
+                isWaitingForConfirmation ? t('payWaitingConfirmation') : translateBackendDetail(data.detail, 'errors.paymentFailed'),
+                isWaitingForConfirmation ? 'info' : 'error',
+            );
+            return false;
+        }
+        completeSubscriptionPayment(data);
+        return true;
+    } catch (_) {
+        setPaymentStatus(t('errors.networkError'), 'error');
+        return false;
+    }
+}
+
 async function startPlanPayment() {
+    if (getPendingSubscriptionPayment()) {
+        await confirmSubscriptionPayment();
+        return;
+    }
+    const locale = translations[getActiveLang()];
     const chosenPlan = localStorage.getItem('selected_plan') || 'Standard';
     const basePrice = PLAN_PRICES[chosenPlan] || PLAN_PRICES.Standard;
     const onboarding = localStorage.getItem('selected_onboarding') === 'true';
-    const status = document.getElementById('paymentStatusContainer');
-    const txid = document.getElementById('txidInput').value.trim();
-
-    if (!txid) {
-        status.innerHTML = `<div style="color:#ef4444; font-size:12px; margin-top:8px;">${t('errors.txidRequired')}</div>`;
-        return;
-    }
+    const button = document.getElementById('paymentActionBtn');
 
     try {
+        setButtonLoading(button, true, locale.payPreparing);
         const createRes = await fetch('/api/payment/create-session', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ plan: chosenPlan, amount: basePrice, onboarding, client_session_id: clientSessionId })
+            body: JSON.stringify({ plan: chosenPlan, amount: basePrice, onboarding, client_session_id: clientSessionId }),
         });
         const createData = await createRes.json();
         if (!createRes.ok) {
-            status.innerHTML = `<div style="color:#ef4444; font-size:12px; margin-top:8px;">${translateBackendDetail(createData.detail, 'errors.paymentFailed')}</div>`;
+            setPaymentStatus(translateBackendDetail(createData.detail, 'errors.paymentFailed'), 'error');
             return;
         }
-        
-        const confirmRes = await fetch('/api/payment/confirm', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ payment_session_id: createData.payment_session_id, client_session_id: clientSessionId, txid: txid })
+
+        const payment = createData.payment;
+        updateSubscriptionPaymentSummary(payment, Boolean(createData.is_testnet));
+        const provider = window.ethereum;
+        if (!provider?.request || !payment) throw new Error('payment_wallet_unavailable');
+        let accounts = await provider.request({ method: 'eth_accounts' });
+        if (!Array.isArray(accounts) || !accounts[0]) accounts = await provider.request({ method: 'eth_requestAccounts' });
+        const from = accounts?.[0];
+        if (!/^0x[0-9a-fA-F]{40}$/.test(from || '')) throw new Error('payment_wallet_unavailable');
+        if (Number(payment.chain_id) === 84532) {
+            await switchToBaseSepolia(provider);
+        } else if (Number(payment.chain_id) === 8453) {
+            await switchToBaseMainnet(provider);
+        } else {
+            throw new Error('payment_network_unavailable');
+        }
+        await requestPaymentAssetVisibility(provider, payment);
+
+        const amountAtomic = parseUsdcAtomic(payment.amount);
+        const data = buildErc20TransferData(payment.receiver, amountAtomic);
+        if (!data || !/^0x[0-9a-fA-F]{40}$/.test(payment.contract || '')) throw new Error('payment_details_invalid');
+        setButtonLoading(button, true, locale.payWalletSigning);
+        setPaymentStatus(locale.payWalletSigning, 'info');
+        const txid = await provider.request({
+            method: 'eth_sendTransaction',
+            params: [{ from, to: payment.contract, data, value: '0x0' }],
         });
-        const confirmData = await confirmRes.json();
-
-        if (!confirmRes.ok) {
-            status.innerHTML = `<div style="color:#ef4444; font-size:12px; margin-top:8px;">${translateBackendDetail(confirmData.detail, 'errors.paymentFailed')}</div>`;
-            return;
+        setPendingSubscriptionPayment({
+            payment_session_id: createData.payment_session_id,
+            client_session_id: clientSessionId,
+            txid,
+        });
+        setPaymentStatus(locale.paySubmitted, 'info');
+        await confirmSubscriptionPayment();
+    } catch (error) {
+        const rejected = error?.code === 4001 || error?.code === 'ACTION_REJECTED';
+        const message = rejected
+            ? locale.payWalletRejected
+            : (String(error?.message || '').includes('payment_wallet_unavailable') ? locale.payWalletUnavailable : locale.errors.networkError);
+        setPaymentStatus(message, 'error');
+    } finally {
+        if (!paymentUnlocked) {
+            restorePaymentActionButton(
+                button,
+                getPendingSubscriptionPayment() ? locale.payCheckStatus : locale.payWithWallet,
+            );
         }
+    }
+}
 
-        paymentUnlocked = true;
-        paymentAccessToken = confirmData.payment_token;
-        sessionStorage.setItem('ax_payment_token', paymentAccessToken);
-        sessionStorage.setItem('ax_paid_session_id', clientSessionId);
+async function requestPaymentAssetVisibility(provider, payment) {
+    // This only asks the wallet to display the verified USDC token. It cannot
+    // move funds and a wallet may safely decline or ignore the request.
+    try {
+        await provider.request({
+            method: 'wallet_watchAsset',
+            params: {
+                type: 'ERC20',
+                options: {
+                    address: payment.contract,
+                    symbol: payment.asset || 'USDC',
+                    decimals: Number(payment.decimals) || 6,
+                },
+            },
+        });
+    } catch (_) {
+        // Asset visibility is optional and must never block a signed payment.
+    }
+}
 
-        showNotification("OK!");
-        setTimeout(() => openModal('register'), 800);
-    } catch (e) {
-        status.innerHTML = `<div style="color:#ef4444; font-size:12px; margin-top:8px;">${t('errors.networkError')}</div>`;
+function updateSubscriptionPaymentSummary(payment, isTestnet) {
+    const locale = translations[getActiveLang()];
+    const amount = `${payment.amount} ${payment.asset || 'USDC'}`;
+    const amountElement = document.getElementById('paymentAmountValue');
+    const button = document.getElementById('paymentActionBtn');
+    const testModeNotice = document.getElementById('paymentTestModeNotice');
+    if (amountElement) amountElement.textContent = amount;
+    if (button) button.textContent = `${locale.payWithWallet} · ${amount}`;
+    if (testModeNotice) {
+        testModeNotice.textContent = isTestnet ? locale.payTestMode : '';
+        testModeNotice.style.display = isTestnet ? 'block' : 'none';
     }
 }
 
@@ -791,18 +1270,24 @@ async function validateRegister() {
 
     setButtonLoading(submitBtn, true, t('auth.register'));
 
-    const requestData = {
-        username,
-        email,
-        password: pass,
-        code,
-        plan: chosenPlan,
-        payment_token: localStorage.getItem('payment_token') || '',
-        client_session_id: localStorage.getItem('client_session_id') || '',
-        fingerprint: localStorage.getItem('fingerprint') || 'web_client'
-    };
-
     try {
+        // The server owns the payment state. Refresh the one-use token here so
+        // a harmless page/server restart can never make a confirmed payment disappear.
+        const paymentRestored = await restorePaidRegistrationAccess();
+        if (!paymentRestored) {
+            setFormError('errorContainer', t('errors.paymentRegistrationUnavailable'));
+            return;
+        }
+        const requestData = {
+            username,
+            email,
+            password: pass,
+            code,
+            plan: chosenPlan,
+            payment_token: paymentAccessToken,
+            client_session_id: clientSessionId,
+            fingerprint: deviceFingerprint
+        };
         const response = await fetch('/api/register', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -823,6 +1308,8 @@ async function validateRegister() {
         if (typeof clearPaymentAccess === 'function') {
             clearPaymentAccess();
         }
+        sessionStorage.removeItem('ax_registration_email');
+        sessionStorage.removeItem('ax_email_code_cooldown_until');
         setFormError('errorContainer', t('auth.registerSuccess'), 'success');
         showNotification(t('auth.registerSuccess'));
         setTimeout(() => openModal('login'), 1200);
@@ -1115,6 +1602,34 @@ function openAaveSupplyConfirmation(quote, approval = false) {
     document.getElementById('baseSwapConfirmProceed').textContent = approval
         ? locale.defiSupplyApprovalProceed
         : locale.defiSupplyProceed;
+    modal.classList.add('show');
+    return new Promise((resolve) => {
+        baseSwapConfirmationResolver = resolve;
+    });
+}
+
+function openAaveWithdrawConfirmation(quote) {
+    const locale = translations[getActiveLang()];
+    const modal = document.getElementById('baseSwapConfirmModal');
+    if (!modal) return Promise.resolve(false);
+    if (baseSwapConfirmationResolver) baseSwapConfirmationResolver(false);
+    const asset = quote?.asset || { symbol: 'USDC' };
+    const pool = String(quote?.pool_address || '');
+    document.getElementById('baseSwapConfirmTitle').textContent = locale.defiWithdrawModalTitle;
+    document.getElementById('baseSwapConfirmNetwork').textContent = locale.defiWithdrawModalNetwork;
+    document.getElementById('baseSwapConfirmPayLabel').textContent = locale.defiWithdrawPay;
+    document.getElementById('baseSwapConfirmPayValue').textContent = `${quote?.amount || ''} a${asset.symbol || 'USDC'}`;
+    document.getElementById('baseSwapConfirmReceiveLabel').textContent = locale.defiWithdrawReceive;
+    document.getElementById('baseSwapConfirmReceiveValue').textContent = `${quote?.amount || ''} ${asset.symbol || 'USDC'}`;
+    setBaseSwapConfirmationDetails([
+        { label: locale.confirmationRouteContract, value: pool },
+        { label: locale.confirmationNetworkFee, value: locale.confirmationNetworkFeeWallet },
+        { label: locale.confirmationWalletCheck, value: locale.confirmationWalletCheckValue },
+    ]);
+    setBaseSwapConfirmationWarning('');
+    document.getElementById('baseSwapConfirmNotice').textContent = locale.defiWithdrawModalNotice;
+    document.getElementById('baseSwapConfirmCancel').textContent = locale.baseSwapModalCancel;
+    document.getElementById('baseSwapConfirmProceed').textContent = locale.defiWithdrawProceed;
     modal.classList.add('show');
     return new Promise((resolve) => {
         baseSwapConfirmationResolver = resolve;
@@ -1667,6 +2182,7 @@ async function sendDirectBaseTransfer() {
 
 let activeBaseSwapQuote = null;
 let activeAaveSupplyQuote = null;
+let activeAaveWithdrawQuote = null;
 
 function formatUsdcAmount(rawAmount) {
     try {
@@ -1941,7 +2457,7 @@ async function loadWalletsFromDB() {
             const isConnectedForActions = isActive && connectedAddress === w.wallet_address.toLowerCase();
             const walletName = escapeHtml(w.label || `${t.walletDefaultName} ${w.id}`);
             const address = escapeHtml(w.wallet_address);
-            const proxyStatus = w.proxy ? t.walletProxyConfigured : t.walletNoProxy;
+            const proxyStatus = w.has_proxy ? t.walletProxyConfigured : t.walletNoProxy;
             return `
                 <div style="background: var(--bg-main); border: 1px solid var(--border-color); padding: 14px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; gap:12px;">
                     <div>
@@ -1956,7 +2472,7 @@ async function loadWalletsFromDB() {
                         <button type="button" onclick="activateSavedWallet(${w.id}, '${w.wallet_address}')" ${isActive ? 'disabled' : ''} style="background:${isActive ? 'rgba(34,197,94,0.12)' : 'rgba(124,58,237,0.12)'}; color:${isActive ? '#86efac' : '#c4b5fd'}; border:1px solid ${isActive ? 'rgba(34,197,94,0.28)' : 'rgba(124,58,237,0.32)'}; padding:6px 10px; border-radius:8px; font-size:12px; cursor:${isActive ? 'default' : 'pointer'};">${isActive ? t.walletActive : t.walletActivate}</button>
                         <button type="button" onclick="toggleWalletEditor(${w.id})" style="background:rgba(255,255,255,.06); color:#e5e7eb; border:1px solid var(--border-color); padding:6px 10px; border-radius:8px; font-size:12px; cursor:pointer;">${t.walletEdit}</button>
                         <button type="button" onclick="checkWalletHealth(${w.id}, this)" style="background:rgba(59,130,246,0.1); color:#93c5fd; border:1px solid rgba(59,130,246,0.28); padding:6px 10px; border-radius:8px; font-size:12px; cursor:pointer;">${t.walletHealthCheck}</button>
-                        ${w.proxy ? `<button type="button" onclick="testWalletProxy(${w.id}, this)" style="background: rgba(34,197,94,0.1); color: #22c55e; border: 1px solid rgba(34,197,94,0.2); padding: 6px 10px; border-radius: 8px; font-size: 12px; cursor:pointer;">${t.walletProxyTest}</button>` : ''}
+                        ${w.has_proxy ? `<button type="button" onclick="testWalletProxy(${w.id}, this)" style="background: rgba(34,197,94,0.1); color: #22c55e; border: 1px solid rgba(34,197,94,0.2); padding: 6px 10px; border-radius: 8px; font-size: 12px; cursor:pointer;">${t.walletProxyTest}</button>` : ''}
                         <button type="button" onclick="deleteWallet(${w.id})" style="background: rgba(239,68,68,0.1); color: #ef4444; border: 1px solid rgba(239,68,68,0.2); padding: 6px 10px; border-radius: 8px; font-size: 12px; cursor:pointer;">${t.walletRemove}</button>
                     </div>
                 </div>
@@ -2073,9 +2589,22 @@ async function testWalletProxy(walletId, btn) {
 }
 
 async function deleteWallet(id) {
-    if (!window.confirm(translations[currentLang].walletRemoveConfirm)) return;
-    await fetch(`/api/wallets/delete/${id}`, { method: 'DELETE' });
-    loadWalletsFromDB();
+    const locale = translations[getActiveLang()] || translations.ru;
+    const approved = await openAppConfirm({
+        title: locale.walletRemoveTitle,
+        message: locale.walletRemoveConfirm,
+        confirmText: locale.walletRemoveAction,
+    });
+    if (!approved) return;
+    try {
+        const response = await fetch(`/api/wallets/delete/${id}`, { method: 'DELETE' });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'wallet_delete_failed');
+        showNotification(locale.walletRemoved, 'success');
+        await loadWalletsFromDB();
+    } catch (error) {
+        showNotification(translateBackendDetail(error.message) || locale.walletLoadError, 'error');
+    }
 }
 
 async function buyExtraSlot() {
@@ -2237,6 +2766,10 @@ async function saveGlobalProfileSettings() {
     const notifyTransactionFinal = document.getElementById('notifTransactionFinalToggle')?.checked ?? true;
     const notifyReminders = document.getElementById('notifRemindersToggle')?.checked ?? true;
     const notifyErrors = document.getElementById('notifErrorsToggle')?.checked ?? true;
+    const notifyDefiSupplySubmitted = document.getElementById('notifDefiSupplySubmittedToggle')?.checked ?? false;
+    const notifyDefiWithdrawSubmitted = document.getElementById('notifDefiWithdrawSubmittedToggle')?.checked ?? false;
+    const notifyDefiFinal = document.getElementById('notifDefiFinalToggle')?.checked ?? false;
+    const notifyDefiErrors = document.getElementById('notifDefiErrorsToggle')?.checked ?? false;
     const notifySettings = true;
     const notifyStart = notifyTransactionSubmitted;
     const notifySuccess = notifyTransactionFinal;
@@ -2247,6 +2780,10 @@ async function saveGlobalProfileSettings() {
     localStorage.setItem('ax_notify_transactions_final', notifyTransactionFinal);
     localStorage.setItem('ax_notify_reminders', notifyReminders);
     localStorage.setItem('ax_notify_errors', notifyErrors);
+    localStorage.setItem('ax_notify_defi_supply_submitted', notifyDefiSupplySubmitted);
+    localStorage.setItem('ax_notify_defi_withdraw_submitted', notifyDefiWithdrawSubmitted);
+    localStorage.setItem('ax_notify_defi_final', notifyDefiFinal);
+    localStorage.setItem('ax_notify_defi_errors', notifyDefiErrors);
 
     document.querySelectorAll('#dailyTimeConfigsContainer > div[data-day]').forEach(row => {
         const day = row.getAttribute('data-day');
@@ -2271,6 +2808,10 @@ async function saveGlobalProfileSettings() {
         notifyTransactionFinal,
         notifyReminders,
         notifyErrors,
+        notifyDefiSupplySubmitted,
+        notifyDefiWithdrawSubmitted,
+        notifyDefiFinal,
+        notifyDefiErrors,
         interfaceHints,
         language: currentLang
     };
@@ -2373,9 +2914,100 @@ async function refreshTelegramConnectionState() {
         statusEl.textContent = data.linked ? t('tgLinked') : t('tgNotLinked');
         statusEl.style.color = data.linked ? '#22c55e' : 'var(--text-muted)';
         if (testButton) testButton.style.display = data.linked ? 'inline-flex' : 'none';
+        if (data.linked && data.filters) applyTelegramNotificationFilters(data.filters);
     } catch (error) {
         statusEl.textContent = t('tgUnavailable');
         statusEl.style.color = '#eab308';
+    }
+}
+
+function applyTelegramNotificationFilters(filters) {
+    const controls = {
+        transactionSubmitted: ['notifTransactionSubmittedToggle', 'ax_notify_transactions_submitted'],
+        transactionFinal: ['notifTransactionFinalToggle', 'ax_notify_transactions_final'],
+        reminders: ['notifRemindersToggle', 'ax_notify_reminders'],
+        errors: ['notifErrorsToggle', 'ax_notify_errors'],
+        defiSupplySubmitted: ['notifDefiSupplySubmittedToggle', 'ax_notify_defi_supply_submitted'],
+        defiWithdrawSubmitted: ['notifDefiWithdrawSubmittedToggle', 'ax_notify_defi_withdraw_submitted'],
+        defiFinal: ['notifDefiFinalToggle', 'ax_notify_defi_final'],
+        defiErrors: ['notifDefiErrorsToggle', 'ax_notify_defi_errors'],
+    };
+    Object.entries(controls).forEach(([key, [elementId, storageKey]]) => {
+        if (typeof filters[key] !== 'boolean') return;
+        const enabled = filters[key];
+        localStorage.setItem(storageKey, String(enabled));
+        const control = document.getElementById(elementId);
+        if (control) control.checked = enabled;
+    });
+}
+
+function applyTelegramNotificationPreset(preset) {
+    const presets = {
+        important: {
+            transactionSubmitted: false, transactionFinal: true, reminders: true, errors: true,
+            defiSupplySubmitted: false, defiWithdrawSubmitted: false, defiFinal: false, defiErrors: false,
+        },
+        all: {
+            transactionSubmitted: true, transactionFinal: true, reminders: true, errors: true,
+            defiSupplySubmitted: true, defiWithdrawSubmitted: true, defiFinal: true, defiErrors: true,
+        },
+        errors: {
+            transactionSubmitted: false, transactionFinal: false, reminders: false, errors: true,
+            defiSupplySubmitted: false, defiWithdrawSubmitted: false, defiFinal: false, defiErrors: true,
+        },
+    };
+    const selected = presets[preset];
+    if (!selected) return;
+    applyTelegramNotificationFilters(selected);
+    showNotification(t('notifPresetApplied'));
+}
+
+async function getWalletSecurityNetwork() {
+    if (!window.ethereum?.request) return { tone: 'muted', text: t('securityNetworkUnknown') };
+    try {
+        const chainId = (await window.ethereum.request({ method: 'eth_chainId' }) || '').toLowerCase();
+        if (chainId === '0x2105') return { tone: 'success', text: t('securityNetworkMain') };
+        if (['0x14a34', '0xaa36a7'].includes(chainId)) return { tone: 'warning', text: t('securityNetworkTest') };
+        return { tone: 'warning', text: t('securityNetworkOther') };
+    } catch (error) {
+        return { tone: 'muted', text: t('securityNetworkUnknown') };
+    }
+}
+
+async function loadSecurityOverview() {
+    const container = document.getElementById('securityOverviewContent');
+    if (!container) return;
+    container.textContent = t('loading');
+    try {
+        const [response, network] = await Promise.all([
+            fetch('/api/security/overview'),
+            getWalletSecurityNetwork(),
+        ]);
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'security_overview_unavailable');
+        const selectedWallet = getActiveBaseWalletAddress();
+        const walletText = selectedWallet
+            ? `${t('securityWalletChosen')}: ${escapeHtml(getShortOperationAddress(selectedWallet))}`
+            : data.wallet_count > 0
+                ? `${t('securityWalletSaved')}: ${data.wallet_count}`
+                : t('securityWalletNone');
+        const telegramText = data.telegram_linked ? t('securityTelegramLinked') : t('securityTelegramNone');
+        const rows = [
+            ['🛡️', t('securitySession'), data.session_active ? t('securitySessionActive') : t('securityUnavailable'), data.session_active ? '#86efac' : '#fca5a5'],
+            ['👛', t('securityWallet'), walletText, selectedWallet || data.wallet_count > 0 ? '#86efac' : '#facc15'],
+            ['✈️', t('securityTelegram'), telegramText, data.telegram_linked ? '#86efac' : 'var(--text-muted)'],
+            ['🌐', t('securityNetwork'), network.text, network.tone === 'success' ? '#86efac' : network.tone === 'warning' ? '#facc15' : 'var(--text-muted)'],
+        ];
+        container.innerHTML = rows.map(([icon, title, value, color]) => `
+            <div style="display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--border-color);">
+                <span style="width:22px; text-align:center;">${icon}</span>
+                <span style="color:#fff; font-size:13px; flex:1;">${title}</span>
+                <span style="color:${color}; font-size:12px; text-align:right;">${value}</span>
+            </div>
+        `).join('');
+    } catch (error) {
+        container.textContent = t('securityUnavailable');
+        container.style.color = '#facc15';
     }
 }
 
@@ -3375,7 +4007,10 @@ async function loadDefiOverview(refresh = false) {
             const collateral = position.has_supply && position.collateral_enabled
                 ? `<span style="color:#c4b5fd; font-size:11px; border:1px solid rgba(196,181,253,.38); border-radius:999px; padding:3px 7px;">${escapeHtml(locale.defiCollateral)}</span>`
                 : '';
-            return `<div style="background:var(--bg-main); border:1px solid var(--border-color); border-radius:10px; padding:11px 12px; margin-top:8px;"><div style="display:flex; justify-content:space-between; gap:10px; align-items:center;"><div style="color:#fff; font-size:13px; font-weight:700;">${escapeHtml(position.asset)}</div>${collateral}</div><div style="display:flex; flex-wrap:wrap; gap:20px; margin-top:10px;">${supply}${borrow}</div></div>`;
+            const withdraw = position.has_supply && String(position.asset || '').toUpperCase() === 'USDC'
+                ? `<div id="aaveWithdrawPanel" style="margin-top:12px;"><button type="button" onclick="showAaveUsdcWithdrawForm('${escapeHtml(position.supplied)}')" class="btn-dark-sm" style="padding:7px 10px; font-size:12px; border-color:#7c3aed;">${escapeHtml(locale.defiWithdrawOpen)}</button></div>`
+                : '';
+            return `<div style="background:var(--bg-main); border:1px solid var(--border-color); border-radius:10px; padding:11px 12px; margin-top:8px;"><div style="display:flex; justify-content:space-between; gap:10px; align-items:center;"><div style="color:#fff; font-size:13px; font-weight:700;">${escapeHtml(position.asset)}</div>${collateral}</div><div style="display:flex; flex-wrap:wrap; gap:20px; margin-top:10px;">${supply}${borrow}</div>${withdraw}</div>`;
         }).join('');
     } catch (error) {
         const message = error.message === 'wallet_required' ? locale.defiWalletRequired : locale.defiLoadError;
@@ -3386,6 +4021,32 @@ async function loadDefiOverview(refresh = false) {
             button.style.opacity = '';
             button.style.cursor = '';
         }
+    }
+}
+
+async function loadAaveDefiHistory() {
+    const locale = translations[getActiveLang()];
+    const panel = document.getElementById('defiHistoryPanel');
+    if (!panel) return;
+    try {
+        const response = await fetch('/api/defi/aave-base/history');
+        const data = await response.json();
+        if (!response.ok || !Array.isArray(data.records)) throw new Error('defi_history_unavailable');
+        if (!data.records.length) {
+            panel.innerHTML = `<div style="color:var(--text-muted); font-size:12px; line-height:1.45;">${escapeHtml(locale.defiHistoryEmpty)}</div>`;
+            return;
+        }
+        panel.innerHTML = data.records.map((record) => {
+            const status = getOperationsJournalStatus(record);
+            const action = String(record.operation_type) === 'withdraw'
+                ? locale.defiHistoryWithdraw
+                : locale.defiHistorySupply;
+            const date = new Date(Number(record.created_at) * 1000).toLocaleString();
+            const txUrl = `${BASE_MAINNET_CONFIG.blockExplorerUrls[0]}/tx/${encodeURIComponent(record.tx_hash)}`;
+            return `<div style="background:var(--bg-main); border:1px solid var(--border-color); border-radius:10px; padding:10px 11px; margin-top:8px; display:flex; justify-content:space-between; gap:10px; align-items:flex-start;"><div style="min-width:0;"><div style="color:#fff; font-size:12px; font-weight:700;">${escapeHtml(action)} · ${escapeHtml(record.amount)} ${escapeHtml(record.asset_symbol || 'USDC')}</div><div style="color:var(--text-muted); font-size:11px; margin-top:4px;">${escapeHtml(record.protocol || 'Aave V3')} · ${escapeHtml(record.network || 'Base')} · ${escapeHtml(date)}</div><div style="color:${status.color}; font-size:11px; margin-top:4px;">${escapeHtml(status.label)}</div></div><a href="${txUrl}" target="_blank" rel="noopener noreferrer" style="color:#c4b5fd; font-size:11px; white-space:nowrap; flex:0 0 auto;">${escapeHtml(locale.defiHistoryOpenTx)}</a></div>`;
+        }).join('');
+    } catch (_) {
+        panel.innerHTML = `<div style="color:#fca5a5; font-size:12px;">${escapeHtml(locale.defiHistoryLoadError)}</div>`;
     }
 }
 
@@ -3429,17 +4090,25 @@ async function requestAaveUsdcSupplyQuote() {
         const data = await response.json();
         if (!response.ok) throw new Error(data.detail || 'aave_supply_quote_failed');
         activeAaveSupplyQuote = data;
-        const rate = Number(data.annual_supply_rate_percent || 0).toLocaleString(undefined, { maximumFractionDigits: 4 });
+        const ratePercent = Number(data.annual_supply_rate_percent || 0);
+        const rate = ratePercent.toLocaleString(undefined, { maximumFractionDigits: 4 });
+        const suppliedAmount = Number(data.amount);
+        const annualInterest = suppliedAmount * ratePercent / 100;
+        const estimatedTotal = suppliedAmount + annualInterest;
+        const displayUsdc = (value) => Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 });
+        const yearlyEstimate = Number.isFinite(annualInterest) && annualInterest >= 0 && Number.isFinite(estimatedTotal)
+            ? `<div style="background:rgba(124,58,237,.08); border:1px solid rgba(124,58,237,.3); border-radius:10px; padding:10px 11px; margin-top:10px;"><div style="color:#e9d5ff; font-size:11px; font-weight:700;">${escapeHtml(locale.defiSupplyYearEstimate)}</div><div style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; margin-top:8px;"><div><div style="color:var(--text-muted); font-size:10px;">${escapeHtml(locale.defiSupplyYearInterest)}</div><div style="color:#86efac; font-size:13px; font-weight:700; margin-top:3px;">≈ ${escapeHtml(displayUsdc(annualInterest))} USDC</div></div><div><div style="color:var(--text-muted); font-size:10px;">${escapeHtml(locale.defiSupplyYearTotal)}</div><div style="color:#fff; font-size:13px; font-weight:700; margin-top:3px;">≈ ${escapeHtml(displayUsdc(estimatedTotal))} USDC</div></div></div><div style="color:var(--text-muted); font-size:10px; line-height:1.4; margin-top:8px;">${escapeHtml(locale.defiSupplyYearNote)}</div></div>`
+            : '';
         const approval = data.approval?.required ? `<div style="color:#fde68a; margin-top:5px;">${escapeHtml(locale.defiSupplyNeedsApproval)}</div>` : '';
         const gasWarning = data.gas_reserve_met ? '' : `<div style="color:#fca5a5; margin-top:5px;">${escapeHtml(locale.defiSupplyNoGas.replace('{amount}', data.gas_reserve || ''))}</div>`;
         if (result) {
-            result.innerHTML = `<div style="color:#86efac; font-weight:600;">${escapeHtml(locale.defiSupplyReady.replace('{amount}', data.amount))}</div><div style="color:var(--text-muted); margin-top:5px;">${escapeHtml(locale.defiSupplyAvailable.replace('{amount}', data.wallet_balance))}</div><div style="color:#c4b5fd; margin-top:4px;">${escapeHtml(locale.defiSupplyRate)}: ${escapeHtml(rate)}%</div>${approval}${gasWarning}${data.gas_reserve_met ? `<button type="button" id="aaveSupplyReviewButton" onclick="submitAaveUsdcSupply()" class="btn-purple-lg" style="font-size:13px; padding:10px 14px; width:auto; margin-top:11px;">${escapeHtml(locale.defiSupplyReview)}</button>` : ''}`;
+            result.innerHTML = `<div style="color:#86efac; font-weight:600;">${escapeHtml(locale.defiSupplyReady.replace('{amount}', data.amount))}</div><div style="color:var(--text-muted); margin-top:5px;">${escapeHtml(locale.defiSupplyAvailable.replace('{amount}', data.wallet_balance))}</div><div style="color:#c4b5fd; margin-top:4px;">${escapeHtml(locale.defiSupplyRate)}: ${escapeHtml(rate)}%</div>${yearlyEstimate}${approval}${gasWarning}${data.gas_reserve_met ? `<button type="button" id="aaveSupplyReviewButton" onclick="submitAaveUsdcSupply()" class="btn-purple-lg" style="font-size:13px; padding:10px 14px; width:auto; margin-top:11px;">${escapeHtml(locale.defiSupplyReview)}</button>` : ''}`;
         }
     } catch (error) {
         const message = String(error?.message || '');
         const display = message.includes('exceeds the wallet balance')
             ? locale.defiSupplyInsufficientBalance
-            : (message.includes('temporarily unavailable') ? locale.defiSupplyUnavailable : locale.defiSupplyQuoteError);
+            : (message.includes('Aave USDC supply is temporarily unavailable') ? locale.defiSupplyUnavailable : locale.defiSupplyQuoteError);
         aaveSupplyResult(display, '#fca5a5');
     } finally {
         setButtonLoading(button, false, locale.defiSupplyCheck);
@@ -3523,11 +4192,12 @@ async function submitAaveUsdcSupply() {
         });
         activeAaveSupplyQuote = null;
         try {
-            await fetch('/api/defi/aave-base/supply-submissions', {
+            const submissionResponse = await fetch('/api/defi/aave-base/supply-submissions', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ quote_id: quote.quote_id, tx_hash: txHash }),
             });
+            if (submissionResponse.ok) await loadAaveDefiHistory();
         } catch (_) {
             // The wallet transaction remains valid even if the optional notification fails.
         }
@@ -3544,6 +4214,130 @@ async function submitAaveUsdcSupply() {
         aaveSupplyResult(rejected ? locale.defiSupplyRejected : display, '#fca5a5');
     } finally {
         setButtonLoading(button, false, locale.defiSupplyReview);
+    }
+}
+
+function showAaveUsdcWithdrawForm(positionAmount) {
+    const locale = translations[getActiveLang()];
+    const panel = document.getElementById('aaveWithdrawPanel');
+    if (!panel) return;
+    activeAaveWithdrawQuote = null;
+    panel.innerHTML = `<div style="border-top:1px solid var(--border-color); margin-top:10px; padding-top:11px;"><label style="display:block; color:var(--text-muted); font-size:11px;">${escapeHtml(locale.defiWithdrawAmount)}<input id="aaveWithdrawAmount" inputmode="decimal" value="${escapeHtml(positionAmount)}" class="auth-input" style="margin-top:5px; padding:8px 10px; font-size:12px;"></label><button type="button" id="aaveWithdrawQuoteButton" onclick="requestAaveUsdcWithdrawQuote()" class="btn-dark-sm" style="padding:8px 11px; font-size:12px; margin-top:9px; border-color:#7c3aed;">${escapeHtml(locale.defiWithdrawCheck)}</button><div id="aaveWithdrawResult" style="font-size:12px; line-height:1.5; margin-top:9px;"></div></div>`;
+}
+
+function aaveWithdrawResult(message, color = 'var(--text-muted)') {
+    const result = document.getElementById('aaveWithdrawResult');
+    if (result) result.innerHTML = `<span style="color:${color};">${escapeHtml(message)}</span>`;
+}
+
+async function requestAaveUsdcWithdrawQuote() {
+    const locale = translations[getActiveLang()];
+    const amount = normalizeUsdcInput(document.getElementById('aaveWithdrawAmount')?.value);
+    const activeAddress = getActiveBaseWalletAddress();
+    const button = document.getElementById('aaveWithdrawQuoteButton');
+    const result = document.getElementById('aaveWithdrawResult');
+    activeAaveWithdrawQuote = null;
+    if (!amount) {
+        aaveWithdrawResult(locale.defiWithdrawInvalid, '#fca5a5');
+        return;
+    }
+    if (!/^0x[0-9a-fA-F]{40}$/.test(activeAddress)) {
+        aaveWithdrawResult(locale.defiWithdrawWalletRequired, '#fca5a5');
+        return;
+    }
+    try {
+        setButtonLoading(button, true, locale.defiWithdrawLoading);
+        const response = await fetch('/api/defi/aave-base/usdc-withdraw-quote', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ wallet_address: activeAddress, amount }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'aave_withdraw_quote_failed');
+        activeAaveWithdrawQuote = data;
+        const gasWarning = data.gas_reserve_met ? '' : `<div style="color:#fca5a5; margin-top:5px;">${escapeHtml(locale.defiWithdrawNoGas.replace('{amount}', data.gas_reserve || ''))}</div>`;
+        if (result) {
+            result.innerHTML = `<div style="color:#86efac; font-weight:600;">${escapeHtml(locale.defiWithdrawReady.replace('{amount}', data.amount))}</div><div style="color:var(--text-muted); margin-top:5px;">${escapeHtml(locale.defiWithdrawAvailable.replace('{amount}', data.position_balance))}</div>${gasWarning}${data.gas_reserve_met ? `<button type="button" id="aaveWithdrawReviewButton" onclick="submitAaveUsdcWithdraw()" class="btn-purple-lg" style="font-size:12px; padding:9px 12px; width:auto; margin-top:10px;">${escapeHtml(locale.defiWithdrawReview)}</button>` : ''}`;
+        }
+    } catch (error) {
+        const message = String(error?.message || '');
+        const display = message.includes('exceeds the Aave USDC position')
+            ? locale.defiWithdrawInsufficientPosition
+            : locale.defiWithdrawQuoteError;
+        aaveWithdrawResult(display, '#fca5a5');
+    } finally {
+        setButtonLoading(button, false, locale.defiWithdrawCheck);
+    }
+}
+
+function validateAaveWithdrawTransaction(quote, fromAddress) {
+    const transaction = quote?.transaction || {};
+    const asset = quote?.asset || {};
+    if (!window.ethers?.utils?.Interface) return false;
+    try {
+        const contract = new window.ethers.utils.Interface([
+            'function withdraw(address asset, uint256 amount, address to) returns (uint256)',
+        ]);
+        const expectedData = contract.encodeFunctionData('withdraw', [
+            asset.address,
+            String(quote.amount_atomic),
+            fromAddress,
+        ]).toLowerCase();
+        return transaction.chain_id === 8453
+            && String(transaction.from || '').toLowerCase() === fromAddress.toLowerCase()
+            && String(transaction.to || '').toLowerCase() === String(quote.pool_address || '').toLowerCase()
+            && String(transaction.data || '').toLowerCase() === expectedData
+            && String(transaction.value || '0') === '0';
+    } catch (_) {
+        return false;
+    }
+}
+
+async function submitAaveUsdcWithdraw() {
+    const locale = translations[getActiveLang()];
+    const quote = activeAaveWithdrawQuote;
+    const provider = walletConnectProvider?.session ? walletConnectProvider : window.ethereum;
+    const button = document.getElementById('aaveWithdrawReviewButton');
+    if (!quote || !provider?.request) {
+        aaveWithdrawResult(locale.defiWithdrawExpired, '#fca5a5');
+        return;
+    }
+    try {
+        let accounts = await provider.request({ method: 'eth_accounts' });
+        if (!Array.isArray(accounts) || !accounts.length) accounts = await provider.request({ method: 'eth_requestAccounts' });
+        const activeAddress = getActiveBaseWalletAddress();
+        const fromAddress = (accounts || []).find((account) => String(account || '').toLowerCase() === activeAddress.toLowerCase());
+        if (!/^0x[0-9a-fA-F]{40}$/.test(fromAddress || '')) throw new Error('aave_withdraw_wallet_mismatch');
+        if (!validateAaveWithdrawTransaction(quote, fromAddress)) throw new Error('aave_withdraw_transaction_invalid');
+        await switchToBaseMainnet(provider);
+        if (!await openAaveWithdrawConfirmation(quote)) return;
+        setButtonLoading(button, true, locale.defiWithdrawSigning);
+        const txHash = await provider.request({
+            method: 'eth_sendTransaction',
+            params: [{ from: fromAddress, to: quote.transaction.to, data: quote.transaction.data, value: '0x0' }],
+        });
+        activeAaveWithdrawQuote = null;
+        try {
+            const submissionResponse = await fetch('/api/defi/aave-base/withdraw-submissions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ quote_id: quote.quote_id, tx_hash: txHash }),
+            });
+            if (submissionResponse.ok) await loadAaveDefiHistory();
+        } catch (_) {
+            // The wallet transaction remains valid even if the optional notification fails.
+        }
+        const txUrl = `${BASE_MAINNET_CONFIG.blockExplorerUrls[0]}/tx/${encodeURIComponent(txHash)}`;
+        const result = document.getElementById('aaveWithdrawResult');
+        if (result) result.innerHTML = `<span style="color:#86efac;">${escapeHtml(locale.defiWithdrawSubmitted)}</span> <a href="${txUrl}" target="_blank" rel="noopener noreferrer" style="color:#c4b5fd;">${escapeHtml(locale.defiWithdrawOpenExplorer)}</a>`;
+        window.setTimeout(() => loadDefiOverview(true), 7000);
+    } catch (error) {
+        const rejected = error?.code === 4001 || error?.code === 'ACTION_REJECTED';
+        const message = String(error?.message || '');
+        const display = message.includes('wallet_mismatch') ? locale.defiWithdrawWalletRequired : locale.defiWithdrawFailed;
+        aaveWithdrawResult(rejected ? locale.defiWithdrawRejected : display, '#fca5a5');
+    } finally {
+        setButtonLoading(button, false, locale.defiWithdrawReview);
     }
 }
 
@@ -4103,6 +4897,10 @@ function renderDashboardContent(section) {
         const notifTransactionFinalChecked = localStorage.getItem('ax_notify_transactions_final') !== 'false' ? 'checked' : '';
         const notifRemindersChecked = localStorage.getItem('ax_notify_reminders') !== 'false' ? 'checked' : '';
         const notifErrorsChecked = localStorage.getItem('ax_notify_errors') !== 'false' ? 'checked' : '';
+        const notifDefiSupplySubmittedChecked = localStorage.getItem('ax_notify_defi_supply_submitted') === 'true' ? 'checked' : '';
+        const notifDefiWithdrawSubmittedChecked = localStorage.getItem('ax_notify_defi_withdraw_submitted') === 'true' ? 'checked' : '';
+        const notifDefiFinalChecked = localStorage.getItem('ax_notify_defi_final') === 'true' ? 'checked' : '';
+        const notifDefiErrorsChecked = localStorage.getItem('ax_notify_defi_errors') === 'true' ? 'checked' : '';
 
         const antiSybilWarningHtml = renderInterfaceHint('settings-safety-note', `${t.setWarnTitle}. ${t.setWarnDesc}`, 'warning', '', '🛡️');
 
@@ -4165,11 +4963,41 @@ function renderDashboardContent(section) {
                 <div style="background: var(--bg-main); border: 1px solid var(--border-color); border-radius: 12px; padding: 16px; margin-bottom: 18px;">
                     <div style="font-size: 13px; color: #fff; font-weight: 600; margin-bottom: 12px;">${t.notifTitle}</div>
                     <div style="font-size:12px; color:var(--text-muted); line-height:1.45; margin:-4px 0 12px;">${t.notifDesc}</div>
+                    <div style="display:flex; flex-wrap:wrap; gap:8px; margin:0 0 14px;">
+                        <button type="button" onclick="applyTelegramNotificationPreset('important')" class="tg-notification-preset">${t.notifPresetImportant}</button>
+                        <button type="button" onclick="applyTelegramNotificationPreset('all')" class="tg-notification-preset">${t.notifPresetAll}</button>
+                        <button type="button" onclick="applyTelegramNotificationPreset('errors')" class="tg-notification-preset">${t.notifPresetErrors}</button>
+                    </div>
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 13px; color: var(--text-muted);">
                         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" id="notifTransactionSubmittedToggle" ${notifTransactionSubmittedChecked}> ${t.notifTransactionSubmitted}</label>
                         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" id="notifTransactionFinalToggle" ${notifTransactionFinalChecked}> ${t.notifTransactionFinal}</label>
                         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" id="notifRemindersToggle" ${notifRemindersChecked}> ${t.notifReminders}</label>
                         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" id="notifErrorsToggle" ${notifErrorsChecked}> ${t.notifErrors}</label>
+                    </div>
+                    <div style="border-top:1px solid var(--border-color); margin-top:14px; padding-top:12px;">
+                        <div style="color:#e9d5ff; font-size:12px; font-weight:700;">${t.notifDefiTitle}</div>
+                        <div style="font-size:11px; color:var(--text-muted); line-height:1.45; margin:4px 0 10px;">${t.notifDefiDesc}</div>
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; font-size:13px; color:var(--text-muted);">
+                            <label style="display:flex; align-items:center; gap:8px; cursor:pointer;"><input type="checkbox" id="notifDefiSupplySubmittedToggle" ${notifDefiSupplySubmittedChecked}> ${t.notifDefiSupplySubmitted}</label>
+                            <label style="display:flex; align-items:center; gap:8px; cursor:pointer;"><input type="checkbox" id="notifDefiWithdrawSubmittedToggle" ${notifDefiWithdrawSubmittedChecked}> ${t.notifDefiWithdrawSubmitted}</label>
+                            <label style="display:flex; align-items:center; gap:8px; cursor:pointer;"><input type="checkbox" id="notifDefiFinalToggle" ${notifDefiFinalChecked}> ${t.notifDefiFinal}</label>
+                            <label style="display:flex; align-items:center; gap:8px; cursor:pointer;"><input type="checkbox" id="notifDefiErrorsToggle" ${notifDefiErrorsChecked}> ${t.notifDefiErrors}</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="background:var(--bg-main); border:1px solid var(--border-color); border-radius:12px; padding:16px; margin-bottom:18px;">
+                    <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; margin-bottom:5px;">
+                        <div style="font-size:13px; color:#fff; font-weight:700;">${t.securityOverviewTitle}</div>
+                        <button type="button" onclick="loadSecurityOverview()" class="tg-notification-preset">${t.securityRefresh}</button>
+                    </div>
+                    <div style="font-size:12px; color:var(--text-muted); line-height:1.45; margin-bottom:8px;">${t.securityOverviewDesc}</div>
+                    <div id="securityOverviewContent" style="margin-bottom:13px;"></div>
+                    <div style="border-top:1px solid var(--border-color); padding-top:12px; color:#bfdbfe; font-size:12px; line-height:1.55;">
+                        <div style="font-weight:700; color:#e9d5ff; margin-bottom:4px;">${t.securityGuarantees}</div>
+                        <div>• ${t.securityNoKeys}</div>
+                        <div>• ${t.securityConfirm}</div>
+                        <div>• ${t.securitySingleSession}</div>
                     </div>
                 </div>
 
@@ -4194,6 +5022,7 @@ function renderDashboardContent(section) {
         setTimeout(() => {
             updateDailyConfigsUI();
             refreshTelegramConnectionState();
+            loadSecurityOverview();
         }, 50);
 
     } else if (section === 'Looter') {
@@ -4322,7 +5151,7 @@ function renderDashboardContent(section) {
             </div>
         `;
         const directTransferPane = `<div class="dashboard-card" style="margin-bottom:16px;"><h3 style="color:#fff; margin:0 0 5px; font-size:16px;">${t.directTransferTitle}</h3><p style="color:var(--text-muted); font-size:13px; line-height:1.5; margin:0 0 14px;">${t.directTransferDesc}</p><div id="directTransferPanel">${t.loading}</div></div>`;
-        const defiPane = `<div class="dashboard-card" style="margin-bottom:16px;"><h3 style="color:#fff; margin:0 0 5px; font-size:16px;">${t.defiSupplyTitle}</h3><p style="color:var(--text-muted); font-size:13px; line-height:1.55; margin:0 0 12px;">${t.defiSupplyDesc}</p>${renderInterfaceHint('defi-supply-safety', t.defiSupplySafety, 'warning', '', '🛡️')}<label style="display:block; color:var(--text-muted); font-size:12px; margin-top:13px;">${t.defiSupplyAmount}<input id="aaveSupplyAmount" inputmode="decimal" placeholder="10" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"></label><button type="button" id="aaveSupplyQuoteButton" onclick="requestAaveUsdcSupplyQuote()" class="btn-purple-lg" style="font-size:13px; padding:10px 14px; width:auto; margin-top:12px;">${t.defiSupplyCheck}</button><div id="aaveSupplyResult" style="font-size:12px; line-height:1.5; margin-top:11px;"></div></div><div class="dashboard-card"><div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px;"><div><h3 style="color:#fff; margin:0 0 5px; font-size:16px;">${t.defiOverviewTitle}</h3><p style="color:var(--text-muted); font-size:13px; line-height:1.55; margin:0;">${t.defiOverviewDesc}</p></div><button type="button" id="defiRefreshButton" onclick="loadDefiOverview(true)" class="btn-dark-sm" style="padding:7px 10px; font-size:12px; white-space:nowrap;">${t.defiRefresh}</button></div>${renderInterfaceHint('defi-read-only', t.defiReadOnlyNote, 'info', '', '🛡️')}<div id="defiOverviewPanel" style="margin-top:12px;"><span style="color:var(--text-muted); font-size:13px;">${t.loading}</span></div></div>`;
+        const defiPane = `<div class="dashboard-card" style="margin-bottom:16px;"><h3 style="color:#fff; margin:0 0 5px; font-size:16px;">${t.defiSupplyTitle}</h3><p style="color:var(--text-muted); font-size:13px; line-height:1.55; margin:0 0 12px;">${t.defiSupplyDesc}</p>${renderInterfaceHint('defi-supply-safety', t.defiSupplySafety, 'warning', '', '🛡️')}<label style="display:block; color:var(--text-muted); font-size:12px; margin-top:13px;">${t.defiSupplyAmount}<input id="aaveSupplyAmount" inputmode="decimal" placeholder="10" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"></label><button type="button" id="aaveSupplyQuoteButton" onclick="requestAaveUsdcSupplyQuote()" class="btn-purple-lg" style="font-size:13px; padding:10px 14px; width:auto; margin-top:12px;">${t.defiSupplyCheck}</button><div id="aaveSupplyResult" style="font-size:12px; line-height:1.5; margin-top:11px;"></div></div><div class="dashboard-card"><div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px;"><div><h3 style="color:#fff; margin:0 0 5px; font-size:16px;">${t.defiOverviewTitle}</h3><p style="color:var(--text-muted); font-size:13px; line-height:1.55; margin:0;">${t.defiOverviewDesc}</p></div><button type="button" id="defiRefreshButton" onclick="loadDefiOverview(true)" class="btn-dark-sm" style="padding:7px 10px; font-size:12px; white-space:nowrap;">${t.defiRefresh}</button></div>${renderInterfaceHint('defi-read-only', t.defiReadOnlyNote, 'info', '', '🛡️')}<div id="defiOverviewPanel" style="margin-top:12px;"><span style="color:var(--text-muted); font-size:13px;">${t.loading}</span></div><div style="border-top:1px solid var(--border-color); margin-top:16px; padding-top:14px;"><div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px;"><div><div style="color:#fff; font-size:13px; font-weight:700;">${t.defiHistoryTitle}</div><div style="color:var(--text-muted); font-size:12px; line-height:1.45; margin-top:4px;">${t.defiHistoryDesc}</div></div><button type="button" onclick="loadAaveDefiHistory()" class="btn-dark-sm" style="padding:7px 10px; font-size:12px; white-space:nowrap;">${t.defiHistoryRefresh}</button></div><div id="defiHistoryPanel" style="margin-top:10px;"><span style="color:var(--text-muted); font-size:12px;">${t.loading}</span></div></div></div>`;
         const questsPane = `<div class="dashboard-card"><h3 style="color:#fff; margin-top:0; font-size:16px;">${t.activityQuestsTitle}</h3><p style="color:var(--text-muted); font-size:13px; line-height:1.55;">${t.activityQuestsDesc}</p><button type="button" onclick="switchMenu(null, 'Looter')" class="btn-dark-sm" style="margin-top:8px; padding:10px 14px; border-color:#7c3aed;">${t.activityQuestsOpen}</button></div>`;
         const journalFilters = [
             ['all', t.operationsJournalAll], ['pending', t.operationsJournalPending], ['completed', t.operationsJournalCompleted],
@@ -4337,7 +5166,7 @@ function renderDashboardContent(section) {
         if (activityPane === 'swap') setTimeout(() => { loadOperationBuilderWalletStatus(); updateOperationBuilder(); loadUniversalBridgeHistory(); }, 50);
         if (activityPane === 'transfer') setTimeout(loadDirectTransferPanel, 50);
         if (activityPane === 'journal') setTimeout(loadOperationsJournal, 50);
-        if (activityPane === 'defi') setTimeout(loadDefiOverview, 50);
+        if (activityPane === 'defi') setTimeout(() => { loadDefiOverview(); loadAaveDefiHistory(); }, 50);
     } else if (section === 'Farming' && false) {
         const plannerNetworkOptions = NETWORKS_CONFIG.map(net => `<option value="${net.key}">${net.name} (${net.symbol})</option>`).join('');
         centerHtml = `
@@ -4379,7 +5208,7 @@ function renderDashboardContent(section) {
             loadTransactionPlan();
         }, 50);
     } else if (section === 'Wallets') {
-        const isTipHidden = localStorage.getItem('hideProxyTip') === 'true' || hideAllBanners;
+        const isTipHidden = localStorage.getItem('hideProxyTip') === 'true' || !areInterfaceHintsEnabled();
         const proxyTipHtml = isTipHidden ? '' : `
             <div id="proxyTipBox" style="background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.2); padding: 12px 14px; border-radius: 10px; font-size: 12px; color: #93c5fd; display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; box-sizing: border-box; line-height: 1.4;">
                 <div style="display: flex; align-items: flex-start; gap: 8px;">
@@ -4423,26 +5252,10 @@ function renderDashboardContent(section) {
                 </div>
                 <div id="walletResponseMsg" style="margin-top: 8px; font-size:12px;"></div>
             </div>
-            <div class="dashboard-card">
-                <h3 style="color:#fff; margin-top:0; font-size:16px;">${t.transferTemplatesTitle}</h3>
-                <p style="color:var(--text-muted); font-size:13px; line-height:1.5;">${t.transferTemplatesDesc}</p>
-                <div id="walletTransferCenter" style="display:flex; flex-direction:column; gap:10px;">${t.loading}</div>
-            </div>
-            <div class="dashboard-card">
-                <h3 style="color:#fff; margin-top:0; font-size:16px;">${t.testTransferTitle}</h3>
-                <p style="color:var(--text-muted); font-size:13px; line-height:1.5;">${t.testTransferDesc}</p>
-                <div style="display:grid; grid-template-columns:2fr 1fr; gap:10px;">
-                    <input type="text" id="baseSepoliaTestRecipient" placeholder="${t.testTransferRecipient}" class="auth-input" style="font-size:13px; padding:10px 12px;">
-                    <input type="text" inputmode="decimal" id="baseSepoliaTestAmount" placeholder="0.001" class="auth-input" style="font-size:13px; padding:10px 12px;">
-                </div>
-                <button type="button" id="baseSepoliaTestButton" onclick="sendBaseSepoliaTestTransfer()" class="btn-dark-sm" style="margin-top:10px; width:auto; padding:10px 14px; border-color:#7c3aed;">${t.testTransferButton}</button>
-                <div id="baseSepoliaTestResult" style="font-size:12px; line-height:1.5; margin-top:9px;"></div>
-            </div>
         `;
         setTimeout(() => {
             updateBaseWalletConnectionState();
             loadWalletsFromDB();
-            loadTransferCenter();
         }, 50);
     } else if (section === 'Networks') {
         const networksHtml = NETWORKS_CONFIG.map(net => `
@@ -4461,7 +5274,7 @@ function renderDashboardContent(section) {
             </div>
         `).join('');
 
-        const networkGuideHtml = hideAllBanners ? '' : `
+        const networkGuideHtml = !areInterfaceHintsEnabled() ? '' : `
             <div id="guide-box" style="position: relative; background: rgba(157,78,221,0.08); border: 1px solid rgba(157,78,221,0.25); border-radius: 14px; padding: 16px 18px; margin-bottom: 18px; font-size: 13px; color: var(--text-muted); line-height: 1.5;">
                 <button onclick="document.getElementById('guide-box').style.display='none'" style="position: absolute; top: 14px; right: 16px; background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 16px; font-weight: bold;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--text-muted)'">✕</button>
                 <b style="color: #fff;">${t.guideTitle}</b><br>
@@ -4530,7 +5343,7 @@ function renderDashboardContent(section) {
                 <div class="sidebar-menu-item ${section === 'Networks' ? 'active' : ''}" onclick="switchMenu(this, 'Networks')">${t.menuNet}</div>
                 <div class="sidebar-menu-item ${section === 'Settings' ? 'active' : ''}" onclick="switchMenu(this, 'Settings')">${t.menuSet}</div>
                 
-                <div class="sidebar-menu-item" style="color: #ef4444; margin-top: 4px;" onclick="returnToMainSite()">
+                <div class="sidebar-menu-item" style="color: #ef4444; margin-top: 4px;" onclick="logoutUser()">
                     ${t.menuExit}
                 </div>
             </div>
