@@ -12,6 +12,7 @@ import hashlib
 import hmac
 import bcrypt
 import re
+import math
 from email.message import EmailMessage
 from pathlib import Path
 from urllib.parse import urlparse
@@ -29,6 +30,7 @@ TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_BOT_USERNAME = os.getenv("TELEGRAM_BOT_USERNAME", "").strip().lstrip("@")
 WALLETCONNECT_PROJECT_ID = os.getenv("WALLETCONNECT_PROJECT_ID", "").strip()
 UNISWAP_API_KEY = os.getenv("UNISWAP_API_KEY", "").strip()
+LIFI_API_KEY = os.getenv("LIFI_API_KEY", "").strip()
 ADMIN_USERNAMES = {
     username.strip()
     for username in os.getenv("AIRDROP_ADMIN_USERNAMES", "").split(",")
@@ -115,7 +117,7 @@ from fastapi import FastAPI, APIRouter, Depends, HTTPException, Header
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from sqlalchemy import create_engine, Column, Integer, String, Float, Boolean, text
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
 from sqlalchemy.exc import IntegrityError
@@ -144,7 +146,17 @@ payment_sessions = {}
 payment_tokens = {}
 gas_cache = {}
 wallet_health_cache = {}
+network_balance_cache = {}
+native_usd_price_cache = {}
+transaction_status_cache = {}
+defi_positions_cache = {}
+aave_supply_quote_sessions = {}
 WALLET_HEALTH_CACHE_TTL_SECONDS = 20
+ETH_USD_PRICE_CACHE_TTL_SECONDS = 60
+TRANSACTION_STATUS_CACHE_TTL_SECONDS = 20
+DEFI_POSITIONS_CACHE_TTL_SECONDS = 30
+AAVE_SUPPLY_QUOTE_TTL_SECONDS = 120
+ASSET_DISPLAY_THRESHOLD_USD = 1.0
 AUTH_SESSION_DURATION_SECONDS = 12 * 60 * 60
 EMAIL_CODE_TTL_SECONDS = 10 * 60
 EMAIL_CODE_RESEND_SECONDS = 60
@@ -154,11 +166,189 @@ TELEGRAM_TEST_COOLDOWN_SECONDS = 60
 BASE_CHAIN_ID = 8453
 BASE_NATIVE_TOKEN_ADDRESS = "0x0000000000000000000000000000000000000000"
 BASE_USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+BASE_USDC_DECIMALS = 6
+AAVE_V3_BASE_POOL = "0xA238Dd80C259a72e81d7e4664a9801593F98d1c5"
+ERC20_BALANCE_OF_ABI = [{
+    "constant": True,
+    "inputs": [{"name": "account", "type": "address"}],
+    "name": "balanceOf",
+    "outputs": [{"name": "", "type": "uint256"}],
+    "stateMutability": "view",
+    "type": "function",
+}]
+ERC20_ALLOWANCE_ABI = [{
+    "constant": True,
+    "inputs": [
+        {"name": "owner", "type": "address"},
+        {"name": "spender", "type": "address"},
+    ],
+    "name": "allowance",
+    "outputs": [{"name": "", "type": "uint256"}],
+    "stateMutability": "view",
+    "type": "function",
+}]
+
+# Official Aave V3 Base address from the Aave DAO address book.  The provider
+# is used only for eth_call reads of an already-public wallet address.
+AAVE_V3_BASE_PROTOCOL_DATA_PROVIDER = "0x0F43731EB8d45A581f4a36DD74F5f358bc90C73A"
+AAVE_V3_POOL_DATA_PROVIDER_ABI = [
+    {
+        "inputs": [],
+        "name": "getAllReservesTokens",
+        "outputs": [{
+            "components": [
+                {"name": "symbol", "type": "string"},
+                {"name": "tokenAddress", "type": "address"},
+            ],
+            "name": "",
+            "type": "tuple[]",
+        }],
+        "stateMutability": "view",
+        "type": "function",
+    },
+    {
+        "inputs": [{"name": "asset", "type": "address"}],
+        "name": "getReserveConfigurationData",
+        "outputs": [
+            {"name": "decimals", "type": "uint256"},
+            {"name": "ltv", "type": "uint256"},
+            {"name": "liquidationThreshold", "type": "uint256"},
+            {"name": "liquidationBonus", "type": "uint256"},
+            {"name": "reserveFactor", "type": "uint256"},
+            {"name": "usageAsCollateralEnabled", "type": "bool"},
+            {"name": "borrowingEnabled", "type": "bool"},
+            {"name": "stableBorrowRateEnabled", "type": "bool"},
+            {"name": "isActive", "type": "bool"},
+            {"name": "isFrozen", "type": "bool"},
+        ],
+        "stateMutability": "view",
+        "type": "function",
+    },
+    {
+        "inputs": [{"name": "asset", "type": "address"}],
+        "name": "getPaused",
+        "outputs": [{"name": "isPaused", "type": "bool"}],
+        "stateMutability": "view",
+        "type": "function",
+    },
+    {
+        "inputs": [{"name": "asset", "type": "address"}],
+        "name": "getReserveData",
+        "outputs": [
+            {"name": "unbacked", "type": "uint256"},
+            {"name": "accruedToTreasuryScaled", "type": "uint256"},
+            {"name": "totalAToken", "type": "uint256"},
+            {"name": "totalStableDebt", "type": "uint256"},
+            {"name": "totalVariableDebt", "type": "uint256"},
+            {"name": "liquidityRate", "type": "uint256"},
+            {"name": "variableBorrowRate", "type": "uint256"},
+            {"name": "stableBorrowRate", "type": "uint256"},
+            {"name": "averageStableBorrowRate", "type": "uint256"},
+            {"name": "liquidityIndex", "type": "uint256"},
+            {"name": "variableBorrowIndex", "type": "uint256"},
+            {"name": "lastUpdateTimestamp", "type": "uint40"},
+        ],
+        "stateMutability": "view",
+        "type": "function",
+    },
+    {
+        "inputs": [
+            {"name": "asset", "type": "address"},
+            {"name": "user", "type": "address"},
+        ],
+        "name": "getUserReserveData",
+        "outputs": [
+            {"name": "currentATokenBalance", "type": "uint256"},
+            {"name": "currentStableDebt", "type": "uint256"},
+            {"name": "currentVariableDebt", "type": "uint256"},
+            {"name": "principalStableDebt", "type": "uint256"},
+            {"name": "scaledVariableDebt", "type": "uint256"},
+            {"name": "stableBorrowRate", "type": "uint256"},
+            {"name": "liquidityRate", "type": "uint256"},
+            {"name": "stableRateLastUpdated", "type": "uint40"},
+            {"name": "usageAsCollateralEnabled", "type": "bool"},
+        ],
+        "stateMutability": "view",
+        "type": "function",
+    },
+]
+
+# The universal bridge only supports EVM chains in this application.  Solana and
+# Tron use different wallet providers and must not be presented as MetaMask
+# routes.  Token data and transaction requests are obtained from LI.FI, while
+# signatures are always requested locally from the user's connected wallet.
+LIFI_API_URL = "https://li.quest/v1"
+LIFI_CATALOG_CACHE_TTL_SECONDS = 5 * 60
+LIFI_QUOTE_TTL_SECONDS = 55
+LIFI_TOKEN_CATALOG_CACHE = {}
+LIFI_EVM_NETWORKS = {
+    "Ethereum": {"chain_id": 1, "native_symbol": "ETH", "rpc_url": "https://ethereum-rpc.publicnode.com"},
+    "Base": {"chain_id": 8453, "native_symbol": "ETH", "rpc_url": BASE_RPC_URL},
+    "Arbitrum": {"chain_id": 42161, "native_symbol": "ETH", "rpc_url": "https://arb1.arbitrum.io/rpc"},
+    "Optimism": {"chain_id": 10, "native_symbol": "ETH", "rpc_url": "https://mainnet.optimism.io"},
+    "Polygon": {"chain_id": 137, "native_symbol": "POL", "rpc_url": "https://polygon-bor-rpc.publicnode.com"},
+    "Linea": {"chain_id": 59144, "native_symbol": "ETH", "rpc_url": "https://rpc.linea.build"},
+    "BNB Chain": {"chain_id": 56, "native_symbol": "BNB", "rpc_url": "https://bsc-rpc.publicnode.com"},
+}
+LIFI_NATIVE_TOKEN_ADDRESS = "0x0000000000000000000000000000000000000000"
+
+# Public, read-only RPCs used only to show an already public wallet balance.
+# Transaction building and signing are deliberately not enabled for these routes.
+PUBLIC_NETWORK_BALANCE_CONFIG = {
+    "Base": {
+        "rpc_url": BASE_RPC_URL,
+        "native_symbol": "ETH",
+        "usdc_address": BASE_USDC_ADDRESS,
+        "usdc_decimals": 6,
+        "gas_reserve": "0.0003",
+    },
+    "Arbitrum": {
+        "rpc_url": "https://arb1.arbitrum.io/rpc",
+        "native_symbol": "ETH",
+        "usdc_address": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+        "usdc_decimals": 6,
+        "gas_reserve": "0.0003",
+    },
+    "Optimism": {
+        "rpc_url": "https://mainnet.optimism.io",
+        "native_symbol": "ETH",
+        "usdc_address": "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
+        "usdc_decimals": 6,
+        "gas_reserve": "0.0003",
+    },
+    "Linea": {
+        "rpc_url": "https://rpc.linea.build",
+        "native_symbol": "ETH",
+        "usdc_address": "0x176211869cA2b568f2A7D4EE941E073a821EE1ff",
+        "usdc_decimals": 6,
+        "gas_reserve": "0.0003",
+    },
+    "Ethereum": {
+        "rpc_url": "https://ethereum-rpc.publicnode.com",
+        "native_symbol": "ETH",
+        "usdc_address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "usdc_decimals": 6,
+        "gas_reserve": "0.0015",
+    },
+    "Polygon": {
+        "rpc_url": "https://polygon-bor-rpc.publicnode.com",
+        "native_symbol": "POL",
+        "usdc_address": "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
+        "usdc_decimals": 6,
+        "gas_reserve": "0.5",
+    },
+    "BNB Chain": {
+        "rpc_url": "https://bsc-rpc.publicnode.com",
+        "native_symbol": "BNB",
+        "gas_reserve": "0.003",
+    },
+}
 UNISWAP_TRADE_API_URL = "https://trade-api.gateway.uniswap.org/v1"
 SWAP_QUOTE_TTL_SECONDS = 45
 swap_quote_sessions = {}
 SWAP_SUBMISSION_TTL_SECONDS = 10 * 60
 swap_submission_sessions = {}
+BRIDGE_PLAN_DESTINATIONS = {"Ethereum", "Arbitrum", "Optimism", "Polygon", "Linea", "BNB Chain"}
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///./airdrop_x.db"
 engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
@@ -239,6 +429,10 @@ class TelegramSubscription(Base):
     last_test_at = Column(Integer, nullable=True)
     linked_at = Column(Integer, nullable=False)
     updated_at = Column(Integer, nullable=False)
+    notify_transaction_submitted = Column(Boolean, nullable=False, default=False)
+    notify_transaction_final = Column(Boolean, nullable=False, default=True)
+    notify_reminders = Column(Boolean, nullable=False, default=True)
+    notify_errors = Column(Boolean, nullable=False, default=True)
 
 class OfficialOpportunitySource(Base):
     __tablename__ = "official_opportunity_sources"
@@ -278,6 +472,7 @@ class WalletTransferRecord(Base):
     amount = Column(String, nullable=False)
     tx_hash = Column(String, unique=True, index=True, nullable=False)
     network = Column(String, nullable=False, default="Base")
+    status = Column(String, nullable=False, default="submitted")
     created_at = Column(Integer, nullable=False)
 
 class BaseSwapRecord(Base):
@@ -289,6 +484,50 @@ class BaseSwapRecord(Base):
     amount_out = Column(String, nullable=True)
     tx_hash = Column(String, unique=True, index=True, nullable=False)
     status = Column(String, nullable=False, default="submitted")
+    created_at = Column(Integer, nullable=False)
+
+class UniversalBridgeRecord(Base):
+    __tablename__ = "universal_bridge_records"
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, index=True, nullable=False)
+    wallet_address = Column(String, nullable=False)
+    from_network = Column(String, nullable=False)
+    to_network = Column(String, nullable=False)
+    from_symbol = Column(String, nullable=False)
+    to_symbol = Column(String, nullable=False)
+    amount_in = Column(String, nullable=False)
+    amount_out = Column(String, nullable=True)
+    amount_out_min = Column(String, nullable=True)
+    provider = Column(String, nullable=False, default="LI.FI")
+    bridge = Column(String, nullable=True)
+    tx_hash = Column(String, unique=True, index=True, nullable=False)
+    status = Column(String, nullable=False, default="submitted")
+    provider_status = Column(String, nullable=True)
+    created_at = Column(Integer, nullable=False)
+    updated_at = Column(Integer, nullable=False)
+
+class ActionReminder(Base):
+    __tablename__ = "action_reminders"
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True, index=True, nullable=False)
+    network = Column(String, nullable=False, default="Base")
+    day_of_week = Column(String, nullable=False, default="Mon")
+    time_of_day = Column(String, nullable=False, default="18:00")
+    enabled = Column(Boolean, nullable=False, default=False)
+    telegram_enabled = Column(Boolean, nullable=False, default=True)
+    last_sent_slot = Column(String, nullable=True)
+    updated_at = Column(Integer, nullable=False)
+
+class BridgePlan(Base):
+    __tablename__ = "bridge_plans"
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, index=True, nullable=False)
+    wallet_address = Column(String, nullable=False)
+    from_network = Column(String, nullable=False, default="Base")
+    to_network = Column(String, nullable=False)
+    asset = Column(String, nullable=False, default="ETH")
+    amount = Column(String, nullable=False)
+    status = Column(String, nullable=False, default="planned")
     created_at = Column(Integer, nullable=False)
 
 Base.metadata.create_all(bind=engine)
@@ -309,6 +548,10 @@ def ensure_schema_columns():
         if wallet_columns and "label" not in wallet_columns:
             conn.execute(text("ALTER TABLE wallets ADD COLUMN label VARCHAR"))
             conn.commit()
+        transfer_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(wallet_transfer_records)"))}
+        if transfer_columns and "status" not in transfer_columns:
+            conn.execute(text("ALTER TABLE wallet_transfer_records ADD COLUMN status VARCHAR DEFAULT 'submitted'"))
+            conn.commit()
         telegram_code_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(telegram_link_codes)"))}
         if telegram_code_columns and "language" not in telegram_code_columns:
             conn.execute(text("ALTER TABLE telegram_link_codes ADD COLUMN language VARCHAR DEFAULT 'ru'"))
@@ -317,6 +560,16 @@ def ensure_schema_columns():
         if telegram_subscription_columns and "language" not in telegram_subscription_columns:
             conn.execute(text("ALTER TABLE telegram_subscriptions ADD COLUMN language VARCHAR DEFAULT 'ru'"))
             conn.commit()
+        telegram_filter_columns = {
+            "notify_transaction_submitted": "BOOLEAN DEFAULT 0",
+            "notify_transaction_final": "BOOLEAN DEFAULT 1",
+            "notify_reminders": "BOOLEAN DEFAULT 1",
+            "notify_errors": "BOOLEAN DEFAULT 1",
+        }
+        for column_name, column_type in telegram_filter_columns.items():
+            if telegram_subscription_columns and column_name not in telegram_subscription_columns:
+                conn.execute(text(f"ALTER TABLE telegram_subscriptions ADD COLUMN {column_name} {column_type}"))
+                conn.commit()
         opportunity_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(official_opportunity_sources)"))}
         if opportunity_columns and "claim_url" not in opportunity_columns:
             conn.execute(text("ALTER TABLE official_opportunity_sources ADD COLUMN claim_url VARCHAR"))
@@ -356,7 +609,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
     allow_credentials=False,
-    allow_methods=["GET", "POST", "DELETE"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE"],
     allow_headers=["Content-Type", "Authorization"],
 )
 
@@ -420,6 +673,83 @@ def classify_gas_level(network: str, gas: str) -> str:
         return "medium"
     return "high"
 
+def get_native_usd_price(native_symbol: str) -> Optional[float]:
+    """Fetch a native asset spot price for display filtering; no wallet data is sent."""
+    price_ids = {
+        "ETH": "ethereum",
+        "BNB": "binancecoin",
+        "POL": "polygon-ecosystem-token",
+    }
+    price_id = price_ids.get(native_symbol)
+    if not price_id:
+        return None
+    now_ts = int(time.time())
+    cached = native_usd_price_cache.get(price_id)
+    if cached and cached["expires_at"] > now_ts:
+        return cached["price"]
+    try:
+        response = requests.get(
+            f"https://api.coingecko.com/api/v3/simple/price?ids={price_id}&vs_currencies=usd",
+            timeout=5,
+            headers={"Accept": "application/json"},
+        )
+        response.raise_for_status()
+        price = float(response.json()[price_id]["usd"])
+        if price <= 0:
+            raise ValueError("native asset price must be positive")
+    except Exception:
+        price = None
+    native_usd_price_cache[price_id] = {
+        "price": price,
+        "expires_at": now_ts + ETH_USD_PRICE_CACHE_TTL_SECONDS,
+    }
+    return price
+
+def estimate_operation_value_usd(amount: str, symbol: str) -> Optional[float]:
+    """Current display-only estimate used in the journal; it is not an execution price."""
+    try:
+        amount_value = float(amount)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(amount_value) or amount_value < 0:
+        return None
+    if str(symbol).upper() in {"USDC", "USDT", "DAI"}:
+        return round(amount_value, 2)
+    price = get_native_usd_price(str(symbol).upper())
+    return round(amount_value * price, 2) if price is not None else None
+
+def get_displayable_wallet_assets(
+    native_balance: str,
+    native_symbol: str,
+    usdc_balance: Optional[str],
+    gas_reserve: str,
+):
+    """Only return known balances whose individual estimated value is at least $1."""
+    visible_assets = []
+    native_amount = float(native_balance)
+    native_reserve = float(gas_reserve)
+    native_price_usd = get_native_usd_price(native_symbol)
+    if native_price_usd is not None:
+        native_value_usd = native_amount * native_price_usd
+        if native_value_usd >= ASSET_DISPLAY_THRESHOLD_USD:
+            visible_assets.append({
+                "symbol": native_symbol,
+                "amount": native_balance,
+                "available_to_send": format(max(native_amount - native_reserve, 0), ".6f").rstrip("0").rstrip(".") or "0",
+                "gas_reserve": gas_reserve,
+                "unit_price_usd": round(native_price_usd, 2),
+                "estimated_usd": round(native_value_usd, 2),
+            })
+    if usdc_balance is not None and float(usdc_balance) >= ASSET_DISPLAY_THRESHOLD_USD:
+        visible_assets.append({
+            "symbol": "USDC",
+            "amount": usdc_balance,
+            "available_to_send": usdc_balance,
+            "unit_price_usd": 1,
+            "estimated_usd": round(float(usdc_balance), 2),
+        })
+    return visible_assets, native_price_usd is not None, native_reserve
+
 # --- REAL BLOCKCHAIN TX VERIFICATION ---
 def verify_blockchain_tx(txid: str, expected_amount: float) -> bool:
     try:
@@ -459,71 +789,57 @@ def verify_blockchain_tx(txid: str, expected_amount: float) -> bool:
 
 scheduler = AsyncIOScheduler()
 
-async def run_scheduled_farming_job():
-    logging.warning("Scheduled signing is disabled until non-custodial wallet signing is implemented.")
-    return
+async def run_scheduled_action_reminder_job():
+    """Send an opt-in reminder only. This job never builds or signs a blockchain transaction."""
     now = datetime.datetime.now()
     current_day_map = {0: 'Mon', 1: 'Tue', 2: 'Wed', 3: 'Thu', 4: 'Fri', 5: 'Sat', 6: 'Sun'}
     current_day_str = current_day_map.get(now.weekday())
     current_time_str = now.strftime("%H:%M")
-
-    for username, settings in USER_SETTINGS_DB.items():
-        if not settings.get("schedulerEnabled", False):
-            continue
-        
-        active_days = settings.get("days", [])
-        daily_schedule = settings.get("schedule", {})
-        
-        # Map RU days to EN for internal checks if needed, but assuming frontend sends English days or we match exact
-        if current_day_str in active_days and current_day_str in daily_schedule:
-            task_info = daily_schedule[current_day_str]
-            task_time = task_info.get("time") if isinstance(task_info, dict) else task_info.time
-            
-            if task_time == current_time_str:
-                chat_id = settings.get("telegram")
-                notify_start = settings.get("notifyStart", True)
-                notify_success = settings.get("notifySuccess", True)
-                notify_error = settings.get("notifyError", True)
-
-                if chat_id and notify_start:
-                    send_telegram_notification(
-                        chat_id, 
-                        f"🚀 **Scheduled Auto-Farm!**\n"
-                        f"• User: `{username}`\n"
-                        f"• Day: `{current_day_str}` ({current_time_str})\n"
-                        f"• Gas limit: `{settings.get('gwei', 30)} Gwei`\n"
-                        f"✅ Status: Farming session launched successfully."
-                    )
-
-                db = SessionLocal()
-                try:
-                    user_wallets = db.query(Wallet).filter(Wallet.username == username).all()
-                    wallets_data = [{"id": w.id, "encrypted_pk": w.encrypted_pk, "proxy": w.proxy} for w in user_wallets]
-                    
-                    if wallets_data:
-                        results = await run_real_farm(wallets_data, [], "master_password", target_network="Base")
-                        if chat_id and notify_success:
-                            send_telegram_notification(
-                                chat_id, 
-                                f"✅ **Scheduled farm successfully completed!**\n"
-                                f"• User: `{username}`\n"
-                                f"• Workers processed: `{len(wallets_data)}`"
-                            )
-                    else:
-                        if chat_id and notify_error:
-                            send_telegram_notification(
-                                chat_id, 
-                                f"⚠️ **Farm skipped:** user `{username}` has no wallets added."
-                            )
-                except Exception as e:
-                    if chat_id and notify_error:
-                        send_telegram_notification(chat_id, f"❌ **Auto-farm error:** `{str(e)}`")
-                finally:
-                    db.close()
+    current_slot = now.strftime("%Y-%m-%d %H:%M")
+    db = SessionLocal()
+    try:
+        reminders = db.query(ActionReminder).filter(
+            ActionReminder.enabled.is_(True),
+            ActionReminder.day_of_week == current_day_str,
+            ActionReminder.time_of_day == current_time_str,
+        ).all()
+        for reminder in reminders:
+            if reminder.last_sent_slot == current_slot:
+                continue
+            subscription = get_telegram_subscription(db, reminder.username)
+            if subscription and reminder.telegram_enabled and subscription.notify_reminders:
+                messages = {
+                    "ru": (
+                        "🗓 *AIRDROP-X: напоминание о плане*\n"
+                        f"Сеть: `{reminder.network}`\n"
+                        "Откройте Центр действий, проверьте условия и подтвердите только нужное действие в кошельке."
+                    ),
+                    "en": (
+                        "🗓 *AIRDROP-X: plan reminder*\n"
+                        f"Network: `{reminder.network}`\n"
+                        "Open the Action Center, review the terms, and approve only the action you choose in your wallet."
+                    ),
+                    "zh": (
+                        "🗓 *AIRDROP-X：计划提醒*\n"
+                        f"网络：`{reminder.network}`\n"
+                        "请打开操作中心、检查条件，并且只在钱包中确认您自己选择的操作。"
+                    ),
+                }
+                send_telegram_notification(
+                    subscription.chat_id,
+                    messages[normalize_language(subscription.language)],
+                )
+            reminder.last_sent_slot = current_slot
+        db.commit()
+    except Exception:
+        db.rollback()
+        logging.exception("Unable to process manual action reminders")
+    finally:
+        db.close()
 
 @app.on_event("startup")
 async def startup_event():
-    scheduler.add_job(run_scheduled_farming_job, 'interval', minutes=1)
+    scheduler.add_job(run_scheduled_action_reminder_job, 'interval', minutes=1)
     scheduler.start()
     print("✅ Background async task scheduler started.")
 
@@ -544,6 +860,11 @@ class ProfileSettingsRequest(BaseModel):
     notifyStart: Optional[bool] = True
     notifySuccess: Optional[bool] = True
     notifyError: Optional[bool] = True
+    notifyTransactionSubmitted: Optional[bool] = False
+    notifyTransactionFinal: Optional[bool] = True
+    notifyReminders: Optional[bool] = True
+    notifyErrors: Optional[bool] = True
+    interfaceHints: Optional[bool] = True
     language: Optional[str] = "ru"
 
 class PaymentRecoverReq(BaseModel):
@@ -607,6 +928,39 @@ class BudgetPlanRequest(BaseModel):
     daily_cap: float
     monthly_cap: float
 
+class ActionReminderRequest(BaseModel):
+    network: str
+    day_of_week: str
+    time_of_day: str
+    enabled: bool = False
+    telegram_enabled: bool = True
+
+class BridgePlanRequest(BaseModel):
+    wallet_address: str
+    to_network: str
+    amount: str
+
+class UniversalBridgeQuoteRequest(BaseModel):
+    wallet_address: str
+    from_network: str
+    to_network: str
+    from_token_address: str
+    to_token_address: str
+    amount: str
+
+class UniversalBridgeSubmissionRequest(BaseModel):
+    wallet_address: str
+    from_network: str
+    to_network: str
+    from_token_address: str
+    to_token_address: str
+    amount_in: str
+    amount_out: str
+    amount_out_min: str
+    provider: str = "LI.FI"
+    bridge: str = ""
+    tx_hash: str
+
 class TelegramLinkRequest(BaseModel):
     language: Optional[str] = "ru"
 
@@ -632,6 +986,13 @@ class TransferRecordCreateRequest(BaseModel):
     amount: str
     tx_hash: str
 
+class DirectTransferRecordCreateRequest(BaseModel):
+    recipient_wallet_id: int
+    from_address: str
+    to_address: str
+    amount: str
+    tx_hash: str
+
 class WalletBatchAddRequest(BaseModel):
     wallet_addresses: List[str]
 
@@ -648,6 +1009,14 @@ class BaseSwapBuildRequest(BaseModel):
 
 class BaseSwapSubmissionRequest(BaseModel):
     submission_id: str
+    tx_hash: str
+
+class AaveSupplyQuoteRequest(BaseModel):
+    wallet_address: str
+    amount: str
+
+class AaveSupplySubmissionRequest(BaseModel):
+    quote_id: str
     tx_hash: str
 
 def normalize_language(language: Optional[str]) -> str:
@@ -825,6 +1194,347 @@ def get_saved_base_wallet(db: Session, username: str, address: str) -> str:
         raise HTTPException(status_code=403, detail="Save this wallet in AIRDROP-X before requesting a swap")
     return wallet.wallet_address
 
+def lifi_headers() -> dict:
+    """Keep an optional LI.FI key on the server; it is never returned to the browser."""
+    headers = {"Accept": "application/json"}
+    if LIFI_API_KEY:
+        headers["x-lifi-api-key"] = LIFI_API_KEY
+    return headers
+
+def normalize_token_address(value: str) -> str:
+    address = (value or "").strip()
+    if address.lower() == LIFI_NATIVE_TOKEN_ADDRESS:
+        return LIFI_NATIVE_TOKEN_ADDRESS
+    if not is_valid_evm_address(address):
+        raise HTTPException(status_code=422, detail="Invalid token address")
+    return address.lower()
+
+def normalize_token_amount(value: str, decimals: int) -> tuple[str, str]:
+    """Return a normalized display amount and its smallest-unit representation."""
+    clean_value = (value or "").strip()
+    if not 0 <= decimals <= 36 or not re.fullmatch(r"(?:0|[1-9]\d*)(?:\.\d+)?", clean_value):
+        raise HTTPException(status_code=422, detail="Invalid token amount")
+    whole, _, fraction = clean_value.partition(".")
+    if len(fraction) > decimals or len(whole) > 30:
+        raise HTTPException(status_code=422, detail="Token amount is outside the permitted range")
+    atomic = int(whole) * (10 ** decimals) + int((fraction + ("0" * decimals))[:decimals] or "0")
+    if atomic <= 0:
+        raise HTTPException(status_code=422, detail="Token amount must be greater than zero")
+    normalized_fraction = fraction.rstrip("0")
+    normalized = f"{int(whole)}.{normalized_fraction}" if normalized_fraction else str(int(whole))
+    return normalized, str(atomic)
+
+def format_token_amount(raw_amount: int, decimals: int, precision: int = 8) -> str:
+    if decimals < 0:
+        return "0"
+    whole = raw_amount // (10 ** decimals)
+    fraction = str(raw_amount % (10 ** decimals)).zfill(decimals)[:precision].rstrip("0")
+    return f"{whole}.{fraction}" if fraction else str(whole)
+
+def format_journal_token_amount(value: Optional[str], decimals: int) -> Optional[str]:
+    """Format stored smallest-unit values for journal display without changing the record."""
+    if value is None:
+        return None
+    clean_value = str(value).strip()
+    if not clean_value:
+        return None
+    if re.fullmatch(r"\d+", clean_value):
+        return format_token_amount(int(clean_value), decimals)
+    return clean_value
+
+def get_base_transaction_status(tx_hash: str) -> Optional[str]:
+    """Read the Base receipt for a submitted operation; this never sends a transaction."""
+    clean_tx_hash = (tx_hash or "").strip()
+    if not re.fullmatch(r"0x[a-fA-F0-9]{64}", clean_tx_hash):
+        return None
+
+    now_ts = int(time.time())
+    cached = transaction_status_cache.get(clean_tx_hash.lower())
+    if cached and cached["expires_at"] > now_ts:
+        return cached["status"]
+
+    status = None
+    try:
+        web3 = Web3(Web3.HTTPProvider(BASE_RPC_URL, request_kwargs={"timeout": 8}))
+        if web3.is_connected():
+            receipt = web3.eth.get_transaction_receipt(clean_tx_hash)
+            if receipt is None:
+                status = "submitted"
+            else:
+                receipt_status = receipt.get("status")
+                status = "completed" if int(receipt_status) == 1 else "failed"
+    except Exception:
+        status = None
+
+    if status is not None:
+        transaction_status_cache[clean_tx_hash.lower()] = {
+            "status": status,
+            "expires_at": now_ts + TRANSACTION_STATUS_CACHE_TTL_SECONDS,
+        }
+    return status
+
+def get_aave_v3_base_positions(wallet_address: str, refresh: bool = False) -> list[dict]:
+    """Read Aave V3 Base supply and borrow positions without creating a transaction."""
+    if not is_valid_evm_address(wallet_address):
+        raise HTTPException(status_code=422, detail="Invalid wallet address")
+
+    cache_key = wallet_address.lower()
+    now_ts = int(time.time())
+    cached = defi_positions_cache.get(cache_key)
+    if not refresh and cached and cached["expires_at"] > now_ts:
+        return cached["positions"]
+
+    try:
+        web3 = Web3(Web3.HTTPProvider(BASE_RPC_URL, request_kwargs={"timeout": 12}))
+        if not web3.is_connected():
+            raise RuntimeError("Base RPC unavailable")
+        provider = web3.eth.contract(
+            address=Web3.to_checksum_address(AAVE_V3_BASE_PROTOCOL_DATA_PROVIDER),
+            abi=AAVE_V3_POOL_DATA_PROVIDER_ABI,
+        )
+        owner = Web3.to_checksum_address(wallet_address)
+        reserves = provider.functions.getAllReservesTokens().call()
+    except Exception:
+        raise HTTPException(status_code=503, detail="Aave Base data is temporarily unavailable")
+
+    positions = []
+    for reserve in reserves:
+        try:
+            symbol = str(reserve[0] or "Asset")
+            asset_address = Web3.to_checksum_address(reserve[1])
+            user_data = provider.functions.getUserReserveData(asset_address, owner).call()
+            supplied_raw = int(user_data[0])
+            borrowed_raw = int(user_data[1]) + int(user_data[2])
+            if supplied_raw <= 0 and borrowed_raw <= 0:
+                continue
+            reserve_data = provider.functions.getReserveConfigurationData(asset_address).call()
+            decimals = int(reserve_data[0])
+            if not 0 <= decimals <= 36:
+                decimals = 18
+            positions.append({
+                "asset": symbol,
+                "asset_address": asset_address,
+                "supplied": format_token_amount(supplied_raw, decimals),
+                "borrowed": format_token_amount(borrowed_raw, decimals),
+                "has_supply": supplied_raw > 0,
+                "has_borrow": borrowed_raw > 0,
+                "collateral_enabled": bool(user_data[8]),
+            })
+        except Exception:
+            # One unavailable reserve must not prevent the rest of the public
+            # portfolio from being shown.
+            continue
+
+    positions.sort(key=lambda item: (not item["has_borrow"], item["asset"].lower()))
+    defi_positions_cache[cache_key] = {
+        "positions": positions,
+        "expires_at": now_ts + DEFI_POSITIONS_CACHE_TTL_SECONDS,
+    }
+    return positions
+
+def build_aave_supply_calldata(asset_address: str, amount_atomic: str, wallet_address: str) -> str:
+    """Encode Aave Pool.supply(asset, amount, onBehalfOf, 0) from fixed inputs."""
+    selector = Web3.keccak(text="supply(address,uint256,address,uint16)")[:4].hex()
+    encoded_asset = asset_address.lower().replace("0x", "").rjust(64, "0")
+    encoded_amount = format(int(amount_atomic), "x").rjust(64, "0")
+    encoded_wallet = wallet_address.lower().replace("0x", "").rjust(64, "0")
+    encoded_referral_code = "0".rjust(64, "0")
+    return f"0x{selector}{encoded_asset}{encoded_amount}{encoded_wallet}{encoded_referral_code}"
+
+def get_aave_v3_base_usdc_supply_quote(wallet_address: str, amount: str) -> dict:
+    """Prepare a fixed, user-confirmed USDC supply request for Aave V3 on Base."""
+    normalized_amount, amount_atomic = normalize_token_amount(amount, BASE_USDC_DECIMALS)
+    if not is_valid_evm_address(wallet_address):
+        raise HTTPException(status_code=422, detail="Invalid wallet address")
+    try:
+        web3 = Web3(Web3.HTTPProvider(BASE_RPC_URL, request_kwargs={"timeout": 12}))
+        if not web3.is_connected():
+            raise RuntimeError("Base RPC unavailable")
+        owner = Web3.to_checksum_address(wallet_address)
+        usdc_address = Web3.to_checksum_address(BASE_USDC_ADDRESS)
+        pool_address = Web3.to_checksum_address(AAVE_V3_BASE_POOL)
+        usdc = web3.eth.contract(address=usdc_address, abi=[*ERC20_BALANCE_OF_ABI, *ERC20_ALLOWANCE_ABI])
+        provider = web3.eth.contract(
+            address=Web3.to_checksum_address(AAVE_V3_BASE_PROTOCOL_DATA_PROVIDER),
+            abi=AAVE_V3_POOL_DATA_PROVIDER_ABI,
+        )
+        balance_raw = int(usdc.functions.balanceOf(owner).call())
+        allowance_raw = int(usdc.functions.allowance(owner, pool_address).call())
+        native_balance_raw = int(web3.eth.get_balance(owner))
+        configuration = provider.functions.getReserveConfigurationData(usdc_address).call()
+        paused = bool(provider.functions.getPaused(usdc_address).call())
+        reserve_data = provider.functions.getReserveData(usdc_address).call()
+    except Exception:
+        raise HTTPException(status_code=503, detail="Aave Base supply data is temporarily unavailable")
+
+    requested_raw = int(amount_atomic)
+    if requested_raw > balance_raw:
+        raise HTTPException(status_code=422, detail="The requested USDC amount exceeds the wallet balance")
+    # Aave configuration: index 8 is active, index 9 is frozen.
+    if not bool(configuration[8]) or bool(configuration[9]) or paused:
+        raise HTTPException(status_code=409, detail="Aave USDC supply is temporarily unavailable")
+
+    liquidity_rate_raw = int(reserve_data[5])
+    annual_rate_percent = round((liquidity_rate_raw / (10 ** 27)) * 100, 4)
+    native_balance = format_token_amount(native_balance_raw, 18)
+    gas_reserve = PUBLIC_NETWORK_BALANCE_CONFIG["Base"]["gas_reserve"]
+    return {
+        "amount": normalized_amount,
+        "amount_atomic": amount_atomic,
+        "asset": {
+            "symbol": "USDC",
+            "address": BASE_USDC_ADDRESS,
+            "decimals": BASE_USDC_DECIMALS,
+        },
+        "network": "Base",
+        "pool_address": AAVE_V3_BASE_POOL,
+        "wallet_balance": format_token_amount(balance_raw, BASE_USDC_DECIMALS),
+        "annual_supply_rate_percent": annual_rate_percent,
+        "rate_is_variable": True,
+        "native_balance": native_balance,
+        "gas_reserve": gas_reserve,
+        "gas_reserve_met": native_balance_raw >= int(float(gas_reserve) * (10 ** 18)),
+        "approval": {
+            "required": allowance_raw < requested_raw,
+            "spender": AAVE_V3_BASE_POOL,
+            "amount_atomic": amount_atomic,
+        },
+        "transaction": {
+            "chain_id": BASE_CHAIN_ID,
+            "from": wallet_address,
+            "to": AAVE_V3_BASE_POOL,
+            "data": build_aave_supply_calldata(BASE_USDC_ADDRESS, amount_atomic, wallet_address),
+            "value": "0",
+        },
+    }
+
+def refresh_base_operation_statuses(
+    db: Session,
+    swap_records: List[BaseSwapRecord],
+    transfer_records: List[WalletTransferRecord],
+):
+    """Update recent pending Base receipts before returning the operation journal."""
+    pending_records = [
+        record for record in [*swap_records, *transfer_records]
+        if (record.status or "submitted") in {"submitted", "in_progress"}
+    ][:24]
+    changed = False
+    for record in pending_records:
+        current_status = get_base_transaction_status(record.tx_hash)
+        if current_status and record.status != current_status:
+            record.status = current_status
+            changed = True
+    if changed:
+        db.commit()
+
+def get_lifi_tokens(network: str) -> list[dict]:
+    """Fetch LI.FI's official catalog for one supported EVM chain and cache it briefly."""
+    config = LIFI_EVM_NETWORKS.get(network)
+    if not config:
+        raise HTTPException(status_code=422, detail="This network is not supported by the universal bridge")
+    now_ts = int(time.time())
+    cached = LIFI_TOKEN_CATALOG_CACHE.get(network)
+    if cached and cached["expires_at"] > now_ts:
+        return cached["tokens"]
+    try:
+        response = requests.get(
+            f"{LIFI_API_URL}/tokens",
+            params={"chains": str(config["chain_id"]), "chainTypes": "EVM"},
+            headers=lifi_headers(),
+            timeout=15,
+        )
+        response.raise_for_status()
+        payload = response.json()
+    except (requests.RequestException, ValueError):
+        raise HTTPException(status_code=503, detail="Universal bridge token catalog is temporarily unavailable")
+
+    token_map = payload.get("tokens", payload) if isinstance(payload, dict) else {}
+    raw_tokens = token_map.get(str(config["chain_id"]), []) if isinstance(token_map, dict) else []
+    if not isinstance(raw_tokens, list):
+        raise HTTPException(status_code=502, detail="Universal bridge returned an invalid token catalog")
+
+    core_addresses = {LIFI_NATIVE_TOKEN_ADDRESS}
+    configured_usdc = PUBLIC_NETWORK_BALANCE_CONFIG.get(network, {}).get("usdc_address")
+    if configured_usdc:
+        core_addresses.add(configured_usdc.lower())
+    unique_tokens = {}
+    for raw_token in raw_tokens[:5000]:
+        if not isinstance(raw_token, dict):
+            continue
+        try:
+            address = normalize_token_address(str(raw_token.get("address", "")))
+            decimals = int(raw_token.get("decimals"))
+        except (ValueError, TypeError, HTTPException):
+            continue
+        symbol = str(raw_token.get("symbol", "")).strip()
+        name = str(raw_token.get("name", "")).strip()
+        if not symbol or len(symbol) > 32 or len(name) > 120 or not 0 <= decimals <= 36:
+            continue
+        price = raw_token.get("priceUSD")
+        try:
+            price_value = float(price)
+            price_usd = price_value if math.isfinite(price_value) and price_value >= 0 else None
+        except (ValueError, TypeError):
+            price_usd = None
+        unique_tokens[address] = {
+            "address": address,
+            "symbol": symbol,
+            "name": name,
+            "decimals": decimals,
+            "price_usd": price_usd,
+            "is_core": address.lower() in core_addresses,
+        }
+    tokens = sorted(unique_tokens.values(), key=lambda token: (
+        not token["is_core"],
+        token["address"] != LIFI_NATIVE_TOKEN_ADDRESS,
+        token["symbol"].upper() not in {"USDC", "USDT", "DAI"},
+        token["symbol"].lower(),
+    ))
+    if not tokens:
+        raise HTTPException(status_code=502, detail="Universal bridge returned no supported tokens for this network")
+    LIFI_TOKEN_CATALOG_CACHE[network] = {"tokens": tokens, "expires_at": now_ts + LIFI_CATALOG_CACHE_TTL_SECONDS}
+    return tokens
+
+def get_lifi_token(network: str, address: str) -> dict:
+    normalized_address = normalize_token_address(address)
+    token = next((item for item in get_lifi_tokens(network) if item["address"].lower() == normalized_address.lower()), None)
+    if not token:
+        raise HTTPException(status_code=422, detail="This token is not supported for the selected network")
+    return token
+
+def validate_lifi_transaction_request(transaction: dict, expected_chain_id: int, expected_address: str) -> dict:
+    if not isinstance(transaction, dict):
+        raise HTTPException(status_code=502, detail="Universal bridge returned no transaction request")
+    try:
+        chain_id = int(transaction.get("chainId"))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=502, detail="Universal bridge returned an invalid transaction network")
+    to_address = str(transaction.get("to", "")).strip()
+    calldata = str(transaction.get("data", "")).strip()
+    value = str(transaction.get("value", "0")).strip()
+    from_address = str(transaction.get("from", expected_address)).strip()
+    if (
+        chain_id != expected_chain_id
+        or not is_valid_evm_address(to_address)
+        or not re.fullmatch(r"0x(?:[a-fA-F0-9]{2})*", calldata)
+        or len(calldata) > 120000
+        or not re.fullmatch(r"(?:0|[1-9]\d*|0x[0-9a-fA-F]+)", value)
+        or not is_valid_evm_address(from_address)
+        or from_address.lower() != expected_address.lower()
+    ):
+        raise HTTPException(status_code=502, detail="Universal bridge transaction validation failed")
+    return {
+        "chain_id": chain_id,
+        "from": from_address,
+        "to": to_address,
+        "data": calldata,
+        "value": value,
+        "gas_limit": str(transaction.get("gasLimit", "")).strip(),
+        "gas_price": str(transaction.get("gasPrice", "")).strip(),
+        "max_fee_per_gas": str(transaction.get("maxFeePerGas", "")).strip(),
+        "max_priority_fee_per_gas": str(transaction.get("maxPriorityFeePerGas", "")).strip(),
+    }
+
 def serialize_transfer_template(template: WalletTransferTemplate) -> dict:
     return {
         "id": template.id,
@@ -928,7 +1638,11 @@ def send_real_email(to_email: str, code: str):
         return False
 
 @app.post("/api/settings/save")
-async def save_user_settings(data: ProfileSettingsRequest, current_user: User = Depends(get_current_user)):
+async def save_user_settings(
+    data: ProfileSettingsRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     try:
         require_owned_username(data.username, current_user)
         for day, item in data.schedule.items():
@@ -940,6 +1654,10 @@ async def save_user_settings(data: ProfileSettingsRequest, current_user: User = 
         subscription = get_telegram_subscription(db, data.username)
         if subscription:
             subscription.language = normalize_language(data.language)
+            subscription.notify_transaction_submitted = bool(data.notifyTransactionSubmitted)
+            subscription.notify_transaction_final = bool(data.notifyTransactionFinal)
+            subscription.notify_reminders = bool(data.notifyReminders)
+            subscription.notify_errors = bool(data.notifyErrors)
             subscription.updated_at = int(time.time())
             db.commit()
         
@@ -1344,17 +2062,578 @@ async def get_wallet_health(wallet_id: int, db: Session = Depends(get_db), curre
         balance_wei = web3.eth.get_balance(address)
         transaction_count = web3.eth.get_transaction_count(address, "latest")
         balance_eth = format(Web3.from_wei(balance_wei, "ether"), ".6f").rstrip("0").rstrip(".") or "0"
+        try:
+            usdc_contract = web3.eth.contract(
+                address=Web3.to_checksum_address(BASE_USDC_ADDRESS),
+                abi=ERC20_BALANCE_OF_ABI,
+            )
+            usdc_raw = usdc_contract.functions.balanceOf(address).call()
+            usdc_balance = format(usdc_raw / (10 ** BASE_USDC_DECIMALS), ".6f").rstrip("0").rstrip(".") or "0"
+        except Exception:
+            usdc_balance = None
     except Exception:
         raise HTTPException(status_code=503, detail="Base public data is temporarily unavailable")
 
     health_data = {
         "network": "Base Mainnet",
         "balance_eth": balance_eth,
+        "usdc_balance": usdc_balance,
         "transaction_count": transaction_count,
         "checked_at": now_ts,
     }
     wallet_health_cache[cache_key] = {"data": health_data, "expires_at": now_ts + WALLET_HEALTH_CACHE_TTL_SECONDS}
     return {"status": "success", **health_data, "cached": False}
+
+@app.get("/api/wallets/{wallet_id}/network-balance/{network}")
+async def get_wallet_network_balance(
+    wallet_id: int,
+    network: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return public balances for a saved EVM address; never handles private keys."""
+    wallet = db.query(Wallet).filter(
+        Wallet.id == wallet_id,
+        Wallet.username == current_user.username,
+    ).first()
+    if not wallet or not is_valid_evm_address(wallet.wallet_address):
+        raise HTTPException(status_code=404, detail="Wallet not found")
+
+    config = PUBLIC_NETWORK_BALANCE_CONFIG.get(network)
+    if not config:
+        raise HTTPException(status_code=422, detail="Public balance reading is not configured for this network")
+
+    cache_key = f"{current_user.username}:{wallet.id}:{network}"
+    now_ts = int(time.time())
+    cached = network_balance_cache.get(cache_key)
+    if cached and cached["expires_at"] > now_ts:
+        return {"status": "success", **cached["data"], "cached": True}
+
+    try:
+        web3 = Web3(Web3.HTTPProvider(config["rpc_url"], request_kwargs={"timeout": 10}))
+        if not web3.is_connected():
+            raise RuntimeError(f"{network} RPC is unavailable")
+        address = Web3.to_checksum_address(wallet.wallet_address)
+        native_raw = web3.eth.get_balance(address)
+        native_balance = format(Web3.from_wei(native_raw, "ether"), ".6f").rstrip("0").rstrip(".") or "0"
+        usdc_balance = None
+        try:
+            usdc_address = config.get("usdc_address")
+            if not usdc_address:
+                raise RuntimeError("USDC is not configured for this network")
+            usdc_contract = web3.eth.contract(
+                address=Web3.to_checksum_address(usdc_address),
+                abi=ERC20_BALANCE_OF_ABI,
+            )
+            usdc_raw = usdc_contract.functions.balanceOf(address).call()
+            usdc_balance = format(
+                usdc_raw / (10 ** config["usdc_decimals"]), ".6f"
+            ).rstrip("0").rstrip(".") or "0"
+        except Exception:
+            # The native balance is still useful even if the token call is unavailable.
+            usdc_balance = None
+    except Exception:
+        raise HTTPException(status_code=503, detail=f"{network} public data is temporarily unavailable")
+
+    visible_assets, price_available, native_gas_reserve = get_displayable_wallet_assets(
+        native_balance,
+        config["native_symbol"],
+        usdc_balance,
+        config["gas_reserve"],
+    )
+    balance_data = {
+        "network": network,
+        "native_symbol": config["native_symbol"],
+        "native_balance": native_balance,
+        "usdc_balance": usdc_balance,
+        "visible_assets": visible_assets,
+        "price_available": price_available,
+        "native_gas_reserve": config["gas_reserve"],
+        "native_gas_reserve_met": float(native_balance) >= native_gas_reserve,
+        "checked_at": now_ts,
+    }
+    network_balance_cache[cache_key] = {
+        "data": balance_data,
+        "expires_at": now_ts + WALLET_HEALTH_CACHE_TTL_SECONDS,
+    }
+    return {"status": "success", **balance_data, "cached": False}
+
+@app.get("/api/universal-bridge/networks")
+async def get_universal_bridge_networks(current_user: User = Depends(get_current_user)):
+    """Return only networks that can be switched and signed by the connected EVM wallet."""
+    return {
+        "status": "success",
+        "networks": [
+            {"key": name, "chain_id": config["chain_id"], "native_symbol": config["native_symbol"]}
+            for name, config in LIFI_EVM_NETWORKS.items()
+        ],
+    }
+
+@app.get("/api/defi/aave-base-positions/{wallet_id}")
+async def get_aave_base_positions(
+    wallet_id: int,
+    refresh: bool = False,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return the user's Aave V3 Base positions through official read-only calls."""
+    wallet = db.query(Wallet).filter(
+        Wallet.id == wallet_id,
+        Wallet.username == current_user.username,
+    ).first()
+    if not wallet:
+        raise HTTPException(status_code=404, detail="Wallet not found")
+    positions = get_aave_v3_base_positions(wallet.wallet_address, refresh=refresh)
+    return {
+        "status": "success",
+        "protocol": "Aave V3",
+        "network": "Base",
+        "wallet_address": wallet.wallet_address,
+        "positions": positions,
+        "read_only": True,
+        "checked_at": int(time.time()),
+    }
+
+@app.post("/api/defi/aave-base/usdc-supply-quote")
+async def get_aave_base_usdc_supply_quote(
+    payload: AaveSupplyQuoteRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Prepare only the official Aave V3 Base USDC supply call; never sign it here."""
+    wallet_address = get_saved_base_wallet(db, current_user.username, payload.wallet_address)
+    quote = get_aave_v3_base_usdc_supply_quote(wallet_address, payload.amount)
+    now_ts = int(time.time())
+    quote_id = secrets.token_urlsafe(24)
+    aave_supply_quote_sessions[quote_id] = {
+        "username": current_user.username,
+        "wallet_address": wallet_address.lower(),
+        "amount_atomic": quote["amount_atomic"],
+        "created_at": now_ts,
+    }
+    for session_id, session in list(aave_supply_quote_sessions.items()):
+        if session["created_at"] < now_ts - AAVE_SUPPLY_QUOTE_TTL_SECONDS:
+            aave_supply_quote_sessions.pop(session_id, None)
+    return {
+        "status": "success",
+        "quote_id": quote_id,
+        "expires_in": AAVE_SUPPLY_QUOTE_TTL_SECONDS,
+        **quote,
+    }
+
+@app.post("/api/defi/aave-base/supply-submissions")
+async def save_aave_base_supply_submission(
+    payload: AaveSupplySubmissionRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Notify about a wallet-submitted Aave supply after validating its short-lived quote session."""
+    quote_id = payload.quote_id.strip()
+    session = aave_supply_quote_sessions.get(quote_id)
+    now_ts = int(time.time())
+    if (
+        not session
+        or session["username"] != current_user.username
+        or session["created_at"] < now_ts - AAVE_SUPPLY_QUOTE_TTL_SECONDS
+    ):
+        aave_supply_quote_sessions.pop(quote_id, None)
+        raise HTTPException(status_code=410, detail="The Aave supply request expired. Check the amount again")
+    tx_hash = payload.tx_hash.strip()
+    if not re.fullmatch(r"0x[a-fA-F0-9]{64}", tx_hash):
+        raise HTTPException(status_code=422, detail="Transaction hash is invalid")
+
+    verified = False
+    try:
+        web3 = Web3(Web3.HTTPProvider(BASE_RPC_URL, request_kwargs={"timeout": 8}))
+        transaction = web3.eth.get_transaction(tx_hash)
+        raw_input = transaction.get("input") or transaction.get("data") or ""
+        tx_input = raw_input.hex() if hasattr(raw_input, "hex") else str(raw_input)
+        if not tx_input.startswith("0x"):
+            tx_input = f"0x{tx_input}"
+        expected_input = build_aave_supply_calldata(
+            BASE_USDC_ADDRESS,
+            session["amount_atomic"],
+            session["wallet_address"],
+        )
+        verified = (
+            str(transaction.get("from") or "").lower() == session["wallet_address"]
+            and str(transaction.get("to") or "").lower() == AAVE_V3_BASE_POOL.lower()
+            and tx_input.lower() == expected_input.lower()
+            and int(transaction.get("value") or 0) == 0
+        )
+    except Exception:
+        verified = False
+
+    subscription = get_telegram_subscription(db, current_user.username)
+    telegram_sent = False
+    if verified and subscription and subscription.notify_transaction_submitted:
+        amount = format_token_amount(int(session["amount_atomic"]), BASE_USDC_DECIMALS)
+        messages = {
+            "ru": f"💧 *AIRDROP-X: USDC внесён в Aave*\nСеть: `Base`\nСумма: `{amount} USDC`\nTX: `{tx_hash}`",
+            "en": f"💧 *AIRDROP-X: USDC supplied to Aave*\nNetwork: `Base`\nAmount: `{amount} USDC`\nTX: `{tx_hash}`",
+            "zh": f"💧 *AIRDROP-X：USDC 已存入 Aave*\n网络：`Base`\n数量：`{amount} USDC`\n交易：`{tx_hash}`",
+        }
+        telegram_sent = send_telegram_notification(
+            subscription.chat_id,
+            messages[normalize_language(subscription.language)],
+        )
+    aave_supply_quote_sessions.pop(quote_id, None)
+    return {"status": "success", "verified": verified, "telegram_sent": telegram_sent}
+
+@app.get("/api/universal-bridge/tokens/{network}")
+async def get_universal_bridge_tokens(network: str, current_user: User = Depends(get_current_user)):
+    return {"status": "success", "network": network, "tokens": get_lifi_tokens(network)}
+
+@app.get("/api/wallets/{wallet_id}/universal-bridge-balance/{network}/{token_address}")
+async def get_universal_bridge_token_balance(
+    wallet_id: int,
+    network: str,
+    token_address: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Read a selected LI.FI-listed token balance; this endpoint never signs or transfers."""
+    wallet = db.query(Wallet).filter(
+        Wallet.id == wallet_id,
+        Wallet.username == current_user.username,
+    ).first()
+    if not wallet or not is_valid_evm_address(wallet.wallet_address):
+        raise HTTPException(status_code=404, detail="Wallet not found")
+    network_config = LIFI_EVM_NETWORKS.get(network)
+    if not network_config:
+        raise HTTPException(status_code=422, detail="This network is not supported by the universal bridge")
+    token = get_lifi_token(network, token_address)
+    try:
+        web3 = Web3(Web3.HTTPProvider(network_config["rpc_url"], request_kwargs={"timeout": 10}))
+        if not web3.is_connected():
+            raise RuntimeError("RPC unavailable")
+        owner = Web3.to_checksum_address(wallet.wallet_address)
+        if token["address"] == LIFI_NATIVE_TOKEN_ADDRESS:
+            raw_balance = int(web3.eth.get_balance(owner))
+            gas_reserve = PUBLIC_NETWORK_BALANCE_CONFIG.get(network, {}).get("gas_reserve", "0")
+            reserve_whole, _, reserve_fraction = str(gas_reserve).partition(".")
+            reserve_atomic = (
+                int(reserve_whole or "0") * (10 ** token["decimals"])
+                + int((reserve_fraction + ("0" * token["decimals"]))[:token["decimals"]] or "0")
+            )
+        else:
+            contract = web3.eth.contract(
+                address=Web3.to_checksum_address(token["address"]),
+                abi=ERC20_BALANCE_OF_ABI,
+            )
+            raw_balance = int(contract.functions.balanceOf(owner).call())
+            gas_reserve = "0"
+            reserve_atomic = 0
+    except Exception:
+        raise HTTPException(status_code=503, detail=f"{network} public token data is temporarily unavailable")
+
+    balance = format_token_amount(raw_balance, token["decimals"])
+    available_atomic = max(raw_balance - reserve_atomic, 0)
+    available_to_send = format_token_amount(available_atomic, token["decimals"])
+    unit_price_usd = token.get("price_usd")
+    estimated_usd = (raw_balance / (10 ** token["decimals"])) * unit_price_usd if unit_price_usd is not None else None
+    return {
+        "status": "success",
+        "network": network,
+        "token": token,
+        "amount": balance,
+        "available_to_send": available_to_send,
+        "gas_reserve": gas_reserve,
+        "unit_price_usd": unit_price_usd,
+        "estimated_usd": round(estimated_usd, 4) if estimated_usd is not None else None,
+        "is_dust": estimated_usd is not None and estimated_usd < ASSET_DISPLAY_THRESHOLD_USD,
+    }
+
+@app.post("/api/universal-bridge/quote")
+async def get_universal_bridge_quote(
+    payload: UniversalBridgeQuoteRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get one current route. The returned request is validated before the wallet ever sees it."""
+    from_network = payload.from_network.strip()
+    to_network = payload.to_network.strip()
+    from_config = LIFI_EVM_NETWORKS.get(from_network)
+    to_config = LIFI_EVM_NETWORKS.get(to_network)
+    if not from_config or not to_config:
+        raise HTTPException(status_code=422, detail="Choose supported EVM networks")
+    wallet_address = get_saved_base_wallet(db, current_user.username, payload.wallet_address)
+    from_token = get_lifi_token(from_network, payload.from_token_address)
+    to_token = get_lifi_token(to_network, payload.to_token_address)
+    normalized_amount, from_amount_atomic = normalize_token_amount(payload.amount, from_token["decimals"])
+    params = {
+        "fromChain": str(from_config["chain_id"]),
+        "toChain": str(to_config["chain_id"]),
+        "fromToken": from_token["address"],
+        "toToken": to_token["address"],
+        "fromAmount": from_amount_atomic,
+        "fromAddress": wallet_address,
+        "toAddress": wallet_address,
+        "slippage": "0.005",
+        "order": "CHEAPEST",
+    }
+    try:
+        response = requests.get(
+            f"{LIFI_API_URL}/quote",
+            params=params,
+            headers=lifi_headers(),
+            timeout=20,
+        )
+    except requests.RequestException:
+        raise HTTPException(status_code=503, detail="Universal bridge quote service is temporarily unavailable")
+    if not response.ok:
+        logging.warning("LI.FI quote rejected with status %s", response.status_code)
+        raise HTTPException(status_code=422, detail="No current route is available for this pair and amount")
+    try:
+        quote = response.json()
+        estimate = quote["estimate"]
+        transaction = validate_lifi_transaction_request(
+            quote["transactionRequest"], from_config["chain_id"], wallet_address,
+        )
+        to_amount = str(estimate["toAmount"])
+        to_amount_min = str(estimate["toAmountMin"])
+        if not re.fullmatch(r"\d+", to_amount) or not re.fullmatch(r"\d+", to_amount_min):
+            raise ValueError("Invalid output amount")
+    except (KeyError, TypeError, ValueError, HTTPException):
+        raise HTTPException(status_code=502, detail="Universal bridge returned an invalid quote")
+
+    approval_address = str(estimate.get("approvalAddress", "")).strip()
+    if from_token["address"] != LIFI_NATIVE_TOKEN_ADDRESS and not is_valid_evm_address(approval_address):
+        raise HTTPException(status_code=502, detail="Universal bridge returned an invalid token approval address")
+    fee_costs = estimate.get("feeCosts") if isinstance(estimate.get("feeCosts"), list) else []
+    gas_costs = estimate.get("gasCosts") if isinstance(estimate.get("gasCosts"), list) else []
+    return {
+        "status": "success",
+        "expires_in": LIFI_QUOTE_TTL_SECONDS,
+        "from_network": from_network,
+        "to_network": to_network,
+        "from_token": from_token,
+        "to_token": to_token,
+        "amount_in": normalized_amount,
+        "amount_in_atomic": from_amount_atomic,
+        "amount_out": format_token_amount(int(to_amount), to_token["decimals"]),
+        "amount_out_min": format_token_amount(int(to_amount_min), to_token["decimals"]),
+        "tool": str((quote.get("toolDetails") or {}).get("name") or quote.get("tool") or "LI.FI")[:80],
+        "tool_key": str(quote.get("tool") or "")[:80],
+        "estimated_seconds": (estimate.get("executionDuration") or 0),
+        "fee_costs": fee_costs[:8],
+        "gas_costs": gas_costs[:8],
+        "approval": {
+            "required": from_token["address"] != LIFI_NATIVE_TOKEN_ADDRESS,
+            "spender": approval_address if from_token["address"] != LIFI_NATIVE_TOKEN_ADDRESS else "",
+            "amount_atomic": from_amount_atomic,
+        },
+        "transaction": transaction,
+        "transaction_id": str(quote.get("transactionId", ""))[:160],
+    }
+
+@app.get("/api/universal-bridge/status/{tx_hash}")
+async def get_universal_bridge_status(
+    tx_hash: str,
+    from_network: str,
+    to_network: str,
+    bridge: str = "",
+    current_user: User = Depends(get_current_user),
+):
+    if not re.fullmatch(r"0x[a-fA-F0-9]{64}", tx_hash) or from_network not in LIFI_EVM_NETWORKS or to_network not in LIFI_EVM_NETWORKS:
+        raise HTTPException(status_code=422, detail="Invalid bridge status request")
+    params = {
+        "txHash": tx_hash,
+        "fromChain": str(LIFI_EVM_NETWORKS[from_network]["chain_id"]),
+        "toChain": str(LIFI_EVM_NETWORKS[to_network]["chain_id"]),
+    }
+    if bridge and re.fullmatch(r"[A-Za-z0-9_-]{1,80}", bridge):
+        params["bridge"] = bridge
+    try:
+        response = requests.get(f"{LIFI_API_URL}/status", params=params, headers=lifi_headers(), timeout=15)
+        if not response.ok:
+            raise requests.RequestException("status unavailable")
+        data = response.json()
+    except (requests.RequestException, ValueError):
+        raise HTTPException(status_code=503, detail="Universal bridge status is temporarily unavailable")
+    return {
+        "status": "success",
+        "substatus": str(data.get("substatus", ""))[:80],
+        "sending": data.get("sending") if isinstance(data.get("sending"), dict) else {},
+        "receiving": data.get("receiving") if isinstance(data.get("receiving"), dict) else {},
+        "lifi_status": str(data.get("status", ""))[:80],
+    }
+
+def serialize_universal_bridge_record(record: UniversalBridgeRecord) -> Dict[str, Any]:
+    return {
+        "id": record.id,
+        "wallet_address": record.wallet_address,
+        "from_network": record.from_network,
+        "to_network": record.to_network,
+        "from_symbol": record.from_symbol,
+        "to_symbol": record.to_symbol,
+        "amount_in": record.amount_in,
+        "amount_out": record.amount_out,
+        "amount_out_min": record.amount_out_min,
+        "provider": record.provider,
+        "bridge": record.bridge,
+        "tx_hash": record.tx_hash,
+        "status": record.status,
+        "provider_status": record.provider_status,
+        "created_at": record.created_at,
+        "updated_at": record.updated_at,
+    }
+
+def normalize_universal_bridge_status(lifi_status: str, substatus: str) -> str:
+    provider_state = f"{lifi_status} {substatus}".upper()
+    if any(word in provider_state for word in ("DONE", "COMPLETED", "SUCCESS")):
+        return "completed"
+    if any(word in provider_state for word in ("FAILED", "INVALID", "REFUNDED")):
+        return "failed"
+    if provider_state and "NOT_FOUND" not in provider_state:
+        return "in_progress"
+    return "submitted"
+
+def notify_universal_bridge_status(subscription: Optional[TelegramSubscription], record: UniversalBridgeRecord) -> bool:
+    if not subscription or record.status not in {"completed", "failed"}:
+        return False
+    if record.status == "completed" and not subscription.notify_transaction_final:
+        return False
+    if record.status == "failed" and not subscription.notify_errors:
+        return False
+    route = f"{record.from_network} → {record.to_network}"
+    amount = f"{record.amount_in} {record.from_symbol}"
+    expected = f"{record.amount_out or '—'} {record.to_symbol}"
+    provider_status = record.provider_status or record.status
+    messages = {
+        "ru": (
+            f"{'✅' if record.status == 'completed' else '⚠️'} *AIRDROP-X: статус моста*\n"
+            f"Маршрут: `{route}`\nОтправлено: `{amount}`\nОжидалось: `{expected}`\nСтатус: `{provider_status}`\nTX: `{record.tx_hash}`"
+        ),
+        "en": (
+            f"{'✅' if record.status == 'completed' else '⚠️'} *AIRDROP-X: bridge status*\n"
+            f"Route: `{route}`\nSent: `{amount}`\nExpected: `{expected}`\nStatus: `{provider_status}`\nTX: `{record.tx_hash}`"
+        ),
+        "zh": (
+            f"{'✅' if record.status == 'completed' else '⚠️'} *AIRDROP-X：跨链状态*\n"
+            f"路线：`{route}`\n已发送：`{amount}`\n预计：`{expected}`\n状态：`{provider_status}`\n交易：`{record.tx_hash}`"
+        ),
+    }
+    return send_telegram_notification(subscription.chat_id, messages[normalize_language(subscription.language)])
+
+@app.post("/api/universal-bridge/submissions")
+async def save_universal_bridge_submission(
+    payload: UniversalBridgeSubmissionRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from_network = payload.from_network.strip()
+    to_network = payload.to_network.strip()
+    if from_network not in LIFI_EVM_NETWORKS or to_network not in LIFI_EVM_NETWORKS:
+        raise HTTPException(status_code=422, detail="Choose supported EVM networks")
+    wallet_address = get_saved_base_wallet(db, current_user.username, payload.wallet_address)
+    tx_hash = payload.tx_hash.strip()
+    if not re.fullmatch(r"0x[a-fA-F0-9]{64}", tx_hash):
+        raise HTTPException(status_code=422, detail="Transaction hash is invalid")
+
+    existing = db.query(UniversalBridgeRecord).filter(UniversalBridgeRecord.tx_hash == tx_hash).first()
+    if existing:
+        if existing.username != current_user.username:
+            raise HTTPException(status_code=409, detail="Transaction is already recorded")
+        return {"status": "success", "record": serialize_universal_bridge_record(existing), "already_saved": True}
+
+    from_token = get_lifi_token(from_network, payload.from_token_address)
+    to_token = get_lifi_token(to_network, payload.to_token_address)
+    amount_in, _ = normalize_token_amount(payload.amount_in, from_token["decimals"])
+    amount_out, _ = normalize_token_amount(payload.amount_out, to_token["decimals"])
+    amount_out_min, _ = normalize_token_amount(payload.amount_out_min, to_token["decimals"])
+    provider = re.sub(r"[^A-Za-z0-9 ._-]", "", payload.provider).strip()[:80] or "LI.FI"
+    bridge = re.sub(r"[^A-Za-z0-9_-]", "", payload.bridge).strip()[:80] or None
+    now_ts = int(time.time())
+    record = UniversalBridgeRecord(
+        username=current_user.username,
+        wallet_address=wallet_address,
+        from_network=from_network,
+        to_network=to_network,
+        from_symbol=from_token["symbol"][:24],
+        to_symbol=to_token["symbol"][:24],
+        amount_in=amount_in,
+        amount_out=amount_out,
+        amount_out_min=amount_out_min,
+        provider=provider,
+        bridge=bridge,
+        tx_hash=tx_hash,
+        status="submitted",
+        provider_status="SUBMITTED",
+        created_at=now_ts,
+        updated_at=now_ts,
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+
+    subscription = get_telegram_subscription(db, current_user.username)
+    telegram_sent = False
+    if subscription and subscription.notify_transaction_submitted:
+        route = f"{from_network} → {to_network}"
+        amount = f"{amount_in} {from_token['symbol']}"
+        messages = {
+            "ru": f"🌉 *AIRDROP-X: мост отправлен*\nМаршрут: `{route}`\nСумма: `{amount}`\nTX: `{tx_hash}`",
+            "en": f"🌉 *AIRDROP-X: bridge submitted*\nRoute: `{route}`\nAmount: `{amount}`\nTX: `{tx_hash}`",
+            "zh": f"🌉 *AIRDROP-X：跨链已提交*\n路线：`{route}`\n金额：`{amount}`\n交易：`{tx_hash}`",
+        }
+        telegram_sent = send_telegram_notification(
+            subscription.chat_id,
+            messages[normalize_language(subscription.language)],
+        )
+    return {"status": "success", "record": serialize_universal_bridge_record(record), "telegram_sent": telegram_sent}
+
+@app.get("/api/universal-bridge/history")
+async def get_universal_bridge_history(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    records = db.query(UniversalBridgeRecord).filter(
+        UniversalBridgeRecord.username == current_user.username,
+    ).order_by(UniversalBridgeRecord.created_at.desc()).limit(20).all()
+    return {"status": "success", "records": [serialize_universal_bridge_record(record) for record in records]}
+
+@app.post("/api/universal-bridge/history/{record_id}/refresh")
+async def refresh_universal_bridge_record(
+    record_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    record = db.query(UniversalBridgeRecord).filter(
+        UniversalBridgeRecord.id == record_id,
+        UniversalBridgeRecord.username == current_user.username,
+    ).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Bridge record not found")
+    params = {
+        "txHash": record.tx_hash,
+        "fromChain": str(LIFI_EVM_NETWORKS[record.from_network]["chain_id"]),
+        "toChain": str(LIFI_EVM_NETWORKS[record.to_network]["chain_id"]),
+    }
+    if record.bridge:
+        params["bridge"] = record.bridge
+    try:
+        response = requests.get(f"{LIFI_API_URL}/status", params=params, headers=lifi_headers(), timeout=15)
+        if not response.ok:
+            raise requests.RequestException("status unavailable")
+        data = response.json()
+    except (requests.RequestException, ValueError):
+        return {"status": "success", "record": serialize_universal_bridge_record(record), "provider_available": False}
+
+    lifi_status = str(data.get("status", ""))[:80]
+    substatus = str(data.get("substatus", ""))[:80]
+    provider_status = substatus or lifi_status or "PENDING"
+    previous_status = record.status
+    record.status = normalize_universal_bridge_status(lifi_status, substatus)
+    record.provider_status = provider_status
+    record.updated_at = int(time.time())
+    db.commit()
+    db.refresh(record)
+
+    telegram_sent = False
+    if record.status != previous_status:
+        telegram_sent = notify_universal_bridge_status(get_telegram_subscription(db, current_user.username), record)
+    return {"status": "success", "record": serialize_universal_bridge_record(record), "provider_available": True, "telegram_sent": telegram_sent}
 
 @app.get("/api/wallets/{username}")
 async def get_wallets(username: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -1474,6 +2753,148 @@ async def save_budget_plan(
     plan.updated_at = int(time.time())
     db.commit()
     return {"status": "success", "planned_total": planned_total, "message": "Budget plan saved"}
+
+@app.get("/api/action-reminder")
+async def get_action_reminder(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    reminder = db.query(ActionReminder).filter(ActionReminder.username == current_user.username).first()
+    subscription = get_telegram_subscription(db, current_user.username)
+    if not reminder:
+        return {
+            "status": "success",
+            "reminder": {
+                "network": "Base",
+                "day_of_week": "Mon",
+                "time_of_day": "18:00",
+                "enabled": False,
+                "telegram_enabled": True,
+            },
+            "telegram_linked": bool(subscription),
+        }
+    return {
+        "status": "success",
+        "reminder": {
+            "network": reminder.network,
+            "day_of_week": reminder.day_of_week,
+            "time_of_day": reminder.time_of_day,
+            "enabled": reminder.enabled,
+            "telegram_enabled": reminder.telegram_enabled,
+        },
+        "telegram_linked": bool(subscription),
+    }
+
+@app.post("/api/action-reminder")
+async def save_action_reminder(
+    payload: ActionReminderRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    supported_networks = {"Ethereum", "Base", "Arbitrum", "ZkSync", "Scroll", "Linea", "Solana", "BNB Chain", "Polygon", "Optimism", "Tron"}
+    allowed_days = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"}
+    if payload.network not in supported_networks:
+        raise HTTPException(status_code=400, detail="Unsupported network")
+    if payload.day_of_week not in allowed_days:
+        raise HTTPException(status_code=400, detail="Unsupported reminder day")
+    if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", payload.time_of_day):
+        raise HTTPException(status_code=400, detail="Invalid reminder time")
+
+    reminder = db.query(ActionReminder).filter(ActionReminder.username == current_user.username).first()
+    if not reminder:
+        reminder = ActionReminder(username=current_user.username, updated_at=int(time.time()))
+        db.add(reminder)
+    reminder.network = payload.network
+    reminder.day_of_week = payload.day_of_week
+    reminder.time_of_day = payload.time_of_day
+    reminder.enabled = payload.enabled
+    reminder.telegram_enabled = payload.telegram_enabled
+    reminder.last_sent_slot = None
+    reminder.updated_at = int(time.time())
+    db.commit()
+    return {
+        "status": "success",
+        "telegram_linked": bool(get_telegram_subscription(db, current_user.username)),
+        "message": "Action reminder saved",
+    }
+
+@app.get("/api/bridge-plans")
+async def get_bridge_plans(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    plans = db.query(BridgePlan).filter(
+        BridgePlan.username == current_user.username,
+    ).order_by(BridgePlan.created_at.desc()).limit(30).all()
+    return {
+        "status": "success",
+        "plans": [
+            {
+                "id": plan.id,
+                "wallet_address": plan.wallet_address,
+                "from_network": plan.from_network,
+                "to_network": plan.to_network,
+                "asset": plan.asset,
+                "amount": plan.amount,
+                "status": plan.status,
+                "created_at": plan.created_at,
+            }
+            for plan in plans
+        ],
+    }
+
+@app.post("/api/bridge-plans")
+async def create_bridge_plan(
+    payload: BridgePlanRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    wallet_address = payload.wallet_address.strip()
+    amount = payload.amount.strip()
+    if payload.to_network not in BRIDGE_PLAN_DESTINATIONS:
+        raise HTTPException(status_code=400, detail="Unsupported bridge destination")
+    if not re.fullmatch(r"0x[a-fA-F0-9]{40}", wallet_address):
+        raise HTTPException(status_code=400, detail="Invalid wallet address")
+    if len(amount) > 32 or not re.fullmatch(r"(?:0|[1-9]\d*)(?:\.\d{1,18})?", amount) or float(amount) <= 0 or float(amount) > 100000:
+        raise HTTPException(status_code=400, detail="Invalid bridge amount")
+    wallet = db.query(Wallet).filter(
+        Wallet.username == current_user.username,
+        Wallet.wallet_address.ilike(wallet_address),
+    ).first()
+    if not wallet:
+        raise HTTPException(status_code=409, detail="Save the active wallet before creating a bridge plan")
+
+    plan = BridgePlan(
+        username=current_user.username,
+        wallet_address=wallet.wallet_address,
+        from_network="Base",
+        to_network=payload.to_network,
+        asset="ETH",
+        amount=amount,
+        status="planned",
+        created_at=int(time.time()),
+    )
+    db.add(plan)
+    db.commit()
+    return {
+        "status": "success",
+        "plan": {
+            "id": plan.id,
+            "wallet_address": plan.wallet_address,
+            "from_network": plan.from_network,
+            "to_network": plan.to_network,
+            "asset": plan.asset,
+            "amount": plan.amount,
+            "status": plan.status,
+            "created_at": plan.created_at,
+        },
+    }
+
+@app.delete("/api/bridge-plans/{plan_id}")
+async def delete_bridge_plan(plan_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    plan = db.query(BridgePlan).filter(
+        BridgePlan.id == plan_id,
+        BridgePlan.username == current_user.username,
+    ).first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="Bridge plan not found")
+    db.delete(plan)
+    db.commit()
+    return {"status": "success"}
 
 @app.post("/api/start")
 async def start_farming(req: StartFarmReq, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -1682,6 +3103,50 @@ async def save_transfer_record(
         amount=normalize_eth_amount(payload.amount),
         tx_hash=tx_hash,
         network="Base",
+        status="submitted",
+        created_at=int(time.time()),
+    ))
+    db.commit()
+    return {"status": "success"}
+
+@app.post("/api/transfer-records/direct")
+async def save_direct_transfer_record(
+    payload: DirectTransferRecordCreateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from_address = payload.from_address.strip()
+    to_address = payload.to_address.strip()
+    if not is_valid_evm_address(from_address) or not is_valid_evm_address(to_address):
+        raise HTTPException(status_code=422, detail="Transfer contains an invalid EVM address")
+    if from_address.lower() == to_address.lower():
+        raise HTTPException(status_code=422, detail="Sender and recipient must be different wallets")
+    sender = db.query(Wallet).filter(
+        Wallet.username == current_user.username,
+        Wallet.wallet_address.ilike(from_address),
+    ).first()
+    recipient = db.query(Wallet).filter(
+        Wallet.id == payload.recipient_wallet_id,
+        Wallet.username == current_user.username,
+    ).first()
+    if not sender or not recipient or not is_valid_evm_address(recipient.wallet_address):
+        raise HTTPException(status_code=403, detail="Choose saved sender and recipient wallets")
+    if recipient.wallet_address.lower() != to_address.lower():
+        raise HTTPException(status_code=403, detail="Recipient does not match the saved wallet")
+    tx_hash = payload.tx_hash.strip()
+    if not re.fullmatch(r"0x[a-fA-F0-9]{64}", tx_hash):
+        raise HTTPException(status_code=422, detail="Transaction hash is invalid")
+    if db.query(WalletTransferRecord).filter(WalletTransferRecord.tx_hash == tx_hash).first():
+        return {"status": "success", "already_saved": True}
+    db.add(WalletTransferRecord(
+        username=current_user.username,
+        template_id=None,
+        from_address=from_address,
+        to_address=to_address,
+        amount=normalize_eth_amount(payload.amount),
+        tx_hash=tx_hash,
+        network="Base",
+        status="submitted",
         created_at=int(time.time()),
     ))
     db.commit()
@@ -1869,7 +3334,7 @@ async def save_base_swap_submission(
 
     subscription = get_telegram_subscription(db, current_user.username)
     telegram_sent = False
-    if subscription:
+    if subscription and subscription.notify_transaction_submitted:
         messages = {
             "ru": f"🔄 *AIRDROP-X: обмен отправлен*\nСеть: `Base`\nСумма: `{submission['amount_in']} ETH`\nTX: `{tx_hash}`",
             "en": f"🔄 *AIRDROP-X: swap submitted*\nNetwork: `Base`\nAmount: `{submission['amount_in']} ETH`\nTX: `{tx_hash}`",
@@ -1906,6 +3371,95 @@ async def get_base_swap_history(
             for record in records
         ],
     }
+
+@app.get("/api/operations/history")
+async def get_operations_history(
+    status: str = "all",
+    operation_type: str = "all",
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    allowed_statuses = {"all", "submitted", "in_progress", "completed", "failed"}
+    allowed_types = {"all", "bridge", "swap", "transfer"}
+    if status not in allowed_statuses or operation_type not in allowed_types:
+        raise HTTPException(status_code=422, detail="Invalid operation history filter")
+
+    operations = []
+    bridge_records: List[UniversalBridgeRecord] = []
+    swap_records: List[BaseSwapRecord] = []
+    transfer_records: List[WalletTransferRecord] = []
+    if operation_type in {"all", "bridge"}:
+        bridge_records = db.query(UniversalBridgeRecord).filter(
+            UniversalBridgeRecord.username == current_user.username,
+        ).order_by(UniversalBridgeRecord.created_at.desc()).limit(100).all()
+    if operation_type in {"all", "swap"}:
+        swap_records = db.query(BaseSwapRecord).filter(
+            BaseSwapRecord.username == current_user.username,
+        ).order_by(BaseSwapRecord.created_at.desc()).limit(100).all()
+    if operation_type in {"all", "transfer"}:
+        transfer_records = db.query(WalletTransferRecord).filter(
+            WalletTransferRecord.username == current_user.username,
+        ).order_by(WalletTransferRecord.created_at.desc()).limit(100).all()
+
+    refresh_base_operation_statuses(db, swap_records, transfer_records)
+
+    for record in bridge_records:
+        operations.append({
+            "id": f"bridge-{record.id}",
+            "type": "bridge",
+            "status": record.status or "submitted",
+            "provider_status": record.provider_status,
+            "from_network": record.from_network,
+            "to_network": record.to_network,
+            "from_symbol": record.from_symbol,
+            "to_symbol": record.to_symbol,
+            "amount_in": record.amount_in,
+            "amount_out": record.amount_out,
+            "estimated_usd": estimate_operation_value_usd(record.amount_in, record.from_symbol),
+            "provider": record.provider,
+            "tx_hash": record.tx_hash,
+            "created_at": record.created_at,
+        })
+    for record in swap_records:
+        operations.append({
+            "id": f"swap-{record.id}",
+            "type": "swap",
+            "status": record.status or "submitted",
+            "provider_status": None,
+            "from_network": "Base",
+            "to_network": "Base",
+            "from_symbol": "ETH",
+            "to_symbol": "USDC",
+            "amount_in": record.amount_in,
+            "amount_out": format_journal_token_amount(record.amount_out, BASE_USDC_DECIMALS),
+            "estimated_usd": estimate_operation_value_usd(record.amount_in, "ETH"),
+            "provider": "Uniswap",
+            "tx_hash": record.tx_hash,
+            "created_at": record.created_at,
+        })
+    for record in transfer_records:
+        operations.append({
+            "id": f"transfer-{record.id}",
+            "type": "transfer",
+            "status": record.status or "submitted",
+            "provider_status": None,
+            "from_network": record.network,
+            "to_network": record.network,
+            "from_symbol": "ETH",
+            "to_symbol": "ETH",
+            "amount_in": record.amount,
+            "amount_out": None,
+            "estimated_usd": estimate_operation_value_usd(record.amount, "ETH"),
+            "provider": "",
+            "recipient": record.to_address,
+            "tx_hash": record.tx_hash,
+            "created_at": record.created_at,
+        })
+
+    if status != "all":
+        operations = [record for record in operations if record["status"] == status]
+    operations.sort(key=lambda record: int(record["created_at"]), reverse=True)
+    return {"status": "success", "records": operations[:100]}
 
 @app.get("/api/opportunities")
 async def get_official_opportunities(

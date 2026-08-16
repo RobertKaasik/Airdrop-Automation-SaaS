@@ -144,6 +144,30 @@
         </div>
     </div>
 
+    <div class="modal-overlay" id="baseSwapConfirmModal" onclick="handleBaseSwapConfirmOverlayClick(event)">
+        <div class="auth-modal" style="max-width:450px; max-height:92vh; overflow-y:auto; width:calc(100% - 32px); border:1px solid rgba(124,58,237,.55); box-shadow:0 22px 70px rgba(0,0,0,.65), 0 0 32px rgba(124,58,237,.16);">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:14px; margin-bottom:15px;">
+                <div>
+                    <div id="baseSwapConfirmTitle" style="font-size:17px; color:#fff; font-weight:800;"></div>
+                    <div id="baseSwapConfirmNetwork" style="color:#a78bfa; font-size:12px; margin-top:4px;"></div>
+                </div>
+                <button type="button" onclick="finishBaseSwapConfirmation(false)" aria-label="Close" style="background:transparent; border:0; color:#b19cd9; cursor:pointer; font-size:22px; line-height:1; padding:2px 5px;">×</button>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr auto 1fr; gap:10px; align-items:center; background:var(--bg-main); border:1px solid var(--border-color); border-radius:12px; padding:13px;">
+                <div><div id="baseSwapConfirmPayLabel" style="font-size:11px; color:var(--text-muted);"></div><div id="baseSwapConfirmPayValue" style="color:#fff; font-size:16px; font-weight:800; margin-top:4px;"></div></div>
+                <div style="color:#a78bfa; font-size:20px;">→</div>
+                <div><div id="baseSwapConfirmReceiveLabel" style="font-size:11px; color:var(--text-muted);"></div><div id="baseSwapConfirmReceiveValue" style="color:#86efac; font-size:16px; font-weight:800; margin-top:4px;"></div></div>
+            </div>
+            <div id="baseSwapConfirmDetails" style="display:none; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:8px; margin-top:10px;"></div>
+            <div id="baseSwapConfirmWarning" style="display:none; background:rgba(245,158,11,.09); border:1px solid rgba(245,158,11,.38); color:#fde68a; border-radius:10px; padding:10px 12px; font-size:12px; line-height:1.5; margin-top:10px;"></div>
+            <div id="baseSwapConfirmNotice" style="background:rgba(59,130,246,.08); border:1px solid rgba(59,130,246,.24); color:#bfdbfe; border-radius:10px; padding:10px 12px; font-size:12px; line-height:1.5; margin-top:13px;"></div>
+            <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:18px;">
+                <button type="button" onclick="finishBaseSwapConfirmation(false)" id="baseSwapConfirmCancel" class="btn-dark-sm" style="padding:10px 14px;"></button>
+                <button type="button" onclick="finishBaseSwapConfirmation(true)" id="baseSwapConfirmProceed" class="btn-purple-lg" style="width:auto; padding:10px 14px;"></button>
+            </div>
+        </div>
+    </div>
+
     <!-- Мобильное нижнее меню -->
     <div class="bottom-sheet-overlay" id="bottomSheetOverlay" onclick="handleSheetOverlayClick(event)">
         <div class="bottom-sheet" id="bottomSheetContent">

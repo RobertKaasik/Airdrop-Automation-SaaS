@@ -84,7 +84,7 @@ function setButtonLoading(button, isLoading, text = '') {
     } else {
         button.classList.remove('btn-loading');
         button.disabled = false;
-        const defaultText = button.dataset.defaultText || '';
+        const defaultText = button.dataset.defaultText || text || '';
         if (defaultText) button.innerText = defaultText;
     }
 }
@@ -97,6 +97,18 @@ let codeCooldownTimer = null;
 let codeCooldownSeconds = 0;
 let confirmedRegistrationEmail = "";
 let currentEditingWallet = null;
+let activeOperationWalletId = null;
+let activeOperationBalanceData = null;
+let activeUniversalBridgeAsset = null;
+let universalBridgeTokensByNetwork = {};
+let activeUniversalBridgeQuote = null;
+let universalBridgeRefreshTimer = null;
+let universalBridgeCooldownTimer = null;
+const universalBridgeRefreshCooldowns = new Map();
+let directTransferWallets = [];
+let directTransferBalanceData = null;
+let operationsJournalFilter = 'all';
+let operationsJournalCheckCooldownUntil = 0;
 let lastSaveTimestamp = 0; 
 let lastRandomizeTimestamp = 0; 
 let cachedStatsData = { current_slots: 1, max_slots: 300, is_sold_out: false };
@@ -117,7 +129,12 @@ if (typeof window.fetch === 'function') {
         }
         const headers = new Headers(options.headers || {});
         headers.set('Authorization', `Bearer ${accessToken}`);
-        return nativeFetch(resource, { ...options, headers });
+        return nativeFetch(resource, { ...options, headers }).then((response) => {
+            if (response.status === 401 && !requestUrl.startsWith('/api/login')) {
+                handleExpiredAuthSession();
+            }
+            return response;
+        });
     };
 }
 
@@ -130,6 +147,40 @@ const BASE_MAINNET_CONFIG = {
     rpcUrls: ['https://mainnet.base.org'],
     blockExplorerUrls: ['https://base.blockscout.com'],
 };
+const UNIVERSAL_BRIDGE_NETWORKS = {
+    Ethereum: {
+        chainId: '0x1', chainName: 'Ethereum Mainnet',
+        nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+        rpcUrls: ['https://ethereum-rpc.publicnode.com'], blockExplorerUrls: ['https://etherscan.io'],
+    },
+    Base: BASE_MAINNET_CONFIG,
+    Arbitrum: {
+        chainId: '0xa4b1', chainName: 'Arbitrum One',
+        nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+        rpcUrls: ['https://arb1.arbitrum.io/rpc'], blockExplorerUrls: ['https://arbiscan.io'],
+    },
+    Optimism: {
+        chainId: '0xa', chainName: 'OP Mainnet',
+        nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+        rpcUrls: ['https://mainnet.optimism.io'], blockExplorerUrls: ['https://optimistic.etherscan.io'],
+    },
+    Polygon: {
+        chainId: '0x89', chainName: 'Polygon PoS',
+        nativeCurrency: { name: 'POL', symbol: 'POL', decimals: 18 },
+        rpcUrls: ['https://polygon-bor-rpc.publicnode.com'], blockExplorerUrls: ['https://polygonscan.com'],
+    },
+    Linea: {
+        chainId: '0xe708', chainName: 'Linea',
+        nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+        rpcUrls: ['https://rpc.linea.build'], blockExplorerUrls: ['https://lineascan.build'],
+    },
+    'BNB Chain': {
+        chainId: '0x38', chainName: 'BNB Smart Chain',
+        nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 },
+        rpcUrls: ['https://bsc-rpc.publicnode.com'], blockExplorerUrls: ['https://bscscan.com'],
+    },
+};
+const UNIVERSAL_BRIDGE_NATIVE_TOKEN = '0x0000000000000000000000000000000000000000';
 const BASE_SEPOLIA_CHAIN_ID = '0x14a34';
 const BASE_SEPOLIA_CONFIG = {
     chainId: BASE_SEPOLIA_CHAIN_ID,
@@ -846,6 +897,15 @@ function handleLoginSuccess() {
     showNotification("OK!");
 }
 
+let authExpiryHandled = false;
+
+function handleExpiredAuthSession() {
+    if (authExpiryHandled) return;
+    authExpiryHandled = true;
+    returnToMainSite();
+    showNotification(t('sessionExpired'), 'error');
+}
+
 function closeWalletConnectModal() {
     document.getElementById('walletConnectModal')?.classList.remove('show');
 }
@@ -853,6 +913,224 @@ function closeWalletConnectModal() {
 function handleWalletConnectOverlayClick(event) {
     if (event.target.id === 'walletConnectModal' && mousedownOverlayTarget.id === 'walletConnectModal') {
         closeWalletConnectModal();
+    }
+}
+
+let baseSwapConfirmationResolver = null;
+
+function formatConfirmationUsd(amount, unitPrice) {
+    const value = Number(amount);
+    const price = Number(unitPrice);
+    if (!Number.isFinite(value) || value <= 0 || !Number.isFinite(price) || price <= 0) return '';
+    return `≈ $${(value * price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+function setBaseSwapConfirmationDetails(details) {
+    const container = document.getElementById('baseSwapConfirmDetails');
+    if (!container) return;
+    const visibleDetails = (Array.isArray(details) ? details : []).filter((detail) => detail?.label && detail?.value);
+    container.replaceChildren();
+    if (!visibleDetails.length) {
+        container.style.display = 'none';
+        return;
+    }
+    for (const detail of visibleDetails) {
+        const row = document.createElement('div');
+        row.style.cssText = 'background:rgba(255,255,255,.025); border:1px solid var(--border-color); border-radius:9px; padding:8px 10px; min-width:0;';
+        const label = document.createElement('div');
+        label.textContent = detail.label;
+        label.style.cssText = 'font-size:10px; color:var(--text-muted);';
+        const value = document.createElement('div');
+        value.textContent = detail.value;
+        value.style.cssText = 'font-size:11px; color:#e9d5ff; font-weight:600; line-height:1.35; margin-top:3px; overflow-wrap:anywhere;';
+        row.append(label, value);
+        container.append(row);
+    }
+    container.style.display = 'grid';
+}
+
+function setBaseSwapConfirmationWarning(message = '') {
+    const warning = document.getElementById('baseSwapConfirmWarning');
+    if (!warning) return;
+    warning.textContent = message;
+    warning.style.display = message ? 'block' : 'none';
+}
+
+function getUniversalBridgeRouteWarning(quote) {
+    const locale = translations[getActiveLang()];
+    const fromToken = quote?.from_token || {};
+    const toToken = quote?.to_token || {};
+    const stableSymbols = new Set(['USDC', 'USDT', 'DAI']);
+    const sourcePrice = Number(activeUniversalBridgeAsset?.unit_price_usd || fromToken.priceUSD || fromToken.price_usd);
+    const sameAsset = String(fromToken.symbol || '').toUpperCase() === String(toToken.symbol || '').toUpperCase();
+    const targetPrice = stableSymbols.has(String(toToken.symbol || '').toUpperCase())
+        ? 1
+        : Number(toToken.priceUSD || toToken.price_usd || (sameAsset ? sourcePrice : 0));
+    const sourceValue = Number(quote?.amount_in) * sourcePrice;
+    const minimumValue = Number(quote?.amount_out_min || quote?.amount_out) * targetPrice;
+    if (!Number.isFinite(sourceValue) || !Number.isFinite(minimumValue) || sourceValue <= 0 || minimumValue <= 0) return '';
+    const impactPercent = ((sourceValue - minimumValue) / sourceValue) * 100;
+    if (!Number.isFinite(impactPercent) || impactPercent < 3) return '';
+    return locale.universalBridgeCostWarning
+        .replace('{percent}', impactPercent.toLocaleString(undefined, { maximumFractionDigits: 1 }))
+        .replace('{loss}', `$${(sourceValue - minimumValue).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+}
+
+function openBaseSwapConfirmation(amount, output) {
+    const locale = translations[getActiveLang()];
+    const modal = document.getElementById('baseSwapConfirmModal');
+    if (!modal) return Promise.resolve(false);
+    if (baseSwapConfirmationResolver) baseSwapConfirmationResolver(false);
+    document.getElementById('baseSwapConfirmTitle').textContent = locale.baseSwapModalTitle;
+    document.getElementById('baseSwapConfirmNetwork').textContent = locale.baseSwapModalNetwork;
+    document.getElementById('baseSwapConfirmPayLabel').textContent = locale.baseSwapYouPay;
+    document.getElementById('baseSwapConfirmPayValue').textContent = `${amount} ETH`;
+    document.getElementById('baseSwapConfirmReceiveLabel').textContent = locale.baseSwapYouReceive;
+    document.getElementById('baseSwapConfirmReceiveValue').textContent = `≈ ${output} USDC`;
+    setBaseSwapConfirmationDetails([
+        { label: locale.confirmationAmountUsd, value: formatConfirmationUsd(amount, getSelectedOperationAssetData()?.unit_price_usd) },
+        { label: locale.confirmationNetworkFee, value: locale.confirmationNetworkFeeWallet },
+        { label: locale.confirmationWalletCheck, value: locale.confirmationWalletCheckValue },
+    ]);
+    setBaseSwapConfirmationWarning('');
+    document.getElementById('baseSwapConfirmNotice').textContent = locale.baseSwapModalNotice;
+    document.getElementById('baseSwapConfirmCancel').textContent = locale.baseSwapModalCancel;
+    document.getElementById('baseSwapConfirmProceed').textContent = locale.baseSwapModalProceed;
+    modal.classList.add('show');
+    return new Promise((resolve) => {
+        baseSwapConfirmationResolver = resolve;
+    });
+}
+
+function openBaseTransferConfirmation(amount, recipientAddress, recipientName) {
+    const locale = translations[getActiveLang()];
+    const modal = document.getElementById('baseSwapConfirmModal');
+    if (!modal) return Promise.resolve(false);
+    if (baseSwapConfirmationResolver) baseSwapConfirmationResolver(false);
+    document.getElementById('baseSwapConfirmTitle').textContent = locale.directTransferModalTitle;
+    document.getElementById('baseSwapConfirmNetwork').textContent = locale.directTransferModalNetwork;
+    document.getElementById('baseSwapConfirmPayLabel').textContent = locale.directTransferModalPayLabel;
+    document.getElementById('baseSwapConfirmPayValue').textContent = `${amount} ETH`;
+    document.getElementById('baseSwapConfirmReceiveLabel').textContent = locale.directTransferModalReceiveLabel;
+    document.getElementById('baseSwapConfirmReceiveValue').textContent = `${recipientName} · ${recipientAddress.slice(0, 6)}…${recipientAddress.slice(-4)}`;
+    setBaseSwapConfirmationDetails([
+        { label: locale.confirmationAmountUsd, value: formatConfirmationUsd(amount, getDirectTransferEthAsset()?.unit_price_usd) },
+        { label: locale.confirmationNetworkFee, value: locale.confirmationNetworkFeeWallet },
+        { label: locale.confirmationWalletCheck, value: locale.confirmationWalletCheckValue },
+    ]);
+    setBaseSwapConfirmationWarning('');
+    document.getElementById('baseSwapConfirmNotice').textContent = locale.directTransferModalNotice;
+    document.getElementById('baseSwapConfirmCancel').textContent = locale.baseSwapModalCancel;
+    document.getElementById('baseSwapConfirmProceed').textContent = locale.directTransferModalProceed;
+    modal.classList.add('show');
+    return new Promise((resolve) => {
+        baseSwapConfirmationResolver = resolve;
+    });
+}
+
+function openUniversalBridgeConfirmation(quote, approval = false) {
+    const locale = translations[getActiveLang()];
+    const modal = document.getElementById('baseSwapConfirmModal');
+    if (!modal) return Promise.resolve(false);
+    if (baseSwapConfirmationResolver) baseSwapConfirmationResolver(false);
+    const fromToken = quote?.from_token || {};
+    const toToken = quote?.to_token || {};
+    const routeText = `${quote?.from_network || ''} → ${quote?.to_network || ''}`;
+    document.getElementById('baseSwapConfirmTitle').textContent = approval
+        ? locale.universalBridgeApprovalModalTitle
+        : locale.universalBridgeModalTitle;
+    document.getElementById('baseSwapConfirmNetwork').textContent = approval
+        ? locale.universalBridgeApprovalModalNetwork.replace('{network}', quote?.from_network || '')
+        : locale.universalBridgeModalNetwork.replace('{route}', routeText);
+    document.getElementById('baseSwapConfirmPayLabel').textContent = approval
+        ? locale.universalBridgeApprovalPayLabel
+        : locale.baseSwapYouPay;
+    document.getElementById('baseSwapConfirmPayValue').textContent = approval
+        ? `${quote?.amount_in || ''} ${fromToken.symbol || ''}`
+        : `${quote?.amount_in || ''} ${fromToken.symbol || ''}`;
+    document.getElementById('baseSwapConfirmReceiveLabel').textContent = approval
+        ? locale.universalBridgeApprovalReceiveLabel
+        : locale.baseSwapYouReceive;
+    document.getElementById('baseSwapConfirmReceiveValue').textContent = approval
+        ? `${String(quote?.approval?.spender || '').slice(0, 6)}…${String(quote?.approval?.spender || '').slice(-4)}`
+        : `≥ ${quote?.amount_out_min || quote?.amount_out || ''} ${toToken.symbol || ''}`;
+    const contractAddress = approval ? quote?.approval?.spender : quote?.transaction?.to;
+    setBaseSwapConfirmationDetails([
+        { label: locale.confirmationAmountUsd, value: formatConfirmationUsd(quote?.amount_in, activeUniversalBridgeAsset?.unit_price_usd) },
+        { label: approval ? locale.confirmationApproval : locale.confirmationRouteContract, value: contractAddress || '' },
+        { label: approval ? locale.confirmationApprovalScope : locale.confirmationNetworkFee, value: approval ? locale.confirmationApprovalExact : locale.confirmationNetworkFeeWallet },
+        { label: locale.confirmationWalletCheck, value: locale.confirmationWalletCheckValue },
+    ]);
+    setBaseSwapConfirmationWarning(approval ? '' : getUniversalBridgeRouteWarning(quote));
+    document.getElementById('baseSwapConfirmNotice').textContent = approval
+        ? locale.universalBridgeApprovalModalNotice
+        : locale.universalBridgeModalNotice
+            .replace('{tool}', quote?.tool || 'LI.FI')
+            .replace('{amount}', quote?.amount_out || '—')
+            .replace('{symbol}', toToken.symbol || '');
+    document.getElementById('baseSwapConfirmCancel').textContent = locale.baseSwapModalCancel;
+    document.getElementById('baseSwapConfirmProceed').textContent = approval
+        ? locale.universalBridgeApprovalProceed
+        : locale.universalBridgeModalProceed;
+    modal.classList.add('show');
+    return new Promise((resolve) => {
+        baseSwapConfirmationResolver = resolve;
+    });
+}
+
+function openAaveSupplyConfirmation(quote, approval = false) {
+    const locale = translations[getActiveLang()];
+    const modal = document.getElementById('baseSwapConfirmModal');
+    if (!modal) return Promise.resolve(false);
+    if (baseSwapConfirmationResolver) baseSwapConfirmationResolver(false);
+    const asset = quote?.asset || { symbol: 'USDC' };
+    const pool = String(quote?.pool_address || '');
+    document.getElementById('baseSwapConfirmTitle').textContent = approval
+        ? locale.defiSupplyApprovalTitle
+        : locale.defiSupplyModalTitle;
+    document.getElementById('baseSwapConfirmNetwork').textContent = approval
+        ? locale.defiSupplyApprovalNetwork
+        : locale.defiSupplyModalNetwork;
+    document.getElementById('baseSwapConfirmPayLabel').textContent = approval
+        ? locale.defiSupplyApprovalPay
+        : locale.defiSupplyPay;
+    document.getElementById('baseSwapConfirmPayValue').textContent = `${quote?.amount || ''} ${asset.symbol || ''}`;
+    document.getElementById('baseSwapConfirmReceiveLabel').textContent = approval
+        ? locale.defiSupplyApprovalReceive
+        : locale.defiSupplyReceive;
+    document.getElementById('baseSwapConfirmReceiveValue').textContent = approval
+        ? `${pool.slice(0, 6)}…${pool.slice(-4)}`
+        : `a${asset.symbol || 'USDC'}`;
+    setBaseSwapConfirmationDetails([
+        { label: approval ? locale.confirmationApproval : locale.defiSupplyRate, value: approval ? pool : `${Number(quote?.annual_supply_rate_percent || 0).toLocaleString(undefined, { maximumFractionDigits: 4 })}%` },
+        { label: approval ? locale.confirmationApprovalScope : locale.confirmationRouteContract, value: approval ? locale.confirmationApprovalExact : pool },
+        { label: locale.confirmationNetworkFee, value: locale.confirmationNetworkFeeWallet },
+        { label: locale.confirmationWalletCheck, value: locale.confirmationWalletCheckValue },
+    ]);
+    setBaseSwapConfirmationWarning(approval ? '' : locale.defiSupplyRateVariable);
+    document.getElementById('baseSwapConfirmNotice').textContent = approval
+        ? locale.defiSupplyApprovalNotice
+        : locale.defiSupplyModalNotice;
+    document.getElementById('baseSwapConfirmCancel').textContent = locale.baseSwapModalCancel;
+    document.getElementById('baseSwapConfirmProceed').textContent = approval
+        ? locale.defiSupplyApprovalProceed
+        : locale.defiSupplyProceed;
+    modal.classList.add('show');
+    return new Promise((resolve) => {
+        baseSwapConfirmationResolver = resolve;
+    });
+}
+
+function finishBaseSwapConfirmation(confirmed) {
+    document.getElementById('baseSwapConfirmModal')?.classList.remove('show');
+    const resolve = baseSwapConfirmationResolver;
+    baseSwapConfirmationResolver = null;
+    if (resolve) resolve(Boolean(confirmed));
+}
+
+function handleBaseSwapConfirmOverlayClick(event) {
+    if (event.target.id === 'baseSwapConfirmModal' && mousedownOverlayTarget?.id === 'baseSwapConfirmModal') {
+        finishBaseSwapConfirmation(false);
     }
 }
 
@@ -885,7 +1163,7 @@ function switchMenu(element, sectionName) {
 }
 
 function switchActivityPane(pane) {
-    const allowedPanes = new Set(['swap', 'plan', 'bridge', 'defi', 'quests']);
+    const allowedPanes = new Set(['swap', 'transfer', 'plan', 'defi', 'quests', 'journal']);
     localStorage.setItem('ax_activity_pane', allowedPanes.has(pane) ? pane : 'swap');
     renderDashboardContent('Farming');
 }
@@ -1051,6 +1329,23 @@ async function switchToBaseMainnet(provider) {
     if (chainId !== BASE_MAINNET_CHAIN_ID) throw new Error('base_mainnet_not_selected');
 }
 
+async function switchToUniversalBridgeNetwork(provider, network) {
+    const config = UNIVERSAL_BRIDGE_NETWORKS[network];
+    if (!provider?.request || !config) throw new Error('universal_bridge_network_unsupported');
+    let chainId = await provider.request({ method: 'eth_chainId' });
+    if (String(chainId).toLowerCase() === config.chainId.toLowerCase()) return;
+    try {
+        await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: config.chainId }] });
+    } catch (switchError) {
+        if (switchError?.code !== 4902) throw switchError;
+        await provider.request({ method: 'wallet_addEthereumChain', params: [config] });
+    }
+    chainId = await provider.request({ method: 'eth_chainId' });
+    if (String(chainId).toLowerCase() !== config.chainId.toLowerCase()) {
+        throw new Error('universal_bridge_network_not_selected');
+    }
+}
+
 async function sendBaseSepoliaTestTransfer() {
     const locale = translations[getActiveLang()];
     const provider = window.ethereum;
@@ -1100,6 +1395,7 @@ async function loadTransferCenter() {
     const locale = translations[getActiveLang()];
     try {
         const response = await fetch('/api/transfer-center');
+        if (response.status === 401) return;
         const data = await response.json();
         if (!response.ok || !Array.isArray(data.wallets) || !Array.isArray(data.templates)) throw new Error('transfer_center_unavailable');
         savedTransferTemplates = data.templates;
@@ -1218,7 +1514,159 @@ async function sendTransferTemplate(templateId) {
     }
 }
 
+function getDirectTransferEthAsset() {
+    const assets = Array.isArray(directTransferBalanceData?.visible_assets)
+        ? directTransferBalanceData.visible_assets
+        : [];
+    return assets.find((asset) => asset.symbol === 'ETH') || null;
+}
+
+function updateDirectTransferAmount() {
+    const availability = document.getElementById('directTransferAvailability');
+    const amountUsd = document.getElementById('directTransferUsd');
+    const input = document.getElementById('directTransferAmount');
+    const locale = translations[getActiveLang()];
+    const asset = getDirectTransferEthAsset();
+    if (!availability || !amountUsd || !input || !asset) return false;
+    const amount = Number(input.value);
+    const available = Number(asset.available_to_send);
+    if (!Number.isFinite(amount) || amount <= 0) {
+        amountUsd.textContent = '';
+        availability.textContent = locale.directTransferAvailable
+            .replace('{amount}', asset.available_to_send)
+            .replace('{reserve}', asset.gas_reserve || '0');
+        availability.style.color = '#bfdbfe';
+        return false;
+    }
+    amountUsd.textContent = locale.directTransferUsd.replace('{usd}', (amount * Number(asset.unit_price_usd)).toLocaleString(undefined, {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    }));
+    if (amount > available) {
+        availability.textContent = locale.directTransferExceeds.replace('{amount}', asset.available_to_send);
+        availability.style.color = '#fca5a5';
+        return false;
+    }
+    availability.textContent = locale.directTransferAvailable
+        .replace('{amount}', asset.available_to_send)
+        .replace('{reserve}', asset.gas_reserve || '0');
+    availability.style.color = '#86efac';
+    return true;
+}
+
+function useDirectTransferMax() {
+    const input = document.getElementById('directTransferAmount');
+    const asset = getDirectTransferEthAsset();
+    if (!input || !asset) return;
+    input.value = asset.available_to_send;
+    updateDirectTransferAmount();
+}
+
+async function loadDirectTransferPanel() {
+    const container = document.getElementById('directTransferPanel');
+    if (!container) return;
+    const locale = translations[getActiveLang()];
+    const activeAddress = getActiveBaseWalletAddress();
+    if (!/^0x[0-9a-fA-F]{40}$/.test(activeAddress)) {
+        container.textContent = locale.directTransferWalletRequired;
+        container.style.color = '#fbbf24';
+        return;
+    }
+    try {
+        const transferResponse = await fetch('/api/transfer-center');
+        const transferData = await transferResponse.json();
+        if (!transferResponse.ok || !Array.isArray(transferData.wallets)) throw new Error('transfer_center_unavailable');
+        const sender = transferData.wallets.find((wallet) => wallet.address?.toLowerCase() === activeAddress.toLowerCase());
+        const recipients = transferData.wallets.filter((wallet) => wallet.address?.toLowerCase() !== activeAddress.toLowerCase());
+        if (!sender || !recipients.length) {
+            container.textContent = locale.directTransferNeedRecipient;
+            container.style.color = 'var(--text-muted)';
+            return;
+        }
+        const balanceResponse = await fetch(`/api/wallets/${sender.id}/network-balance/Base`);
+        const balanceData = await balanceResponse.json();
+        if (!balanceResponse.ok) throw new Error('base_balance_unavailable');
+        const ethAsset = (balanceData.visible_assets || []).find((asset) => asset.symbol === 'ETH');
+        if (!ethAsset || Number(ethAsset.available_to_send) <= 0) {
+            container.textContent = locale.directTransferInsufficientEth;
+            container.style.color = '#fbbf24';
+            return;
+        }
+        directTransferWallets = transferData.wallets;
+        directTransferBalanceData = balanceData;
+        const recipientOptions = recipients.map((wallet) => `<option value="${Number(wallet.id)}">${escapeHtml(transferTemplateWalletName(wallet))} · ${escapeHtml(wallet.address.slice(0, 6))}…${escapeHtml(wallet.address.slice(-4))}</option>`).join('');
+        const history = Array.isArray(transferData.history) && transferData.history.length
+            ? transferData.history.slice(0, 5).map((record) => `<div style="display:flex; justify-content:space-between; gap:10px; font-size:12px; padding:8px 0; border-top:1px solid var(--border-color);"><span style="color:var(--text-muted);">${escapeHtml(record.amount)} ETH → ${escapeHtml(`${record.to_address.slice(0, 6)}…${record.to_address.slice(-4)}`)}</span><a href="${BASE_MAINNET_CONFIG.blockExplorerUrls[0]}/tx/${encodeURIComponent(record.tx_hash)}" target="_blank" rel="noopener noreferrer" style="color:#c4b5fd; text-decoration:none;">${locale.directTransferOpenTx}</a></div>`).join('')
+            : `<div style="color:var(--text-muted); font-size:12px;">${locale.directTransferNoHistory}</div>`;
+        container.style.color = '';
+        container.innerHTML = `
+            <div style="display:grid; grid-template-columns:1.4fr 1fr; gap:10px;">
+                <label style="color:var(--text-muted); font-size:12px;">${locale.directTransferRecipient}<select id="directTransferRecipient" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;">${recipientOptions}</select></label>
+                <label style="color:var(--text-muted); font-size:12px;">${locale.directTransferAmount}<input id="directTransferAmount" inputmode="decimal" placeholder="0.001" oninput="updateDirectTransferAmount()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"><div id="directTransferUsd" style="color:#c4b5fd; font-size:14px; font-weight:700; margin-top:6px;"></div></label>
+            </div>
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:8px;">
+                <div id="directTransferAvailability" style="font-size:12px;"></div>
+                <button type="button" onclick="useDirectTransferMax()" class="btn-dark-sm" style="padding:6px 10px; font-size:11px; white-space:nowrap;">${locale.directTransferMax}</button>
+            </div>
+            <button type="button" id="directTransferSendButton" onclick="sendDirectBaseTransfer()" class="btn-purple-lg" style="font-size:13px; padding:11px 16px; width:auto; margin-top:14px;">${locale.directTransferReview}</button>
+            <div id="directTransferResult" style="font-size:12px; line-height:1.5; margin-top:10px;"></div>
+            <details style="border-top:1px solid var(--border-color); margin-top:16px; padding-top:13px;"><summary style="color:var(--text-muted); cursor:pointer; font-size:12px;">${locale.directTransferHistory}</summary><div style="margin-top:9px;">${history}</div></details>`;
+        updateDirectTransferAmount();
+    } catch (_) {
+        container.textContent = locale.directTransferLoadError;
+        container.style.color = '#fca5a5';
+    }
+}
+
+async function sendDirectBaseTransfer() {
+    const locale = translations[getActiveLang()];
+    const recipientId = Number(document.getElementById('directTransferRecipient')?.value);
+    const recipient = directTransferWallets.find((wallet) => wallet.id === recipientId);
+    const amount = document.getElementById('directTransferAmount')?.value.trim() || '';
+    const amountWei = parseTestEthAmount(amount);
+    const result = document.getElementById('directTransferResult');
+    const button = document.getElementById('directTransferSendButton');
+    const provider = walletConnectProvider?.session ? walletConnectProvider : window.ethereum;
+    if (!recipient || !amountWei || !provider?.request || !updateDirectTransferAmount()) {
+        if (result) result.innerHTML = `<span style="color:#fca5a5;">${locale.directTransferInvalid}</span>`;
+        return;
+    }
+    try {
+        let accounts = await provider.request({ method: 'eth_accounts' });
+        if (!Array.isArray(accounts) || !accounts[0]) accounts = await provider.request({ method: 'eth_requestAccounts' });
+        const fromAddress = accounts?.[0];
+        const activeAddress = getActiveBaseWalletAddress();
+        if (!/^0x[0-9a-fA-F]{40}$/.test(fromAddress || '') || fromAddress.toLowerCase() !== activeAddress.toLowerCase() || fromAddress.toLowerCase() === recipient.address.toLowerCase()) {
+            throw new Error('invalid_transfer_wallet');
+        }
+        if (!await openBaseTransferConfirmation(amount, recipient.address, transferTemplateWalletName(recipient))) return;
+        setButtonLoading(button, true, locale.directTransferSigning);
+        await switchToBaseMainnet(provider);
+        const txHash = await provider.request({
+            method: 'eth_sendTransaction',
+            params: [{ from: fromAddress, to: recipient.address, value: `0x${amountWei.toString(16)}` }],
+        });
+        try {
+            await fetch('/api/transfer-records/direct', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ recipient_wallet_id: recipient.id, from_address: fromAddress, to_address: recipient.address, amount, tx_hash: txHash }),
+            });
+        } catch (_) {
+            // The wallet submitted the transaction; history can be refreshed later.
+        }
+        const txUrl = `${BASE_MAINNET_CONFIG.blockExplorerUrls[0]}/tx/${encodeURIComponent(txHash)}`;
+        if (result) result.innerHTML = `<span style="color:#86efac;">${locale.directTransferSubmitted}</span> <a href="${txUrl}" target="_blank" rel="noopener noreferrer" style="color:#c4b5fd;">${locale.directTransferOpenTx}</a>`;
+    } catch (error) {
+        const isRejected = error?.code === 4001 || error?.code === 'ACTION_REJECTED';
+        if (result) result.innerHTML = `<span style="color:#fca5a5;">${isRejected ? locale.directTransferRejected : locale.directTransferFailed}</span>`;
+    } finally {
+        setButtonLoading(button, false, locale.directTransferReview);
+    }
+}
+
 let activeBaseSwapQuote = null;
+let activeAaveSupplyQuote = null;
 
 function formatUsdcAmount(rawAmount) {
     try {
@@ -1256,10 +1704,11 @@ async function loadBaseSwapHistory() {
 
 async function requestBaseSwapQuote() {
     const locale = translations[getActiveLang()];
-    const amount = normalizeEthInput(document.getElementById('baseSwapAmount')?.value);
+    const amount = normalizeEthInput(document.getElementById('operationAmount')?.value || document.getElementById('baseSwapAmount')?.value);
     const connectedAddress = getActiveBaseWalletAddress();
     const result = document.getElementById('baseSwapResult');
     const button = document.getElementById('baseSwapQuoteButton');
+    if (!validateOperationAmount()) return;
     if (!/^0x[0-9a-fA-F]{40}$/.test(connectedAddress)) {
         if (result) result.innerHTML = `<span style="color:#fca5a5;">${locale.baseSwapWalletRequired}</span>`;
         return;
@@ -1326,7 +1775,7 @@ async function submitBaseSwap() {
             return;
         }
         const expectedOutput = formatUsdcAmount(quote.amount_out) || '—';
-        if (!window.confirm(locale.baseSwapConfirm.replace('{amount}', quote.amount_in).replace('{output}', expectedOutput))) return;
+        if (!await openBaseSwapConfirmation(quote.amount_in, expectedOutput)) return;
         setButtonLoading(button, true, locale.baseSwapPreparing);
         const response = await fetch('/api/base-swap/build', {
             method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ quote_id: quote.quote_id }),
@@ -1359,7 +1808,11 @@ async function submitBaseSwap() {
         if (result) result.innerHTML = `<span style="color:#86efac;">${locale.baseSwapSubmitted}</span> <a href="${txUrl}" target="_blank" rel="noopener noreferrer" style="color:#c4b5fd;">${locale.baseSwapOpenTx}</a>`;
     } catch (error) {
         const rejected = error?.code === 4001 || error?.code === 'ACTION_REJECTED';
-        if (result) result.innerHTML = `<span style="color:#fca5a5;">${rejected ? locale.baseSwapRejected : (translateBackendDetail(error.message) || locale.baseSwapFailed)}</span>`;
+        const errorMessage = String(error?.message || '');
+        const displayMessage = errorMessage.includes('Base Swap quote expired')
+            ? locale.baseSwapExpired
+            : (translateBackendDetail(errorMessage) || locale.baseSwapFailed);
+        if (result) result.innerHTML = `<span style="color:#fca5a5;">${rejected ? locale.baseSwapRejected : displayMessage}</span>`;
     } finally {
         setButtonLoading(button, false, locale.baseSwapReview);
     }
@@ -1381,10 +1834,10 @@ async function getWalletConnectProvider() {
     walletConnectProvider = await EthereumProvider.init({
         projectId: config.project_id,
         showQrModal: false,
-        optionalChains: [config.chain_id],
-        optionalMethods: ['eth_requestAccounts', 'eth_accounts', 'eth_chainId', 'eth_sendTransaction', 'wallet_switchEthereumChain'],
+        optionalChains: Object.values(UNIVERSAL_BRIDGE_NETWORKS).map((network) => parseInt(network.chainId, 16)),
+        optionalMethods: ['eth_requestAccounts', 'eth_accounts', 'eth_chainId', 'eth_sendTransaction', 'wallet_switchEthereumChain', 'wallet_addEthereumChain', 'eth_call', 'eth_getTransactionReceipt'],
         optionalEvents: ['accountsChanged', 'chainChanged'],
-        rpcMap: { [config.chain_id]: BASE_MAINNET_CONFIG.rpcUrls[0] },
+        rpcMap: Object.fromEntries(Object.values(UNIVERSAL_BRIDGE_NETWORKS).map((network) => [parseInt(network.chainId, 16), network.rpcUrls[0]])),
         metadata: {
             name: 'AIRDROP-X',
             description: 'Non-custodial Base wallet connection',
@@ -1469,12 +1922,14 @@ async function addNewWalletToDB() {
 async function loadWalletsFromDB() {
     const username = localStorage.getItem('airdrop_username') || "Robert";
     const container = document.getElementById('walletsListContainer');
-    if(!container) return;
-    const res = await fetch(`/api/wallets/${username}`);
-    const data = await res.json();
-    userPlan = data.plan;
     const t = translations[currentLang];
-    
+    if(!container) return;
+    try {
+        const res = await fetch(`/api/wallets/${username}`);
+        if (res.status === 401) return;
+        const data = await res.json();
+        if (!res.ok || !Array.isArray(data.wallets)) throw new Error('wallet_load_failed');
+    userPlan = data.plan;
     const badge = document.getElementById('slot-info-badge');
     if(badge) badge.innerText = `${t.slotsLabel}: ${data.wallets.length} / ${data.max_slots} (${data.plan})`;
     
@@ -1509,6 +1964,9 @@ async function loadWalletsFromDB() {
         }).join('');
     } else {
         container.innerHTML = `<div style="color: var(--text-muted); font-size: 13px;">${t.noWal}</div>`;
+    }
+    } catch (_) {
+        container.innerHTML = `<div style="color:#fca5a5; font-size:13px;">${t.walletLoadError}</div>`;
     }
 }
 
@@ -1660,7 +2118,6 @@ function updateDailyConfigsUI() {
     const container = document.getElementById('dailyTimeConfigsContainer');
     if (!container) return;
     const t = translations[currentLang];
-    const hideAllBanners = localStorage.getItem('hide_all_banners') === 'true';
     
     const activeDays = [];
     document.querySelectorAll('#globalCalendarGrid .calendar-day.active').forEach(el => {
@@ -1672,11 +2129,7 @@ function updateDailyConfigsUI() {
         return;
     }
 
-    let htmlContent = hideAllBanners ? '' : `
-        <div style="font-size: 13px; color: #b19cd9; background: rgba(157,78,221,0.1); padding: 10px 14px; border-radius: 10px; border: 1px solid rgba(157,78,221,0.3); margin-bottom: 14px; line-height: 1.4;">
-            ${t.timeAlert}
-        </div>
-    `;
+    let htmlContent = renderInterfaceHint('scheduler-time-alert', t.timeAlert, 'purple', '', '◷');
 
     htmlContent += activeDays.map(day => {
         const savedTime = localStorage.getItem(`day_time_${day}`) || `${String(Math.floor(Math.random()*15)+8).padStart(2,'0')}:${String(Math.floor(Math.random()*60)).padStart(2,'0')}`;
@@ -1691,9 +2144,9 @@ function updateDailyConfigsUI() {
                     
                     <div style="display: flex; align-items: center; gap: 6px;">
                         <span style="font-size: 12px; color: var(--text-muted);">${t.tTime}</span>
-                        <input type="text" class="auth-input day-time-val" value="${savedTime}" placeholder="15:30" maxlength="5"
+                        <input type="text" class="auth-input day-time-val" value="${savedTime}" placeholder="15:30" maxlength="5" inputmode="numeric" pattern="[0-2][0-9]:[0-5][0-9]"
                             style="padding: 6px; width: 60px; font-size: 13px; background: var(--bg-card); text-align: center;"
-                            oninput="let v = this.value.replace(/[^0-9]/g, '').substring(0, 4); let h = v.substring(0, 2); let m = v.substring(2, 4); if (h && parseInt(h) > 23) h = '23'; if (m && parseInt(m) > 59) m = '59'; this.value = (v.length > 2) ? h + ':' + m : h;">
+                            oninput="format24HourTimeInput(this)" onblur="normalize24HourTimeInput(this)">
                     </div>
                     
                     <div style="display: flex; align-items: center; gap: 6px;">
@@ -1763,10 +2216,12 @@ async function saveGlobalProfileSettings() {
     const dailySchedule = {};
     document.querySelectorAll('#dailyTimeConfigsContainer > div[data-day]').forEach(row => {
         const day = row.getAttribute('data-day');
-        const time = row.querySelector('.day-time-val').value;
+        const timeInput = row.querySelector('.day-time-val');
+        const time = normalize24HourTime(timeInput.value);
         const minDelay = parseInt(row.querySelector('.day-min-delay-val').value);
         const maxDelay = parseInt(row.querySelector('.day-max-delay-val').value);
-        if (isNaN(minDelay) || isNaN(maxDelay) || minDelay < 15 || maxDelay > 7200 || minDelay >= maxDelay) hasError = true;
+        if (!time || isNaN(minDelay) || isNaN(maxDelay) || minDelay < 15 || maxDelay > 7200 || minDelay >= maxDelay) hasError = true;
+        if (time) timeInput.value = time;
         dailySchedule[day] = { time, minDelay, maxDelay };
     });
     if (hasError) return;
@@ -1778,15 +2233,20 @@ async function saveGlobalProfileSettings() {
     if (now - lastSaveTimestamp < 1500) return;
     lastSaveTimestamp = now;
 
-    const notifySettings = document.getElementById('notifSettingsToggle')?.checked ?? true;
-    const notifyStart = document.getElementById('notifStartToggle')?.checked ?? true;
-    const notifySuccess = document.getElementById('notifSuccessToggle')?.checked ?? true;
-    const notifyError = document.getElementById('notifErrorToggle')?.checked ?? true;
+    const notifyTransactionSubmitted = document.getElementById('notifTransactionSubmittedToggle')?.checked ?? false;
+    const notifyTransactionFinal = document.getElementById('notifTransactionFinalToggle')?.checked ?? true;
+    const notifyReminders = document.getElementById('notifRemindersToggle')?.checked ?? true;
+    const notifyErrors = document.getElementById('notifErrorsToggle')?.checked ?? true;
+    const notifySettings = true;
+    const notifyStart = notifyTransactionSubmitted;
+    const notifySuccess = notifyTransactionFinal;
+    const notifyError = notifyErrors;
+    const interfaceHints = areInterfaceHintsEnabled();
 
-    localStorage.setItem('ax_notify_settings', notifySettings);
-    localStorage.setItem('ax_notify_start', notifyStart);
-    localStorage.setItem('ax_notify_success', notifySuccess);
-    localStorage.setItem('ax_notify_error', notifyError);
+    localStorage.setItem('ax_notify_transactions_submitted', notifyTransactionSubmitted);
+    localStorage.setItem('ax_notify_transactions_final', notifyTransactionFinal);
+    localStorage.setItem('ax_notify_reminders', notifyReminders);
+    localStorage.setItem('ax_notify_errors', notifyErrors);
 
     document.querySelectorAll('#dailyTimeConfigsContainer > div[data-day]').forEach(row => {
         const day = row.getAttribute('data-day');
@@ -1807,6 +2267,11 @@ async function saveGlobalProfileSettings() {
         notifyStart,
         notifySuccess,
         notifyError,
+        notifyTransactionSubmitted,
+        notifyTransactionFinal,
+        notifyReminders,
+        notifyErrors,
+        interfaceHints,
         language: currentLang
     };
     
@@ -1827,11 +2292,67 @@ async function saveGlobalProfileSettings() {
     }
 }
 
-function toggleHideBanners(checkbox) {
-    localStorage.setItem('hide_all_banners', checkbox.checked);
-    const t = translations[currentLang];
-    showNotification(checkbox.checked ? t.msgBannersHidden : t.msgBannersShown, "success");
+function areInterfaceHintsEnabled() {
+    const value = localStorage.getItem('ax_interface_hints_enabled');
+    if (value !== null) return value !== 'false';
+
+    // Migrate the previous inverse setting without changing the user's choice.
+    return localStorage.getItem('hide_all_banners') !== 'true';
+}
+
+function getDismissedInterfaceHints() {
+    try {
+        return JSON.parse(localStorage.getItem('ax_dismissed_interface_hints') || '{}');
+    } catch (error) {
+        return {};
+    }
+}
+
+function isInterfaceHintVisible(hintId) {
+    return areInterfaceHintsEnabled() && !getDismissedInterfaceHints()[hintId];
+}
+
+function dismissInterfaceHint(hintId) {
+    const dismissed = getDismissedInterfaceHints();
+    dismissed[hintId] = true;
+    localStorage.setItem('ax_dismissed_interface_hints', JSON.stringify(dismissed));
+    document.getElementById(`interfaceHint-${hintId}`)?.remove();
+}
+
+function renderInterfaceHint(hintId, message, tone = 'info', contentId = '', icon = 'ℹ') {
+    if (!isInterfaceHintVisible(hintId)) return '';
+
+    const tones = {
+        info: { background: 'rgba(59,130,246,.08)', border: 'rgba(59,130,246,.34)', color: '#bfdbfe' },
+        purple: { background: 'rgba(124,58,237,.10)', border: 'rgba(167,139,250,.34)', color: '#ddd6fe' },
+        warning: { background: 'rgba(234,179,8,.09)', border: 'rgba(234,179,8,.38)', color: '#fde68a' },
+        success: { background: 'rgba(34,197,94,.08)', border: 'rgba(34,197,94,.32)', color: '#bbf7d0' },
+    };
+    const style = tones[tone] || tones.info;
+    const content = contentId
+        ? `<span id="${contentId}">${escapeHtml(message)}</span>`
+        : `<span>${escapeHtml(message)}</span>`;
+
+    return `<div id="interfaceHint-${hintId}" style="background:${style.background}; border:1px solid ${style.border}; color:${style.color}; padding:11px 12px; border-radius:11px; font-size:12px; line-height:1.5; margin:12px 0; display:flex; align-items:flex-start; gap:9px;">
+        <span aria-hidden="true" style="font-size:15px; line-height:18px;">${icon}</span>
+        <div style="flex:1; min-width:0;">${content}</div>
+        <button type="button" onclick="dismissInterfaceHint('${hintId}')" aria-label="${escapeHtml(t('interfaceHintClose'))}" title="${escapeHtml(t('interfaceHintClose'))}" style="appearance:none; border:0; background:transparent; color:inherit; cursor:pointer; font-size:18px; line-height:16px; padding:0 1px; opacity:.78;">×</button>
+    </div>`;
+}
+
+function toggleInterfaceHints(checkbox) {
+    const enabled = Boolean(checkbox.checked);
+    localStorage.setItem('ax_interface_hints_enabled', String(enabled));
+    localStorage.removeItem('hide_all_banners');
+    if (enabled) localStorage.removeItem('ax_dismissed_interface_hints');
+
+    showNotification(enabled ? t('setInterfaceHintsOn') : t('setInterfaceHintsOff'), 'success');
     renderDashboardContent(currentSection);
+}
+
+// Kept as a compatibility alias for older inline markup.
+function toggleHideBanners(checkbox) {
+    toggleInterfaceHints({ checked: !checkbox.checked });
 }
 
 // --- Планирование расходов и сканирование ---
@@ -1970,6 +2491,1398 @@ async function saveTransactionPlan() {
         showNotification(translations[currentLang].planSaved, 'success');
     } catch (error) {
         showNotification(translations[currentLang].planInvalid, 'error');
+    }
+}
+
+function normalize24HourTime(value) {
+    const match = String(value || '').trim().match(/^([01]?\d|2[0-3]):([0-5]\d)$/);
+    if (!match) return null;
+    return `${match[1].padStart(2, '0')}:${match[2]}`;
+}
+
+function format24HourTimeInput(input) {
+    if (!input) return;
+    const digits = input.value.replace(/\D/g, '').slice(0, 4);
+    const hours = digits.slice(0, 2);
+    const minutes = digits.slice(2, 4);
+    input.value = minutes ? `${hours}:${minutes}` : hours;
+}
+
+function normalize24HourTimeInput(input) {
+    const normalized = normalize24HourTime(input?.value);
+    if (normalized) input.value = normalized;
+    return Boolean(normalized);
+}
+
+function toggleActionReminderFields() {
+    const enabled = document.getElementById('actionReminderEnabled')?.checked;
+    const fields = document.getElementById('actionReminderFields');
+    if (!fields) return;
+    fields.style.opacity = enabled ? '1' : '.5';
+    fields.style.pointerEvents = enabled ? 'auto' : 'none';
+}
+
+async function loadActionReminder() {
+    const status = document.getElementById('actionReminderStatus');
+    if (!status) return;
+    const locale = translations[currentLang];
+    try {
+        const response = await fetch('/api/action-reminder');
+        const data = await response.json();
+        if (!response.ok || !data.reminder) throw new Error('action_reminder_unavailable');
+        const reminder = data.reminder;
+        const fieldMap = {
+            actionReminderDay: reminder.day_of_week,
+            actionReminderTime: reminder.time_of_day,
+        };
+        Object.entries(fieldMap).forEach(([id, value]) => {
+            const input = document.getElementById(id);
+            if (input && value !== undefined) input.value = value;
+        });
+        const enabled = document.getElementById('actionReminderEnabled');
+        const telegram = document.getElementById('actionReminderTelegram');
+        if (enabled) enabled.checked = Boolean(reminder.enabled);
+        if (telegram) telegram.checked = Boolean(reminder.telegram_enabled);
+        status.textContent = data.telegram_linked ? locale.planReminderTelegramLinked : locale.planReminderTelegramNotLinked;
+        status.style.color = data.telegram_linked ? '#86efac' : '#fbbf24';
+        toggleActionReminderFields();
+    } catch (error) {
+        status.textContent = locale.planReminderLoadError;
+        status.style.color = '#fca5a5';
+        toggleActionReminderFields();
+    }
+}
+
+async function saveActionReminder() {
+    const locale = translations[currentLang];
+    const status = document.getElementById('actionReminderStatus');
+    const timeInput = document.getElementById('actionReminderTime');
+    const normalizedTime = normalize24HourTime(timeInput?.value);
+    if (!normalizedTime) {
+        if (status) {
+            status.textContent = locale.planReminderTimeInvalid;
+            status.style.color = '#fca5a5';
+        }
+        showNotification(locale.planReminderTimeInvalid, 'error');
+        return;
+    }
+    timeInput.value = normalizedTime;
+    const payload = {
+        network: document.getElementById('planNetwork')?.value || 'Base',
+        day_of_week: document.getElementById('actionReminderDay')?.value || 'Mon',
+        time_of_day: normalizedTime,
+        enabled: Boolean(document.getElementById('actionReminderEnabled')?.checked),
+        telegram_enabled: Boolean(document.getElementById('actionReminderTelegram')?.checked),
+    };
+    try {
+        const response = await fetch('/api/action-reminder', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'action_reminder_unavailable');
+        if (status) {
+            status.textContent = data.telegram_linked ? locale.planReminderSaved : locale.planReminderSavedNoTelegram;
+            status.style.color = data.telegram_linked ? '#86efac' : '#fbbf24';
+        }
+        showNotification(locale.planReminderSaved, 'success');
+    } catch (error) {
+        if (status) {
+            status.textContent = locale.planReminderLoadError;
+            status.style.color = '#fca5a5';
+        }
+        showNotification(locale.planReminderLoadError, 'error');
+    }
+}
+
+function getBridgeGasText(data) {
+    const locale = translations[getActiveLang()];
+    const level = data?.gas_level || 'unavailable';
+    const levelKey = `gas${level.charAt(0).toUpperCase()}${level.slice(1)}`;
+    return `${data?.gas || 'N/A'} · ${locale[levelKey] || locale.gasUnavailable}`;
+}
+
+function getOperationBuilderAmount() {
+    return normalizeEthInput(document.getElementById('operationAmount')?.value || document.getElementById('bridgePlanAmount')?.value);
+}
+
+function getOperationBuilderDestination() {
+    return document.getElementById('operationDestinationNetwork')?.value || document.getElementById('bridgePlanDestination')?.value || '';
+}
+
+function getOperationBuilderSource() {
+    return document.getElementById('operationSourceNetwork')?.value || 'Base';
+}
+
+function formatOperationVisibleAssets(data) {
+    const assets = Array.isArray(data?.visible_assets) ? data.visible_assets : [];
+    return assets.map((asset) => {
+        const usd = Number(asset.estimated_usd);
+        const usdText = Number.isFinite(usd)
+            ? ` (≈$${usd.toLocaleString(undefined, { maximumFractionDigits: 2 })})`
+            : '';
+        return `${asset.amount} ${asset.symbol}${usdText}`;
+    }).join(' · ');
+}
+
+function getSelectedOperationAssetData() {
+    const address = document.getElementById('operationSourceAsset')?.value || '';
+    if (activeUniversalBridgeAsset?.token?.address?.toLowerCase() === address.toLowerCase()) {
+        return activeUniversalBridgeAsset;
+    }
+    const assets = Array.isArray(activeOperationBalanceData?.visible_assets) ? activeOperationBalanceData.visible_assets : [];
+    return assets.find((asset) => (asset.address || asset.symbol).toLowerCase() === address.toLowerCase()) || null;
+}
+
+function updateOperationSourceAssetOptions(data) {
+    const select = document.getElementById('operationSourceAsset');
+    if (!select) return;
+    const locale = translations[getActiveLang()];
+    const previousValue = select.value;
+    const assets = Array.isArray(data?.visible_assets) ? data.visible_assets : [];
+    if (!assets.length) {
+        select.innerHTML = `<option value="">${locale.operationNoEligibleAssets}</option>`;
+        select.disabled = true;
+        return;
+    }
+    select.innerHTML = assets.map((asset) => {
+        const usd = Number(asset.estimated_usd);
+        const usdText = Number.isFinite(usd) ? ` · ≈$${usd.toLocaleString(undefined, { maximumFractionDigits: 2 })}` : '';
+        return `<option value="${asset.symbol}">${asset.symbol}${usdText}</option>`;
+    }).join('');
+    select.disabled = false;
+    select.value = assets.some((asset) => asset.symbol === previousValue) ? previousValue : assets[0].symbol;
+}
+
+function getUniversalBridgeToken(network, address) {
+    return (universalBridgeTokensByNetwork[network] || []).find((token) => token.address?.toLowerCase() === String(address || '').toLowerCase()) || null;
+}
+
+function populateUniversalBridgeTokenSelect(elementId, network, preferredAddress = '') {
+    const select = document.getElementById(elementId);
+    if (!select) return null;
+    const allTokens = universalBridgeTokensByNetwork[network] || [];
+    const search = String(document.getElementById(`${elementId}Search`)?.value || '').trim().toLowerCase();
+    const tokens = search
+        ? allTokens.filter((token) => `${token.symbol} ${token.name} ${token.address}`.toLowerCase().includes(search)).slice(0, 100)
+        : allTokens.filter((token) => token.is_core);
+    const previous = preferredAddress || select.value;
+    select.replaceChildren();
+    if (!tokens.length) {
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = translations[getActiveLang()].universalBridgeTokensLoading;
+        select.append(option);
+        select.disabled = true;
+        return null;
+    }
+    for (const token of tokens) {
+        const option = document.createElement('option');
+        option.value = token.address;
+        const shortAddress = token.address === UNIVERSAL_BRIDGE_NATIVE_TOKEN ? '' : ` · ${token.address.slice(0, 6)}…${token.address.slice(-4)}`;
+        option.textContent = `${token.symbol} · ${token.name}${shortAddress}`;
+        select.append(option);
+    }
+    const stable = tokens.find((token) => token.symbol?.toUpperCase() === 'USDC');
+    const native = tokens.find((token) => token.address?.toLowerCase() === UNIVERSAL_BRIDGE_NATIVE_TOKEN);
+    const next = tokens.some((token) => token.address?.toLowerCase() === String(previous).toLowerCase())
+        ? previous
+        : (elementId === 'operationReceiveAsset' ? (stable || native || tokens[0])?.address : (native || stable || tokens[0])?.address);
+    select.value = next || '';
+    select.disabled = false;
+    return getUniversalBridgeToken(network, select.value);
+}
+
+function filterUniversalBridgeTokenSelect(elementId) {
+    const network = elementId === 'operationSourceAsset' ? getOperationBuilderSource() : getOperationBuilderDestination();
+    populateUniversalBridgeTokenSelect(elementId, network || getOperationBuilderSource());
+    activeUniversalBridgeQuote = null;
+    if (elementId === 'operationSourceAsset') activeUniversalBridgeAsset = null;
+    updateOperationBuilder();
+}
+
+async function loadUniversalBridgeTokens(network) {
+    if (universalBridgeTokensByNetwork[network]) return universalBridgeTokensByNetwork[network];
+    const response = await fetch(`/api/universal-bridge/tokens/${encodeURIComponent(network)}`);
+    const data = await response.json();
+    if (!response.ok || !Array.isArray(data.tokens)) throw new Error(data.detail || 'universal_bridge_tokens_unavailable');
+    universalBridgeTokensByNetwork[network] = data.tokens;
+    return data.tokens;
+}
+
+async function loadSelectedUniversalBridgeSourceBalance() {
+    const locale = translations[getActiveLang()];
+    const availability = document.getElementById('operationAmountAvailability');
+    const sourceNetwork = getOperationBuilderSource();
+    const address = document.getElementById('operationSourceAsset')?.value || '';
+    const token = getUniversalBridgeToken(sourceNetwork, address);
+    activeUniversalBridgeAsset = null;
+    if (!token || !activeOperationWalletId) {
+        validateOperationAmount();
+        return;
+    }
+    if (availability) {
+        availability.textContent = locale.operationAmountBalanceLoading;
+        availability.style.color = 'var(--text-muted)';
+    }
+    try {
+        const response = await fetch(`/api/wallets/${activeOperationWalletId}/universal-bridge-balance/${encodeURIComponent(sourceNetwork)}/${encodeURIComponent(token.address)}`);
+        const data = await response.json();
+        if (!response.ok || !data.token) throw new Error(data.detail || 'universal_bridge_balance_unavailable');
+        if (sourceNetwork !== getOperationBuilderSource() || String(document.getElementById('operationSourceAsset')?.value || '').toLowerCase() !== token.address.toLowerCase()) return;
+        activeUniversalBridgeAsset = {
+            ...data,
+            token: data.token,
+            address: data.token.address,
+            symbol: data.token.symbol,
+            decimals: data.token.decimals,
+        };
+        validateOperationAmount();
+    } catch (_) {
+        activeUniversalBridgeAsset = null;
+        if (availability) {
+            availability.textContent = locale.universalBridgeBalanceUnavailable;
+            availability.style.color = '#fca5a5';
+        }
+    }
+}
+
+async function loadUniversalBridgeTokenSelectors() {
+    const locale = translations[getActiveLang()];
+    const sourceNetwork = getOperationBuilderSource();
+    const destinationNetwork = getOperationBuilderDestination() || sourceNetwork;
+    const catalogStatus = document.getElementById('universalBridgeCatalogStatus');
+    if (catalogStatus) {
+        catalogStatus.textContent = locale.universalBridgeTokensLoading;
+        catalogStatus.style.color = 'var(--text-muted)';
+    }
+    try {
+        await Promise.all([loadUniversalBridgeTokens(sourceNetwork), loadUniversalBridgeTokens(destinationNetwork)]);
+        populateUniversalBridgeTokenSelect('operationSourceAsset', sourceNetwork);
+        populateUniversalBridgeTokenSelect('operationReceiveAsset', destinationNetwork);
+        if (catalogStatus) {
+            catalogStatus.textContent = locale.universalBridgeCoreTokensReady;
+            catalogStatus.style.color = '#86efac';
+        }
+        await loadSelectedUniversalBridgeSourceBalance();
+        updateOperationBuilder();
+    } catch (_) {
+        if (catalogStatus) {
+            catalogStatus.textContent = locale.universalBridgeCatalogUnavailable;
+            catalogStatus.style.color = '#fca5a5';
+        }
+    }
+}
+
+async function handleOperationSourceTokenChange() {
+    activeUniversalBridgeQuote = null;
+    await loadSelectedUniversalBridgeSourceBalance();
+    updateOperationBuilder();
+}
+
+async function handleOperationDestinationNetworkChange() {
+    activeUniversalBridgeQuote = null;
+    const destination = getOperationBuilderDestination();
+    const search = document.getElementById('operationReceiveAssetSearch');
+    if (search) search.value = '';
+    try {
+        await loadUniversalBridgeTokens(destination);
+        populateUniversalBridgeTokenSelect('operationReceiveAsset', destination);
+        updateOperationBuilder();
+    } catch (_) {
+        const status = document.getElementById('universalBridgeCatalogStatus');
+        if (status) {
+            status.textContent = translations[getActiveLang()].universalBridgeCatalogUnavailable;
+            status.style.color = '#fca5a5';
+        }
+    }
+}
+
+function handleOperationDestinationTokenChange() {
+    activeUniversalBridgeQuote = null;
+    updateOperationBuilder();
+}
+
+function updateOperationAmountUsd(asset = getSelectedOperationAssetData()) {
+    const amountUsd = document.getElementById('operationAmountUsd');
+    const amountInput = document.getElementById('operationAmount');
+    if (!amountUsd || !amountInput || !asset) {
+        if (amountUsd) amountUsd.textContent = '';
+        return;
+    }
+    const amount = Number(amountInput.value);
+    const unitPrice = Number(asset.unit_price_usd);
+    if (!Number.isFinite(amount) || amount <= 0 || !Number.isFinite(unitPrice) || unitPrice <= 0) {
+        amountUsd.textContent = '';
+        return;
+    }
+    amountUsd.textContent = translations[getActiveLang()].operationAmountUsd
+        .replace('{usd}', (amount * unitPrice).toLocaleString(undefined, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        }));
+}
+
+function hideBridgePlanSaveButton() {
+    const saveButton = document.getElementById('bridgePlanSaveButton');
+    if (saveButton) saveButton.style.display = 'none';
+}
+
+function validateOperationAmount() {
+    const availability = document.getElementById('operationAmountAvailability');
+    const amountInput = document.getElementById('operationAmount');
+    if (!availability || !amountInput) return false;
+    hideBridgePlanSaveButton();
+    const locale = translations[getActiveLang()];
+    const asset = getSelectedOperationAssetData();
+    if (!asset) {
+        updateOperationAmountUsd(null);
+        availability.textContent = locale.operationAmountBalanceLoading;
+        availability.style.color = 'var(--text-muted)';
+        return false;
+    }
+    const available = Number(asset.available_to_send);
+    const amount = Number(amountInput.value);
+    updateOperationAmountUsd(asset);
+    const reserve = Number(asset.gas_reserve) > 0
+        ? locale.operationGasReserve.replace('{reserve}', asset.gas_reserve).replace('{symbol}', asset.symbol)
+        : '';
+    if (!Number.isFinite(amount) || amount <= 0) {
+        availability.textContent = locale.operationAmountAvailable
+            .replace('{available}', asset.available_to_send)
+            .replace('{symbol}', asset.symbol)
+            .replace('{reserve}', reserve);
+        availability.style.color = '#bfdbfe';
+        return true;
+    }
+    if (amount > available) {
+        availability.textContent = locale.operationAmountExceeds
+            .replace('{available}', asset.available_to_send)
+            .replace('{symbol}', asset.symbol);
+        availability.style.color = '#fca5a5';
+        return false;
+    }
+    availability.textContent = locale.operationAmountAvailable
+        .replace('{available}', asset.available_to_send)
+        .replace('{symbol}', asset.symbol)
+        .replace('{reserve}', reserve);
+    availability.style.color = '#86efac';
+    return true;
+}
+
+function useOperationMaxAmount() {
+    const input = document.getElementById('operationAmount');
+    const asset = getSelectedOperationAssetData();
+    if (!input || !asset) return;
+    input.value = asset.available_to_send;
+    validateOperationAmount();
+}
+
+function handleOperationSourceNetworkChange() {
+    activeOperationWalletId = null;
+    activeOperationBalanceData = null;
+    activeUniversalBridgeAsset = null;
+    activeUniversalBridgeQuote = null;
+    const search = document.getElementById('operationSourceAssetSearch');
+    if (search) search.value = '';
+    loadOperationBuilderWalletStatus();
+}
+
+async function loadOperationBuilderDestinationBalance(walletId = activeOperationWalletId) {
+    const destinationBalance = document.getElementById('operationDestinationBalance');
+    if (!destinationBalance) return;
+    const locale = translations[getActiveLang()];
+    const destination = getOperationBuilderDestination() || 'Base';
+    if (!walletId) {
+        destinationBalance.textContent = '';
+        return;
+    }
+    if (destination === getOperationBuilderSource()) {
+        destinationBalance.textContent = locale.operationDestinationSameNetwork.replace('{network}', destination);
+        destinationBalance.style.color = 'var(--text-muted)';
+        return;
+    }
+
+    destinationBalance.textContent = locale.operationDestinationBalanceLoading.replace('{network}', destination);
+    destinationBalance.style.color = 'var(--text-muted)';
+    try {
+        const response = await fetch(`/api/wallets/${walletId}/network-balance/${encodeURIComponent(destination)}`);
+        const data = await response.json();
+        if (destination !== getOperationBuilderDestination()) return;
+        if (!response.ok) {
+            const isNotConfigured = response.status === 422 || String(data.detail || '').includes('not configured');
+            destinationBalance.textContent = isNotConfigured
+                ? locale.operationDestinationBalancePending.replace('{network}', destination)
+                : locale.operationDestinationBalanceUnavailable.replace('{network}', destination);
+            destinationBalance.style.color = isNotConfigured ? '#fbbf24' : '#fca5a5';
+            return;
+        }
+        const assets = formatOperationVisibleAssets(data);
+        destinationBalance.textContent = assets
+            ? locale.operationDestinationBalance
+                .replace('{network}', data.network)
+                .replace('{assets}', assets)
+            : locale.operationDestinationNoAssets.replace('{network}', data.network);
+        destinationBalance.style.color = '#bfdbfe';
+    } catch (_) {
+        if (destination !== getOperationBuilderDestination()) return;
+        destinationBalance.textContent = locale.operationDestinationBalanceUnavailable.replace('{network}', destination);
+        destinationBalance.style.color = '#fca5a5';
+    }
+}
+
+async function loadOperationBuilderWalletStatus() {
+    const status = document.getElementById('operationWalletStatus');
+    if (!status) return;
+    activeOperationWalletId = null;
+    activeOperationBalanceData = null;
+    activeUniversalBridgeAsset = null;
+    const locale = translations[getActiveLang()];
+    const activeAddress = getActiveBaseWalletAddress();
+    if (!/^0x[0-9a-fA-F]{40}$/.test(activeAddress)) {
+        status.textContent = locale.operationWalletRequired;
+        status.style.color = '#fbbf24';
+        return;
+    }
+    status.textContent = locale.operationBalanceLoading;
+    status.style.color = 'var(--text-muted)';
+    try {
+        const username = localStorage.getItem('airdrop_username');
+        const walletsResponse = await fetch(`/api/wallets/${encodeURIComponent(username || '')}`);
+        const walletsData = await walletsResponse.json();
+        const wallet = walletsData.wallets?.find((item) => item.wallet_address?.toLowerCase() === activeAddress.toLowerCase());
+        if (!wallet || !walletsResponse.ok) throw new Error('wallet_not_saved');
+        activeOperationWalletId = wallet.id;
+        status.textContent = locale.operationBalanceNetwork
+            .replace('{address}', `${activeAddress.slice(0, 6)}…${activeAddress.slice(-4)}`)
+            .replace('{network}', getOperationBuilderSource());
+        status.style.color = '#86efac';
+        await loadUniversalBridgeTokenSelectors();
+    } catch (error) {
+        activeOperationWalletId = null;
+        activeOperationBalanceData = null;
+        activeUniversalBridgeAsset = null;
+        status.textContent = locale.operationBalanceUnavailable;
+        status.style.color = '#fbbf24';
+        validateOperationAmount();
+    }
+}
+
+function updateOperationBuilder() {
+    const locale = translations[getActiveLang()];
+    const source = getOperationBuilderSource();
+    const destination = getOperationBuilderDestination() || 'Base';
+    const sourceToken = getUniversalBridgeToken(source, document.getElementById('operationSourceAsset')?.value);
+    const destinationToken = getUniversalBridgeToken(destination, document.getElementById('operationReceiveAsset')?.value);
+    const routeIsReady = Boolean(sourceToken && destinationToken && activeOperationWalletId);
+    const swapPanel = document.getElementById('operationSwapPanel');
+    const bridgePanel = document.getElementById('operationBridgePanel');
+    const universalPanel = document.getElementById('universalBridgePanel');
+    hideBridgePlanSaveButton();
+    if (swapPanel) swapPanel.style.display = 'none';
+    if (bridgePanel) bridgePanel.style.display = 'none';
+    if (universalPanel) universalPanel.style.display = routeIsReady ? '' : 'none';
+    const result = document.getElementById('universalBridgeResult');
+    if (result && !routeIsReady) {
+        result.textContent = locale.universalBridgeRouteNotReady;
+        result.style.color = 'var(--text-muted)';
+    }
+}
+
+function normalizeUniversalBridgeAmount(value, decimals) {
+    const raw = String(value || '').trim();
+    if (!/^\d+(?:\.\d+)?$/.test(raw)) return null;
+    const [whole, fraction = ''] = raw.split('.');
+    if (!whole || fraction.length > Number(decimals || 18)) return null;
+    const normalizedWhole = whole.replace(/^0+(?=\d)/, '') || '0';
+    const normalizedFraction = fraction.replace(/0+$/, '');
+    if (normalizedWhole === '0' && !normalizedFraction) return null;
+    return normalizedFraction ? `${normalizedWhole}.${normalizedFraction}` : normalizedWhole;
+}
+
+function getUniversalBridgeSelectedTokens() {
+    const sourceNetwork = getOperationBuilderSource();
+    const destinationNetwork = getOperationBuilderDestination() || sourceNetwork;
+    return {
+        sourceNetwork,
+        destinationNetwork,
+        sourceToken: getUniversalBridgeToken(sourceNetwork, document.getElementById('operationSourceAsset')?.value),
+        destinationToken: getUniversalBridgeToken(destinationNetwork, document.getElementById('operationReceiveAsset')?.value),
+    };
+}
+
+function setUniversalBridgeResult(message, color = 'var(--text-muted)') {
+    const result = document.getElementById('universalBridgeResult');
+    if (!result) return;
+    result.textContent = message;
+    result.style.color = color;
+}
+
+function setUniversalBridgeReviewVisible(visible) {
+    const button = document.getElementById('universalBridgeReviewButton');
+    if (button) button.style.display = visible ? 'inline-flex' : 'none';
+}
+
+function quoteUniversalBridgeSummary(quote) {
+    const locale = translations[getActiveLang()];
+    const seconds = Number(quote?.estimated_seconds || 0);
+    const timeText = Number.isFinite(seconds) && seconds > 0
+        ? locale.universalBridgeEstimatedTime.replace('{minutes}', Math.max(1, Math.ceil(seconds / 60)))
+        : '';
+    return locale.universalBridgeQuoteReady
+        .replace('{from}', `${quote.amount_in} ${quote.from_token.symbol}`)
+        .replace('{to}', `${quote.amount_out} ${quote.to_token.symbol}`)
+        .replace('{minimum}', `${quote.amount_out_min} ${quote.to_token.symbol}`)
+        .replace('{tool}', quote.tool || 'LI.FI')
+        .replace('{time}', timeText);
+}
+
+async function requestUniversalBridgeQuote() {
+    const locale = translations[getActiveLang()];
+    const button = document.getElementById('universalBridgeQuoteButton');
+    const activeAddress = getActiveBaseWalletAddress();
+    const { sourceNetwork, destinationNetwork, sourceToken, destinationToken } = getUniversalBridgeSelectedTokens();
+    const amount = normalizeUniversalBridgeAmount(document.getElementById('operationAmount')?.value, sourceToken?.decimals);
+    activeUniversalBridgeQuote = null;
+    setUniversalBridgeReviewVisible(false);
+    if (!sourceToken || !destinationToken || !amount || !validateOperationAmount() || !/^0x[0-9a-fA-F]{40}$/.test(activeAddress)) {
+        setUniversalBridgeResult(locale.universalBridgeInvalid, '#fca5a5');
+        return;
+    }
+    try {
+        setButtonLoading(button, true, locale.universalBridgeQuoteLoading);
+        setUniversalBridgeResult(locale.universalBridgeQuoteLoading, '#bfdbfe');
+        const response = await fetch('/api/universal-bridge/quote', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                wallet_address: activeAddress,
+                from_network: sourceNetwork,
+                to_network: destinationNetwork,
+                from_token_address: sourceToken.address,
+                to_token_address: destinationToken.address,
+                amount,
+            }),
+        });
+        const data = await response.json();
+        if (!response.ok || !data.transaction) throw new Error(data.detail || 'universal_bridge_quote_unavailable');
+        data.expires_at = Date.now() + (Number(data.expires_in || 55) * 1000);
+        activeUniversalBridgeQuote = data;
+        setUniversalBridgeResult(quoteUniversalBridgeSummary(data), '#86efac');
+        setUniversalBridgeReviewVisible(true);
+    } catch (error) {
+        setUniversalBridgeResult(translateBackendDetail(error?.message) || locale.universalBridgeQuoteUnavailable, '#fca5a5');
+    } finally {
+        setButtonLoading(button, false, locale.universalBridgeGetQuote);
+    }
+}
+
+function makeErc20AllowanceCallData(owner, spender) {
+    return `0xdd62ed3e${owner.slice(2).toLowerCase().padStart(64, '0')}${spender.slice(2).toLowerCase().padStart(64, '0')}`;
+}
+
+function makeErc20ApproveCallData(spender, amountAtomic) {
+    return `0x095ea7b3${spender.slice(2).toLowerCase().padStart(64, '0')}${BigInt(amountAtomic).toString(16).padStart(64, '0')}`;
+}
+
+async function waitForUniversalBridgeReceipt(provider, txHash) {
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+        const receipt = await provider.request({ method: 'eth_getTransactionReceipt', params: [txHash] });
+        if (receipt) {
+            if (String(receipt.status || '').toLowerCase() === '0x0') throw new Error('universal_bridge_approval_failed');
+            return receipt;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 4000));
+    }
+    throw new Error('universal_bridge_approval_pending');
+}
+
+async function getFreshUniversalBridgeQuote() {
+    await requestUniversalBridgeQuote();
+    if (!activeUniversalBridgeQuote) throw new Error('universal_bridge_quote_unavailable');
+    return activeUniversalBridgeQuote;
+}
+
+async function ensureUniversalBridgeApproval(provider, quote, fromAddress) {
+    const approval = quote?.approval || {};
+    if (!approval.required) return quote;
+    const tokenAddress = quote?.from_token?.address;
+    const spender = approval.spender;
+    if (!/^0x[0-9a-fA-F]{40}$/.test(tokenAddress || '') || !/^0x[0-9a-fA-F]{40}$/.test(spender || '')) {
+        throw new Error('universal_bridge_approval_invalid');
+    }
+    await switchToUniversalBridgeNetwork(provider, quote.from_network);
+    const allowanceHex = await provider.request({
+        method: 'eth_call',
+        params: [{ to: tokenAddress, data: makeErc20AllowanceCallData(fromAddress, spender) }, 'latest'],
+    });
+    let allowance = 0n;
+    try { allowance = BigInt(allowanceHex || '0x0'); } catch (_) { throw new Error('universal_bridge_allowance_unavailable'); }
+    if (allowance >= BigInt(approval.amount_atomic)) return quote;
+    if (!await openUniversalBridgeConfirmation(quote, true)) throw new Error('universal_bridge_cancelled');
+    setUniversalBridgeResult(translations[getActiveLang()].universalBridgeApprovalSigning, '#bfdbfe');
+    const approvalTxHash = await provider.request({
+        method: 'eth_sendTransaction',
+        params: [{
+            from: fromAddress,
+            to: tokenAddress,
+            data: makeErc20ApproveCallData(spender, approval.amount_atomic),
+            value: '0x0',
+        }],
+    });
+    setUniversalBridgeResult(translations[getActiveLang()].universalBridgeApprovalWaiting, '#bfdbfe');
+    await waitForUniversalBridgeReceipt(provider, approvalTxHash);
+    return getFreshUniversalBridgeQuote();
+}
+
+function universalBridgeTransactionParams(quote, fromAddress) {
+    const tx = quote?.transaction || {};
+    const expected = UNIVERSAL_BRIDGE_NETWORKS[quote?.from_network];
+    if (
+        !expected
+        || Number(tx.chain_id) !== parseInt(expected.chainId, 16)
+        || String(tx.from || '').toLowerCase() !== fromAddress.toLowerCase()
+        || !/^0x[0-9a-fA-F]{40}$/.test(String(tx.to || ''))
+        || !/^0x(?:[a-fA-F0-9]{2})*$/.test(String(tx.data || ''))
+        || !/^(?:0|[1-9]\d*|0x[0-9a-fA-F]+)$/.test(String(tx.value || '0'))
+    ) throw new Error('universal_bridge_transaction_invalid');
+    return {
+        from: fromAddress,
+        to: tx.to,
+        data: tx.data,
+        value: `0x${BigInt(tx.value || '0').toString(16)}`,
+    };
+}
+
+function getUniversalBridgeRecordStatus(record) {
+    const locale = translations[getActiveLang()];
+    const status = String(record?.status || 'submitted');
+    const statusKeys = {
+        submitted: 'universalBridgeStatusSubmitted',
+        in_progress: 'universalBridgeStatusInProgress',
+        completed: 'universalBridgeStatusCompleted',
+        failed: 'universalBridgeStatusFailed',
+    };
+    const colors = {
+        submitted: '#bfdbfe',
+        in_progress: '#fde68a',
+        completed: '#86efac',
+        failed: '#fca5a5',
+    };
+    return {
+        key: status,
+        label: locale[statusKeys[status]] || status,
+        color: colors[status] || 'var(--text-muted)',
+    };
+}
+
+function getUniversalBridgeExplorerUrl(record) {
+    const explorer = UNIVERSAL_BRIDGE_NETWORKS[record?.from_network]?.blockExplorerUrls?.[0];
+    const txHash = String(record?.tx_hash || '');
+    if (!explorer || !/^0x[a-fA-F0-9]{64}$/.test(txHash)) return '';
+    return `${explorer.replace(/\/$/, '')}/tx/${encodeURIComponent(txHash)}`;
+}
+
+function scheduleUniversalBridgeRefresh(recordId, delay = 15000) {
+    clearTimeout(universalBridgeRefreshTimer);
+    universalBridgeRefreshTimer = setTimeout(async () => {
+        if (!document.getElementById('universalBridgeHistory')) return;
+        await refreshUniversalBridgeHistoryRecord(recordId, true);
+    }, delay);
+}
+
+function getUniversalBridgeRefreshCooldown(recordId) {
+    const expiresAt = Number(universalBridgeRefreshCooldowns.get(String(recordId)) || 0);
+    const remaining = Math.max(0, expiresAt - Date.now());
+    if (!remaining) universalBridgeRefreshCooldowns.delete(String(recordId));
+    return remaining;
+}
+
+function scheduleUniversalBridgeCooldownRepaint(delay) {
+    clearTimeout(universalBridgeCooldownTimer);
+    universalBridgeCooldownTimer = setTimeout(() => {
+        if (document.getElementById('universalBridgeHistory')) loadUniversalBridgeHistory();
+    }, Math.max(250, delay + 50));
+}
+
+function setUniversalBridgeRefreshButtonLoading(button, loading) {
+    if (!button) return;
+    const locale = translations[getActiveLang()];
+    if (!loading) {
+        button.disabled = false;
+        button.style.opacity = '';
+        button.style.cursor = '';
+        button.style.display = '';
+        button.style.alignItems = '';
+        button.style.gap = '';
+        button.textContent = locale.universalBridgeRefresh;
+        return;
+    }
+    button.disabled = true;
+    button.style.opacity = '.82';
+    button.style.cursor = 'wait';
+    button.style.display = 'inline-flex';
+    button.style.alignItems = 'center';
+    button.style.gap = '5px';
+    button.replaceChildren();
+    const spinner = document.createElement('span');
+    spinner.setAttribute('aria-hidden', 'true');
+    spinner.textContent = '↻';
+    spinner.style.cssText = 'display:inline-block; font-size:14px; line-height:12px; animation:button-loading-spinner .75s linear infinite;';
+    const label = document.createElement('span');
+    label.textContent = locale.universalBridgeRefreshing;
+    button.append(spinner, label);
+}
+
+async function loadUniversalBridgeHistory() {
+    const locale = translations[getActiveLang()];
+    const container = document.getElementById('universalBridgeHistory');
+    if (!container) return;
+    clearTimeout(universalBridgeRefreshTimer);
+    try {
+        const response = await fetch('/api/universal-bridge/history');
+        const data = await response.json();
+        if (!response.ok || !Array.isArray(data.records)) throw new Error('universal_bridge_history_unavailable');
+        if (!data.records.length) {
+            container.innerHTML = `<div style="color:var(--text-muted); font-size:12px;">${locale.universalBridgeHistoryEmpty}</div>`;
+            return;
+        }
+        container.innerHTML = data.records.map((record) => {
+            const status = getUniversalBridgeRecordStatus(record);
+            const txUrl = getUniversalBridgeExplorerUrl(record);
+            const date = new Date(Number(record.created_at) * 1000).toLocaleString();
+            const received = record.amount_out ? `≈ ${escapeHtml(record.amount_out)} ${escapeHtml(record.to_symbol)}` : '—';
+            const providerStatus = record.provider_status ? ` · ${escapeHtml(record.provider_status)}` : '';
+            const cooldownMs = getUniversalBridgeRefreshCooldown(record.id);
+            const cooldownSeconds = Math.max(1, Math.ceil(cooldownMs / 1000));
+            const refreshButton = status.key === 'completed'
+                ? ''
+                : `<button type="button" onclick="refreshUniversalBridgeHistoryRecord(${Number(record.id)}, false, this)" class="btn-dark-sm" ${cooldownMs ? 'disabled' : ''} style="padding:5px 8px; font-size:11px; ${cooldownMs ? 'opacity:.55; cursor:not-allowed;' : ''}">${cooldownMs ? locale.universalBridgeRefreshCooldown.replace('{seconds}', cooldownSeconds) : locale.universalBridgeRefresh}</button>`;
+            return `<div style="background:var(--bg-main); border:1px solid var(--border-color); border-radius:10px; padding:10px 11px; margin-top:8px;">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
+                    <div style="min-width:0;"><div style="color:#fff; font-size:12px; font-weight:600;">${escapeHtml(record.amount_in)} ${escapeHtml(record.from_symbol)} → ${received}</div><div style="color:var(--text-muted); font-size:11px; margin-top:4px;">${escapeHtml(record.from_network)} → ${escapeHtml(record.to_network)} · ${escapeHtml(date)} · ${escapeHtml(record.provider || 'LI.FI')}</div><div style="color:${status.color}; font-size:11px; margin-top:4px;">${escapeHtml(status.label)}${providerStatus}</div></div>
+                    <div style="display:flex; flex-direction:column; align-items:flex-end; gap:7px; flex:0 0 auto;">
+                        ${refreshButton}
+                        ${txUrl ? `<a href="${txUrl}" target="_blank" rel="noopener noreferrer" style="color:#c4b5fd; font-size:11px; white-space:nowrap;">${locale.universalBridgeOpenTx}</a>` : ''}
+                    </div>
+                </div>
+            </div>`;
+        }).join('');
+        const pending = data.records.find((record) => ['submitted', 'in_progress'].includes(record.status));
+        if (pending) scheduleUniversalBridgeRefresh(pending.id);
+        const activeCooldowns = data.records.map((record) => getUniversalBridgeRefreshCooldown(record.id)).filter(Boolean);
+        if (activeCooldowns.length) scheduleUniversalBridgeCooldownRepaint(Math.min(...activeCooldowns));
+    } catch (_) {
+        container.innerHTML = `<div style="color:#fca5a5; font-size:12px;">${locale.universalBridgeProviderUnavailable}</div>`;
+    }
+}
+
+function setOperationsJournalFilter(filter) {
+    if (!['all', 'pending', 'completed'].includes(filter)) return;
+    operationsJournalFilter = filter;
+    renderDashboardContent('Farming');
+}
+
+function setOperationsJournalCheckButtonLoading(button, loading) {
+    if (!button) return;
+    const locale = translations[getActiveLang()];
+    if (!loading) {
+        button.disabled = false;
+        button.style.opacity = '';
+        button.style.cursor = '';
+        button.style.display = '';
+        button.style.alignItems = '';
+        button.style.gap = '';
+        button.textContent = locale.operationsJournalCheckPending;
+        return;
+    }
+    button.disabled = true;
+    button.style.opacity = '.82';
+    button.style.cursor = 'wait';
+    button.style.display = 'inline-flex';
+    button.style.alignItems = 'center';
+    button.style.gap = '5px';
+    button.replaceChildren();
+    const spinner = document.createElement('span');
+    spinner.setAttribute('aria-hidden', 'true');
+    spinner.textContent = '↻';
+    spinner.style.cssText = 'display:inline-block; font-size:14px; line-height:12px; animation:button-loading-spinner .75s linear infinite;';
+    const label = document.createElement('span');
+    label.textContent = locale.operationsJournalChecking;
+    button.append(spinner, label);
+}
+
+async function checkPendingOperations(button) {
+    if (Date.now() < operationsJournalCheckCooldownUntil) return;
+    operationsJournalCheckCooldownUntil = Date.now() + 12000;
+    setOperationsJournalCheckButtonLoading(button, true);
+    try {
+        const response = await fetch('/api/universal-bridge/history');
+        const data = await response.json();
+        if (response.ok && Array.isArray(data.records)) {
+            const pendingBridges = data.records.filter((record) => ['submitted', 'in_progress'].includes(record.status)).slice(0, 10);
+            for (const record of pendingBridges) {
+                await refreshUniversalBridgeHistoryRecord(record.id, true);
+            }
+        }
+        await loadOperationsJournal();
+    } catch (_) {
+        await loadOperationsJournal();
+    } finally {
+        window.setTimeout(() => {
+            const refreshedButton = document.getElementById('operationsJournalCheckButton');
+            setOperationsJournalCheckButtonLoading(refreshedButton, false);
+        }, Math.max(0, operationsJournalCheckCooldownUntil - Date.now()));
+    }
+}
+
+async function loadDefiOverview(refresh = false) {
+    const locale = translations[getActiveLang()];
+    const panel = document.getElementById('defiOverviewPanel');
+    const button = document.getElementById('defiRefreshButton');
+    if (!panel) return;
+    if (button) {
+        button.disabled = true;
+        button.style.opacity = '.72';
+        button.style.cursor = 'wait';
+    }
+    panel.innerHTML = `<span style="color:var(--text-muted); font-size:13px;">${escapeHtml(locale.defiLoading)}</span>`;
+    try {
+        const activeAddress = getActiveBaseWalletAddress().toLowerCase();
+        if (!activeAddress) throw new Error('wallet_required');
+        const username = localStorage.getItem('airdrop_username') || '';
+        const walletsResponse = await fetch(`/api/wallets/${encodeURIComponent(username)}`);
+        const walletsData = await walletsResponse.json();
+        if (!walletsResponse.ok || !Array.isArray(walletsData.wallets)) throw new Error('wallet_required');
+        const savedWallet = walletsData.wallets.find((wallet) => String(wallet.wallet_address || '').toLowerCase() === activeAddress);
+        if (!savedWallet) throw new Error('wallet_required');
+
+        const response = await fetch(`/api/defi/aave-base-positions/${Number(savedWallet.id)}${refresh ? '?refresh=true' : ''}`);
+        const data = await response.json();
+        if (!response.ok || !Array.isArray(data.positions)) throw new Error(data.detail || 'defi_load_failed');
+        if (!data.positions.length) {
+            panel.innerHTML = `<div style="color:var(--text-muted); font-size:13px; padding:4px 0;">${escapeHtml(locale.defiNoPositions)}</div>`;
+            return;
+        }
+        panel.innerHTML = data.positions.map((position) => {
+            const supply = position.has_supply
+                ? `<div><div style="color:var(--text-muted); font-size:11px;">${escapeHtml(locale.defiSupplied)}</div><div style="color:#86efac; font-weight:700; margin-top:3px;">${escapeHtml(position.supplied)} ${escapeHtml(position.asset)}</div></div>`
+                : '';
+            const borrow = position.has_borrow
+                ? `<div><div style="color:var(--text-muted); font-size:11px;">${escapeHtml(locale.defiBorrowed)}</div><div style="color:#fca5a5; font-weight:700; margin-top:3px;">${escapeHtml(position.borrowed)} ${escapeHtml(position.asset)}</div></div>`
+                : '';
+            const collateral = position.has_supply && position.collateral_enabled
+                ? `<span style="color:#c4b5fd; font-size:11px; border:1px solid rgba(196,181,253,.38); border-radius:999px; padding:3px 7px;">${escapeHtml(locale.defiCollateral)}</span>`
+                : '';
+            return `<div style="background:var(--bg-main); border:1px solid var(--border-color); border-radius:10px; padding:11px 12px; margin-top:8px;"><div style="display:flex; justify-content:space-between; gap:10px; align-items:center;"><div style="color:#fff; font-size:13px; font-weight:700;">${escapeHtml(position.asset)}</div>${collateral}</div><div style="display:flex; flex-wrap:wrap; gap:20px; margin-top:10px;">${supply}${borrow}</div></div>`;
+        }).join('');
+    } catch (error) {
+        const message = error.message === 'wallet_required' ? locale.defiWalletRequired : locale.defiLoadError;
+        panel.innerHTML = `<div style="color:#fca5a5; font-size:13px; line-height:1.45;">${escapeHtml(message)}</div>`;
+    } finally {
+        if (button) {
+            button.disabled = false;
+            button.style.opacity = '';
+            button.style.cursor = '';
+        }
+    }
+}
+
+function normalizeUsdcInput(value) {
+    const input = String(value || '').trim();
+    if (!/^\d+(?:\.\d{1,6})?$/.test(input)) return null;
+    const [wholePart, fractionPart = ''] = input.split('.');
+    const whole = wholePart.replace(/^0+(?=\d)/, '') || '0';
+    const fraction = fractionPart.replace(/0+$/, '');
+    const normalized = fraction ? `${whole}.${fraction}` : whole;
+    return normalized === '0' ? null : normalized;
+}
+
+function aaveSupplyResult(message, color = 'var(--text-muted)') {
+    const result = document.getElementById('aaveSupplyResult');
+    if (result) result.innerHTML = `<span style="color:${color};">${escapeHtml(message)}</span>`;
+}
+
+async function requestAaveUsdcSupplyQuote() {
+    const locale = translations[getActiveLang()];
+    const amount = normalizeUsdcInput(document.getElementById('aaveSupplyAmount')?.value);
+    const activeAddress = getActiveBaseWalletAddress();
+    const button = document.getElementById('aaveSupplyQuoteButton');
+    const result = document.getElementById('aaveSupplyResult');
+    activeAaveSupplyQuote = null;
+    if (!amount) {
+        aaveSupplyResult(locale.defiSupplyInvalid, '#fca5a5');
+        return;
+    }
+    if (!/^0x[0-9a-fA-F]{40}$/.test(activeAddress)) {
+        aaveSupplyResult(locale.defiSupplyWalletRequired, '#fca5a5');
+        return;
+    }
+    try {
+        setButtonLoading(button, true, locale.defiSupplyLoading);
+        const response = await fetch('/api/defi/aave-base/usdc-supply-quote', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ wallet_address: activeAddress, amount }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'aave_supply_quote_failed');
+        activeAaveSupplyQuote = data;
+        const rate = Number(data.annual_supply_rate_percent || 0).toLocaleString(undefined, { maximumFractionDigits: 4 });
+        const approval = data.approval?.required ? `<div style="color:#fde68a; margin-top:5px;">${escapeHtml(locale.defiSupplyNeedsApproval)}</div>` : '';
+        const gasWarning = data.gas_reserve_met ? '' : `<div style="color:#fca5a5; margin-top:5px;">${escapeHtml(locale.defiSupplyNoGas.replace('{amount}', data.gas_reserve || ''))}</div>`;
+        if (result) {
+            result.innerHTML = `<div style="color:#86efac; font-weight:600;">${escapeHtml(locale.defiSupplyReady.replace('{amount}', data.amount))}</div><div style="color:var(--text-muted); margin-top:5px;">${escapeHtml(locale.defiSupplyAvailable.replace('{amount}', data.wallet_balance))}</div><div style="color:#c4b5fd; margin-top:4px;">${escapeHtml(locale.defiSupplyRate)}: ${escapeHtml(rate)}%</div>${approval}${gasWarning}${data.gas_reserve_met ? `<button type="button" id="aaveSupplyReviewButton" onclick="submitAaveUsdcSupply()" class="btn-purple-lg" style="font-size:13px; padding:10px 14px; width:auto; margin-top:11px;">${escapeHtml(locale.defiSupplyReview)}</button>` : ''}`;
+        }
+    } catch (error) {
+        const message = String(error?.message || '');
+        const display = message.includes('exceeds the wallet balance')
+            ? locale.defiSupplyInsufficientBalance
+            : (message.includes('temporarily unavailable') ? locale.defiSupplyUnavailable : locale.defiSupplyQuoteError);
+        aaveSupplyResult(display, '#fca5a5');
+    } finally {
+        setButtonLoading(button, false, locale.defiSupplyCheck);
+    }
+}
+
+function validateAaveSupplyTransaction(quote, fromAddress) {
+    const transaction = quote?.transaction || {};
+    const asset = quote?.asset || {};
+    if (!window.ethers?.utils?.Interface) return false;
+    try {
+        const contract = new window.ethers.utils.Interface([
+            'function supply(address asset, uint256 amount, address onBehalfOf, uint16 referralCode)',
+        ]);
+        const expectedData = contract.encodeFunctionData('supply', [
+            asset.address,
+            String(quote.amount_atomic),
+            fromAddress,
+            0,
+        ]).toLowerCase();
+        return transaction.chain_id === 8453
+            && String(transaction.from || '').toLowerCase() === fromAddress.toLowerCase()
+            && String(transaction.to || '').toLowerCase() === String(quote.pool_address || '').toLowerCase()
+            && String(transaction.data || '').toLowerCase() === expectedData
+            && String(transaction.value || '0') === '0';
+    } catch (_) {
+        return false;
+    }
+}
+
+async function waitForAaveSupplyApproval(provider, txHash) {
+    for (let attempt = 0; attempt < 25; attempt += 1) {
+        const receipt = await provider.request({ method: 'eth_getTransactionReceipt', params: [txHash] });
+        if (receipt) {
+            if (String(receipt.status || '').toLowerCase() === '0x0') throw new Error('aave_supply_approval_failed');
+            return;
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, 2500));
+    }
+    throw new Error('aave_supply_approval_pending');
+}
+
+async function submitAaveUsdcSupply() {
+    const locale = translations[getActiveLang()];
+    const quote = activeAaveSupplyQuote;
+    const provider = walletConnectProvider?.session ? walletConnectProvider : window.ethereum;
+    const button = document.getElementById('aaveSupplyReviewButton');
+    if (!quote || !provider?.request) {
+        aaveSupplyResult(locale.defiSupplyExpired, '#fca5a5');
+        return;
+    }
+    try {
+        let accounts = await provider.request({ method: 'eth_accounts' });
+        if (!Array.isArray(accounts) || !accounts.length) accounts = await provider.request({ method: 'eth_requestAccounts' });
+        const activeAddress = getActiveBaseWalletAddress();
+        const fromAddress = (accounts || []).find((account) => String(account || '').toLowerCase() === activeAddress.toLowerCase());
+        if (!/^0x[0-9a-fA-F]{40}$/.test(fromAddress || '')) throw new Error('aave_supply_wallet_mismatch');
+        if (!validateAaveSupplyTransaction(quote, fromAddress)) throw new Error('aave_supply_transaction_invalid');
+        await switchToBaseMainnet(provider);
+        setButtonLoading(button, true, locale.defiSupplyPreparing);
+        if (quote.approval?.required) {
+            if (!await openAaveSupplyConfirmation(quote, true)) return;
+            setButtonLoading(button, true, locale.defiSupplyApprovalSigning);
+            const approvalHash = await provider.request({
+                method: 'eth_sendTransaction',
+                params: [{
+                    from: fromAddress,
+                    to: quote.asset.address,
+                    data: makeErc20ApproveCallData(quote.pool_address, quote.approval.amount_atomic),
+                    value: '0x0',
+                }],
+            });
+            aaveSupplyResult(locale.defiSupplyApprovalWaiting, '#bfdbfe');
+            await waitForAaveSupplyApproval(provider, approvalHash);
+        }
+        if (!await openAaveSupplyConfirmation(quote, false)) return;
+        setButtonLoading(button, true, locale.defiSupplySigning);
+        const txHash = await provider.request({
+            method: 'eth_sendTransaction',
+            params: [{ from: fromAddress, to: quote.transaction.to, data: quote.transaction.data, value: '0x0' }],
+        });
+        activeAaveSupplyQuote = null;
+        try {
+            await fetch('/api/defi/aave-base/supply-submissions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ quote_id: quote.quote_id, tx_hash: txHash }),
+            });
+        } catch (_) {
+            // The wallet transaction remains valid even if the optional notification fails.
+        }
+        const txUrl = `${BASE_MAINNET_CONFIG.blockExplorerUrls[0]}/tx/${encodeURIComponent(txHash)}`;
+        const result = document.getElementById('aaveSupplyResult');
+        if (result) result.innerHTML = `<span style="color:#86efac;">${escapeHtml(locale.defiSupplySubmitted)}</span> <a href="${txUrl}" target="_blank" rel="noopener noreferrer" style="color:#c4b5fd;">${escapeHtml(locale.defiSupplyOpenExplorer)}</a>`;
+        window.setTimeout(() => loadDefiOverview(true), 7000);
+    } catch (error) {
+        const rejected = error?.code === 4001 || error?.code === 'ACTION_REJECTED';
+        const message = String(error?.message || '');
+        const display = message.includes('approval_pending')
+            ? locale.defiSupplyApprovalPending
+            : (message.includes('wallet_mismatch') ? locale.defiSupplyWalletRequired : locale.defiSupplyFailed);
+        aaveSupplyResult(rejected ? locale.defiSupplyRejected : display, '#fca5a5');
+    } finally {
+        setButtonLoading(button, false, locale.defiSupplyReview);
+    }
+}
+
+function getOperationsJournalStatus(record) {
+    const locale = translations[getActiveLang()];
+    const status = String(record?.status || 'submitted');
+    const keyMap = {
+        submitted: 'operationsJournalStatusSubmitted',
+        in_progress: 'operationsJournalStatusInProgress',
+        completed: 'operationsJournalStatusCompleted',
+        failed: 'operationsJournalStatusFailed',
+    };
+    const colors = {
+        submitted: '#bfdbfe',
+        in_progress: '#fde68a',
+        completed: '#86efac',
+        failed: '#fca5a5',
+    };
+    return { label: locale[keyMap[status]] || status, color: colors[status] || 'var(--text-muted)' };
+}
+
+function getOperationsJournalType(record) {
+    const locale = translations[getActiveLang()];
+    const type = String(record?.type || '');
+    const labels = {
+        bridge: locale.operationsJournalTypeBridge,
+        swap: locale.operationsJournalTypeSwap,
+        transfer: locale.operationsJournalTypeTransfer,
+    };
+    const icons = { bridge: '🌉', swap: '🔄', transfer: '↗' };
+    return { label: labels[type] || type, icon: icons[type] || '•' };
+}
+
+function getOperationsJournalExplorerUrl(record) {
+    const explorer = UNIVERSAL_BRIDGE_NETWORKS[record?.from_network]?.blockExplorerUrls?.[0];
+    const txHash = String(record?.tx_hash || '');
+    if (!explorer || !/^0x[a-fA-F0-9]{64}$/.test(txHash)) return '';
+    return `${explorer.replace(/\/$/, '')}/tx/${encodeURIComponent(txHash)}`;
+}
+
+function getShortOperationAddress(address) {
+    const value = String(address || '');
+    return /^0x[a-fA-F0-9]{40}$/.test(value) ? `${value.slice(0, 6)}…${value.slice(-4)}` : '';
+}
+
+function formatOperationsJournalUsd(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number) || number < 0) return '';
+    return `≈ $${number.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+async function loadOperationsJournal() {
+    const locale = translations[getActiveLang()];
+    const container = document.getElementById('operationsJournalList');
+    if (!container) return;
+    try {
+        const response = await fetch('/api/operations/history');
+        const data = await response.json();
+        if (!response.ok || !Array.isArray(data.records)) throw new Error('operations_history_unavailable');
+        const records = data.records.filter((record) => {
+            if (operationsJournalFilter === 'pending') return ['submitted', 'in_progress'].includes(record.status);
+            return operationsJournalFilter === 'all' || record.status === operationsJournalFilter;
+        });
+        if (!records.length) {
+            container.innerHTML = `<div style="padding:14px 0; color:var(--text-muted); font-size:13px;">${locale.operationsJournalEmpty}</div>`;
+            return;
+        }
+        container.innerHTML = records.map((record) => {
+            const status = getOperationsJournalStatus(record);
+            const type = getOperationsJournalType(record);
+            const txUrl = getOperationsJournalExplorerUrl(record);
+            const date = new Date(Number(record.created_at) * 1000).toLocaleString();
+            const output = record.amount_out ? ` → ≈ ${escapeHtml(record.amount_out)} ${escapeHtml(record.to_symbol)}` : '';
+            const recipient = record.type === 'transfer' && record.recipient
+                ? ` · ${locale.operationsJournalRecipient}: ${escapeHtml(getShortOperationAddress(record.recipient))}`
+                : '';
+            const provider = record.provider ? ` · ${escapeHtml(record.provider)}` : '';
+            const providerStatus = record.provider_status ? ` · ${escapeHtml(record.provider_status)}` : '';
+            const usd = formatOperationsJournalUsd(record.estimated_usd);
+            return `<div style="background:var(--bg-main); border:1px solid var(--border-color); border-radius:11px; padding:11px 12px; margin-top:8px; display:flex; justify-content:space-between; gap:12px; align-items:flex-start;">
+                <div style="min-width:0;"><div style="display:flex; flex-wrap:wrap; align-items:center; gap:7px;"><span style="font-size:12px; color:#c4b5fd;">${type.icon} ${escapeHtml(type.label)}</span><span style="font-size:11px; color:${status.color}; border:1px solid ${status.color}; border-radius:999px; padding:2px 6px;">${escapeHtml(status.label)}</span></div><div style="color:#fff; font-size:13px; font-weight:600; margin-top:7px;">${escapeHtml(record.amount_in)} ${escapeHtml(record.from_symbol)}${output}</div><div style="color:var(--text-muted); font-size:11px; line-height:1.45; margin-top:4px;">${escapeHtml(record.from_network)} → ${escapeHtml(record.to_network)} · ${escapeHtml(date)}${provider}${recipient}${providerStatus}</div></div>
+                <div style="text-align:right; flex:0 0 auto;">${usd ? `<div style="color:#c4b5fd; font-size:12px; font-weight:600; white-space:nowrap;">${usd}</div>` : ''}${txUrl ? `<a href="${txUrl}" target="_blank" rel="noopener noreferrer" style="display:block; margin-top:7px; color:#c4b5fd; font-size:12px; white-space:nowrap;">${locale.universalBridgeOpenTx}</a>` : ''}</div>
+            </div>`;
+        }).join('');
+    } catch (_) {
+        container.innerHTML = `<div style="padding:14px 0; color:#fca5a5; font-size:13px;">${locale.operationsJournalLoadError}</div>`;
+    }
+}
+
+async function refreshUniversalBridgeHistoryRecord(recordId, silent = false, button = null) {
+    const locale = translations[getActiveLang()];
+    if (!silent && getUniversalBridgeRefreshCooldown(recordId) > 0) return null;
+    try {
+        if (!silent && button) setUniversalBridgeRefreshButtonLoading(button, true);
+        const response = await fetch(`/api/universal-bridge/history/${encodeURIComponent(recordId)}/refresh`, { method: 'POST' });
+        const data = await response.json();
+        if (!response.ok || !data.record) throw new Error(data.detail || 'universal_bridge_status_unavailable');
+        universalBridgeRefreshCooldowns.set(String(recordId), Date.now() + 12000);
+        const record = data.record;
+        const status = getUniversalBridgeRecordStatus(record);
+        const result = document.getElementById('universalBridgeResult');
+        if (result) {
+            result.textContent = data.provider_available
+                ? locale.universalBridgeStatus.replace('{status}', status.label)
+                : locale.universalBridgeProviderUnavailable;
+            result.style.color = data.provider_available ? status.color : '#fbbf24';
+        }
+        await loadUniversalBridgeHistory();
+        return record;
+    } catch (_) {
+        if (button) setUniversalBridgeRefreshButtonLoading(button, false);
+        if (!silent) showNotification(locale.universalBridgeProviderUnavailable, 'error');
+        return null;
+    }
+}
+
+async function saveUniversalBridgeSubmission(txHash, quote, fromAddress) {
+    const response = await fetch('/api/universal-bridge/submissions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            wallet_address: fromAddress,
+            from_network: quote.from_network,
+            to_network: quote.to_network,
+            from_token_address: quote.from_token.address,
+            to_token_address: quote.to_token.address,
+            amount_in: quote.amount_in,
+            amount_out: quote.amount_out,
+            amount_out_min: quote.amount_out_min,
+            provider: quote.tool || 'LI.FI',
+            bridge: quote.tool_key || '',
+            tx_hash: txHash,
+        }),
+    });
+    const data = await response.json();
+    if (!response.ok || !data.record) throw new Error(data.detail || 'universal_bridge_submission_unavailable');
+    return data.record;
+}
+
+async function refreshUniversalBridgeStatus(txHash, quote) {
+    const locale = translations[getActiveLang()];
+    try {
+        const params = new URLSearchParams({
+            from_network: quote.from_network,
+            to_network: quote.to_network,
+            bridge: String(quote.tool_key || '').replace(/[^A-Za-z0-9_-]/g, ''),
+        });
+        const response = await fetch(`/api/universal-bridge/status/${encodeURIComponent(txHash)}?${params.toString()}`);
+        const data = await response.json();
+        if (!response.ok) return;
+        const status = data.substatus || data.lifi_status;
+        if (status) setUniversalBridgeResult(locale.universalBridgeStatus.replace('{status}', status), '#bfdbfe');
+    } catch (_) {
+        // Status updates are informational. The source transaction remains available in the explorer.
+    }
+}
+
+async function executeUniversalBridge() {
+    const locale = translations[getActiveLang()];
+    const button = document.getElementById('universalBridgeReviewButton');
+    const provider = walletConnectProvider?.session ? walletConnectProvider : window.ethereum;
+    let quote = activeUniversalBridgeQuote;
+    if (!quote || !provider?.request) {
+        setUniversalBridgeResult(locale.universalBridgeInvalid, '#fca5a5');
+        return;
+    }
+    if (Number(quote.expires_at || 0) <= Date.now()) {
+        activeUniversalBridgeQuote = null;
+        setUniversalBridgeReviewVisible(false);
+        setUniversalBridgeResult(locale.universalBridgeQuoteExpired, '#fbbf24');
+        return;
+    }
+    try {
+        let accounts = await provider.request({ method: 'eth_accounts' });
+        if (!Array.isArray(accounts) || !accounts[0]) accounts = await provider.request({ method: 'eth_requestAccounts' });
+        const fromAddress = accounts?.[0];
+        const activeAddress = getActiveBaseWalletAddress();
+        if (!/^0x[0-9a-fA-F]{40}$/.test(fromAddress || '') || fromAddress.toLowerCase() !== activeAddress.toLowerCase()) {
+            throw new Error('universal_bridge_wallet_mismatch');
+        }
+        setButtonLoading(button, true, locale.universalBridgeSigning);
+        quote = await ensureUniversalBridgeApproval(provider, quote, fromAddress);
+        activeUniversalBridgeQuote = quote;
+        if (!await openUniversalBridgeConfirmation(quote, false)) return;
+        await switchToUniversalBridgeNetwork(provider, quote.from_network);
+        const txHash = await provider.request({ method: 'eth_sendTransaction', params: [universalBridgeTransactionParams(quote, fromAddress)] });
+        const explorer = UNIVERSAL_BRIDGE_NETWORKS[quote.from_network]?.blockExplorerUrls?.[0];
+        const result = document.getElementById('universalBridgeResult');
+        if (result) {
+            result.replaceChildren();
+            const message = document.createElement('span');
+            message.textContent = locale.universalBridgeSubmitted;
+            message.style.color = '#86efac';
+            result.append(message, document.createTextNode(' '));
+            if (explorer) {
+                const link = document.createElement('a');
+                link.href = `${explorer.replace(/\/$/, '')}/tx/${encodeURIComponent(txHash)}`;
+                link.target = '_blank';
+                link.rel = 'noopener noreferrer';
+                link.textContent = locale.universalBridgeOpenTx;
+                link.style.color = '#c4b5fd';
+                result.append(link);
+            }
+        }
+        activeUniversalBridgeQuote = null;
+        setUniversalBridgeReviewVisible(false);
+        void saveUniversalBridgeSubmission(txHash, quote, fromAddress)
+            .then(async () => {
+                showNotification(locale.universalBridgeRecordSaved, 'success');
+                await loadUniversalBridgeHistory();
+            })
+            .catch(() => {
+                // The wallet transaction is still valid even if recording is temporarily unavailable.
+                setTimeout(() => refreshUniversalBridgeStatus(txHash, quote), 12000);
+            });
+    } catch (error) {
+        const rejected = error?.code === 4001 || error?.code === 'ACTION_REJECTED' || String(error?.message || '').includes('universal_bridge_cancelled');
+        const message = String(error?.message || '');
+        const display = message.includes('universal_bridge_approval_pending')
+            ? locale.universalBridgeApprovalPending
+            : (rejected ? locale.universalBridgeRejected : (translateBackendDetail(message) || locale.universalBridgeFailed));
+        setUniversalBridgeResult(display, '#fca5a5');
+    } finally {
+        setButtonLoading(button, false, locale.universalBridgeReview);
+    }
+}
+
+async function checkBridgeReadiness() {
+    const locale = translations[getActiveLang()];
+    const amount = getOperationBuilderAmount();
+    const destination = getOperationBuilderDestination();
+    const result = document.getElementById('bridgePlanResult');
+    const saveButton = document.getElementById('bridgePlanSaveButton');
+    const walletAddress = getActiveBaseWalletAddress();
+    if (!validateOperationAmount()) {
+        if (saveButton) saveButton.style.display = 'none';
+        return false;
+    }
+    if (!amount || !destination || !/^0x[0-9a-fA-F]{40}$/.test(walletAddress)) {
+        if (saveButton) saveButton.style.display = 'none';
+        if (result) {
+            result.textContent = locale.bridgePlanInvalid;
+            result.style.color = '#fca5a5';
+        }
+        return false;
+    }
+    if (result) {
+        result.textContent = locale.bridgePlanChecking;
+        result.style.color = '#bfdbfe';
+    }
+    try {
+        const [sourceResponse, destinationResponse] = await Promise.all([
+            fetch('/api/gas/Base'), fetch(`/api/gas/${encodeURIComponent(destination)}`),
+        ]);
+        const [sourceGas, destinationGas] = await Promise.all([
+            sourceResponse.json(), destinationResponse.json(),
+        ]);
+        if (!sourceResponse.ok || !destinationResponse.ok) throw new Error('bridge_gas_unavailable');
+        if (result) {
+            result.textContent = locale.bridgePlanReady
+                .replace('{amount}', amount)
+                .replace('{destination}', destination)
+                .replace('{sourceGas}', getBridgeGasText(sourceGas))
+                .replace('{destinationGas}', getBridgeGasText(destinationGas));
+            result.style.color = '#86efac';
+        }
+        if (saveButton) saveButton.style.display = 'inline-flex';
+        return true;
+    } catch (error) {
+        if (saveButton) saveButton.style.display = 'none';
+        if (result) {
+            result.textContent = locale.bridgePlanGasUnavailable;
+            result.style.color = '#fbbf24';
+        }
+        return false;
+    }
+}
+
+async function saveBridgePlan() {
+    const locale = translations[getActiveLang()];
+    const amount = getOperationBuilderAmount();
+    const destination = getOperationBuilderDestination();
+    const walletAddress = getActiveBaseWalletAddress();
+    const result = document.getElementById('bridgePlanResult');
+    if (!validateOperationAmount()) return;
+    if (!amount || !destination || !/^0x[0-9a-fA-F]{40}$/.test(walletAddress)) {
+        if (result) {
+            result.textContent = locale.bridgePlanInvalid;
+            result.style.color = '#fca5a5';
+        }
+        return;
+    }
+    try {
+        const response = await fetch('/api/bridge-plans', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ wallet_address: walletAddress, to_network: destination, amount }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'bridge_plan_unavailable');
+        if (result) {
+            result.textContent = locale.bridgePlanSaved;
+            result.style.color = '#86efac';
+        }
+        showNotification(locale.bridgePlanSaved, 'success');
+        const saveButton = document.getElementById('bridgePlanSaveButton');
+        if (saveButton) saveButton.style.display = 'none';
+        await loadBridgePlans();
+    } catch (error) {
+        if (result) {
+            result.textContent = locale.bridgePlanSaveError;
+            result.style.color = '#fca5a5';
+        }
+        showNotification(locale.bridgePlanSaveError, 'error');
+    }
+}
+
+async function loadBridgePlans() {
+    const container = document.getElementById('bridgePlansHistory');
+    if (!container) return;
+    const locale = translations[getActiveLang()];
+    try {
+        const response = await fetch('/api/bridge-plans');
+        const data = await response.json();
+        if (!response.ok || !Array.isArray(data.plans)) throw new Error('bridge_plan_unavailable');
+        if (!data.plans.length) {
+            container.textContent = locale.bridgePlanEmpty;
+            container.style.color = 'var(--text-muted)';
+            container.style.fontSize = '12px';
+            return;
+        }
+        container.innerHTML = data.plans.map((plan) => {
+            const createdAt = new Date(Number(plan.created_at) * 1000).toLocaleString();
+            return `<div style="background:var(--bg-main); border:1px solid var(--border-color); border-radius:10px; padding:11px 12px; margin-top:8px;"><div style="color:#fff; font-size:13px; font-weight:700;">${escapeHtml(plan.amount)} ${escapeHtml(plan.asset)} · ${escapeHtml(plan.from_network)} → ${escapeHtml(plan.to_network)}</div><div style="color:var(--text-muted); font-size:11px; margin-top:4px;">${escapeHtml(createdAt)} · ${locale.bridgePlanStatusPlanned}</div></div>`;
+        }).join('');
+    } catch (error) {
+        container.textContent = locale.bridgePlanLoadError;
+        container.style.color = '#fca5a5';
+        container.style.fontSize = '12px';
     }
 }
 
@@ -2168,23 +4081,11 @@ function renderDashboardContent(section) {
     const t = translations[currentLang] || translations['ru'];
     const content = document.getElementById('dashboard-content');
     const username = localStorage.getItem('airdrop_username') || "Robert";
-    const hideAllBanners = localStorage.getItem('hide_all_banners') === 'true';
 
     let centerHtml = '';
     
     if (section === 'Account') {
-        let guideHtml = '';
-        if (showWelcomeGuide && !hideAllBanners) {
-            guideHtml = `
-                <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; padding: 18px; margin-bottom: 16px; position: relative;" id="welcomeGuideBox">
-                    <span onclick="document.getElementById('welcomeGuideBox').style.display='none'; showWelcomeGuide=false;" style="position: absolute; right: 18px; top: 18px; cursor: pointer; color: var(--text-muted); font-size: 16px;">✕</span>
-                    <h4 style="color: #fff; margin: 0 0 8px 0; font-size: 15px;">👋 ${t.accWelcome}, ${username}!</h4>
-                    <p style="color: var(--text-muted); font-size: 13px; margin: 0; line-height: 1.5;">
-                        ${t.accWelcomeDesc}
-                    </p>
-                </div>
-            `;
-        }
+        const guideHtml = renderInterfaceHint('account-welcome', `${t.accWelcome}, ${username}! ${t.accWelcomeDesc}`, 'purple', '', '👋');
 
         centerHtml = `
             ${guideHtml}
@@ -2198,21 +4099,12 @@ function renderDashboardContent(section) {
         `;
 
 } else if (section === 'Settings') {
-        const notifSettingsChecked = localStorage.getItem('ax_notify_settings') !== 'false' ? 'checked' : '';
-        const notifStartChecked = localStorage.getItem('ax_notify_start') !== 'false' ? 'checked' : '';
-        const notifSuccessChecked = localStorage.getItem('ax_notify_success') !== 'false' ? 'checked' : '';
-        const notifErrorChecked = localStorage.getItem('ax_notify_error') !== 'false' ? 'checked' : '';
+        const notifTransactionSubmittedChecked = localStorage.getItem('ax_notify_transactions_submitted') === 'true' ? 'checked' : '';
+        const notifTransactionFinalChecked = localStorage.getItem('ax_notify_transactions_final') !== 'false' ? 'checked' : '';
+        const notifRemindersChecked = localStorage.getItem('ax_notify_reminders') !== 'false' ? 'checked' : '';
+        const notifErrorsChecked = localStorage.getItem('ax_notify_errors') !== 'false' ? 'checked' : '';
 
-        const antiSybilWarningHtml = hideAllBanners ? '' : `
-            <div id="antiSybilWarningBox" style="background: linear-gradient(135deg, rgba(234, 179, 8, 0.12), rgba(234, 179, 8, 0.03)); border: 1px solid rgba(234, 179, 8, 0.35); border-radius: 16px; padding: 18px 20px; margin-bottom: 18px; display: flex; gap: 14px; align-items: flex-start; position: relative; box-shadow: 0 4px 20px rgba(0,0,0,0.2);">
-                <span style="font-size: 20px; margin-top: 1px;">🛡️</span>
-                <div style="flex: 1;">
-                    <div style="color: #eab308; font-weight: bold; font-size: 14px; margin-bottom: 4px; letter-spacing: 0.3px;">${t.setWarnTitle}</div>
-                    <div style="color: var(--text-muted); font-size: 13px; line-height: 1.5;">${t.setWarnDesc}</div>
-                </div>
-                <span onclick="document.getElementById('antiSybilWarningBox').style.display='none'" style="cursor: pointer; color: var(--text-muted); font-size: 16px; padding: 2px 6px; transition: color 0.2s;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--text-muted)'">✕</span>
-            </div>
-        `;
+        const antiSybilWarningHtml = renderInterfaceHint('settings-safety-note', `${t.setWarnTitle}. ${t.setWarnDesc}`, 'warning', '', '🛡️');
 
         centerHtml = `
             ${antiSybilWarningHtml}
@@ -2272,27 +4164,30 @@ function renderDashboardContent(section) {
 
                 <div style="background: var(--bg-main); border: 1px solid var(--border-color); border-radius: 12px; padding: 16px; margin-bottom: 18px;">
                     <div style="font-size: 13px; color: #fff; font-weight: 600; margin-bottom: 12px;">${t.notifTitle}</div>
+                    <div style="font-size:12px; color:var(--text-muted); line-height:1.45; margin:-4px 0 12px;">${t.notifDesc}</div>
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 13px; color: var(--text-muted);">
-                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" id="notifSettingsToggle" ${notifSettingsChecked}> ${t.notif1}</label>
-                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" id="notifStartToggle" ${notifStartChecked}> ${t.notif2}</label>
-                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" id="notifSuccessToggle" ${notifSuccessChecked}> ${t.notif3}</label>
-                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" id="notifErrorToggle" ${notifErrorChecked}> ${t.notif4}</label>
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" id="notifTransactionSubmittedToggle" ${notifTransactionSubmittedChecked}> ${t.notifTransactionSubmitted}</label>
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" id="notifTransactionFinalToggle" ${notifTransactionFinalChecked}> ${t.notifTransactionFinal}</label>
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" id="notifRemindersToggle" ${notifRemindersChecked}> ${t.notifReminders}</label>
+                        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" id="notifErrorsToggle" ${notifErrorsChecked}> ${t.notifErrors}</label>
                     </div>
                 </div>
 
                 <button type="button" onclick="saveGlobalProfileSettings()" class="btn-modal-primary" style="width:100%; padding: 12px; font-size: 14px; font-weight: 600; border-radius: 12px; cursor: pointer;">${t.btnSaveSet}</button>
             </div>
 
-            <!-- Блок интерфейса и подсказок перемещен вниз и оформлен как карточка дашборда -->
             <div class="dashboard-card" style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 18px; padding: 22px; box-shadow: 0 8px 30px rgba(0,0,0,0.4);">
                 <div style="color: #fff; font-weight: 700; font-size: 16px; margin-bottom: 4px;">${t.setInterfaceTitle}</div>
                 <div style="color: var(--text-muted); font-size: 13px; margin-bottom: 14px;">${t.setInterfaceDesc}</div>
                 <label style="display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
-                    <span style="color: #fff; font-size: 13px; font-weight: 500;">${t.setHideAllBanners}</span>
-                    <label class="switch">
-                        <input type="checkbox" ${hideAllBanners ? 'checked' : ''} onchange="toggleHideBanners(this)">
-                        <span class="slider"></span>
-                    </label>
+                    <span style="padding-right:16px;">
+                        <span style="display:block; color:#fff; font-size:13px; font-weight:600;">${t.setInterfaceHintsToggle}</span>
+                        <span style="display:block; color:var(--text-muted); font-size:12px; line-height:1.45; margin-top:3px;">${t.setInterfaceHintsToggleDesc}</span>
+                    </span>
+                    <span class="toggle-switch" style="flex:0 0 auto;">
+                        <input type="checkbox" ${areInterfaceHintsEnabled() ? 'checked' : ''} onchange="toggleInterfaceHints(this)">
+                        <span class="toggle-slider"></span>
+                    </span>
                 </label>
             </div>
         `;
@@ -2326,20 +4221,123 @@ function renderDashboardContent(section) {
             loadAirdropEligibility();
         }, 50);
     } else if (section === 'Farming') {
-        const activityPane = ['swap', 'plan', 'bridge', 'defi', 'quests'].includes(localStorage.getItem('ax_activity_pane')) ? localStorage.getItem('ax_activity_pane') : 'swap';
+        const storedActivityPane = localStorage.getItem('ax_activity_pane');
+        const activityPane = ['swap', 'transfer', 'plan', 'defi', 'quests', 'journal'].includes(storedActivityPane) ? storedActivityPane : 'swap';
         const plannerNetworkOptions = NETWORKS_CONFIG.map(net => `<option value="${net.key}">${net.name} (${net.symbol})</option>`).join('');
+        const bridgeDestinationOptions = NETWORKS_CONFIG
+            .filter(net => ['Ethereum', 'Arbitrum', 'Optimism', 'Polygon', 'Linea', 'BNB Chain'].includes(net.key))
+            .map(net => `<option value="${net.key}">${net.name}</option>`).join('');
+        const sourceNetworkOptions = NETWORKS_CONFIG
+            .filter(net => ['Ethereum', 'Base', 'Arbitrum', 'Optimism', 'Polygon', 'Linea', 'BNB Chain'].includes(net.key))
+            .map(net => `<option value="${net.key}">${net.name}</option>`).join('');
+        const reminderDayOptions = [
+            ['Mon', t.planReminderMonday], ['Tue', t.planReminderTuesday], ['Wed', t.planReminderWednesday],
+            ['Thu', t.planReminderThursday], ['Fri', t.planReminderFriday], ['Sat', t.planReminderSaturday], ['Sun', t.planReminderSunday],
+        ].map(([value, label]) => `<option value="${value}">${label}</option>`).join('');
         const activityTabs = [
-            ['swap', t.activityTabSwap], ['plan', t.activityTabPlan], ['bridge', t.activityTabBridge], ['defi', t.activityTabDefi], ['quests', t.activityTabQuests],
+            ['swap', t.activityTabSwap], ['transfer', t.activityTabTransfer], ['plan', t.activityTabPlan], ['defi', t.activityTabDefi], ['quests', t.activityTabQuests], ['journal', t.activityTabJournal],
         ].map(([key, label]) => `<button type="button" onclick="switchActivityPane('${key}')" style="background:${activityPane === key ? 'rgba(124,58,237,.22)' : 'var(--bg-main)'}; color:${activityPane === key ? '#e9d5ff' : 'var(--text-muted)'}; border:1px solid ${activityPane === key ? '#7c3aed' : 'var(--border-color)'}; padding:9px 11px; border-radius:9px; cursor:pointer; font-size:12px; white-space:nowrap;">${label}</button>`).join('');
-        const swapPane = `<div class="dashboard-card"><h3 style="color:#fff; margin-top:0; font-size:16px;">${t.baseSwapTitle}</h3><p style="color:var(--text-muted); font-size:13px; line-height:1.5;">${t.baseSwapDesc}</p><div style="background:rgba(59,130,246,.08); border:1px solid rgba(59,130,246,.25); color:#bfdbfe; padding:10px 12px; border-radius:10px; font-size:12px; line-height:1.5; margin:12px 0;">${t.baseSwapSafety}</div><div style="display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); gap:10px; align-items:end;"><label style="color:var(--text-muted); font-size:12px;">${t.baseSwapYouPay}<input id="baseSwapAmount" inputmode="decimal" class="auth-input" placeholder="0.01" style="font-size:13px; padding:10px 12px; margin-top:5px;"></label><div style="color:#c4b5fd; padding:0 0 11px; font-size:18px;">→</div><div style="background:var(--bg-main); border:1px solid var(--border-color); border-radius:10px; padding:10px 12px;"><div style="color:var(--text-muted); font-size:11px;">${t.baseSwapYouReceive}</div><div style="color:#fff; margin-top:4px; font-weight:700;">USDC</div></div></div><div style="color:var(--text-muted); font-size:12px; margin-top:10px;">${t.baseSwapSlippage}</div><button type="button" id="baseSwapQuoteButton" onclick="requestBaseSwapQuote()" class="btn-purple-lg" style="font-size:13px; padding:12px 18px; width:auto; margin-top:12px;">${t.baseSwapGetQuote}</button><div id="baseSwapResult" style="font-size:12px; line-height:1.5; margin-top:12px;"></div><div style="margin-top:18px; color:#fff; font-weight:700; font-size:13px;">${t.baseSwapHistoryTitle}</div><div id="baseSwapHistory" style="margin-top:7px;"></div></div>`;
-        const planPane = `<div class="dashboard-card"><h3 style="color:#fff; margin-top:0; font-size:16px;">${t.farmTitle}</h3><p style="color:var(--text-muted); font-size:13px; line-height:1.5; margin-bottom:12px;">${t.farmDesc}</p><div style="background:rgba(59,130,246,.08); border:1px solid rgba(59,130,246,.25); color:#bfdbfe; padding:10px 12px; border-radius:10px; font-size:12px; line-height:1.5; margin-bottom:14px;">${t.planSigningNote}</div><label style="color:var(--text-muted); font-size:12px; display:block; margin-bottom:6px;">${t.netSelect}</label><select class="auth-input" id="planNetwork" style="margin-bottom:12px; font-size:13px; padding:10px 12px;">${plannerNetworkOptions}</select><div style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px;"><label style="color:var(--text-muted); font-size:12px;">${t.planOps}<input id="planOperations" type="number" min="1" max="1000" value="1" oninput="updateTransactionPlanEstimate()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"></label><label style="color:var(--text-muted); font-size:12px;">${t.planMaxCost}<input id="planMaxCost" type="number" min="0" step="0.01" value="1" oninput="updateTransactionPlanEstimate()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"></label><label style="color:var(--text-muted); font-size:12px;">${t.planReserve}<input id="planReserve" type="number" min="0" step="0.01" value="0" oninput="updateTransactionPlanEstimate()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"></label><label style="color:var(--text-muted); font-size:12px;">${t.planDailyCap}<input id="planDailyCap" type="number" min="0" step="0.01" value="10" oninput="updateTransactionPlanEstimate()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"></label><label style="color:var(--text-muted); font-size:12px; grid-column:1 / -1;">${t.planMonthlyCap}<input id="planMonthlyCap" type="number" min="0" step="0.01" value="50" oninput="updateTransactionPlanEstimate()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"></label></div><div style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:14px;"><div style="background:var(--bg-main); border:1px solid var(--border-color); border-radius:10px; padding:12px;"><div style="font-size:11px; color:var(--text-muted);">${t.planEstimated}</div><div id="planEstimateValue" style="font-size:18px; color:#fff; font-weight:700; margin-top:4px;">$0.00</div></div><div style="background:var(--bg-main); border:1px solid var(--border-color); border-radius:10px; padding:12px;"><div style="font-size:11px; color:var(--text-muted);">${t.planRiskCap}</div><div id="planRiskCapValue" style="font-size:18px; color:#fff; font-weight:700; margin-top:4px;">$0.00</div></div></div><div id="planBudgetWarning" style="display:none; color:#fca5a5; font-size:12px; margin-top:10px;"></div><button type="button" onclick="saveTransactionPlan()" class="btn-purple-lg" style="font-size:13px; padding:12px 20px; width:auto; margin-top:14px;">${t.planSave}</button></div>`;
-        const bridgePane = `<div class="dashboard-card"><h3 style="color:#fff; margin-top:0; font-size:16px;">${t.activityBridgeTitle}</h3><p style="color:var(--text-muted); font-size:13px; line-height:1.55;">${t.activityBridgeDesc}</p><div style="background:rgba(251,191,36,.08); border:1px solid rgba(251,191,36,.28); color:#fde68a; padding:12px; border-radius:10px; font-size:12px; line-height:1.5;">${t.activityProtocolReview}</div></div>`;
-        const defiPane = `<div class="dashboard-card"><h3 style="color:#fff; margin-top:0; font-size:16px;">${t.activityDefiTitle}</h3><p style="color:var(--text-muted); font-size:13px; line-height:1.55;">${t.activityDefiDesc}</p><div style="background:rgba(251,191,36,.08); border:1px solid rgba(251,191,36,.28); color:#fde68a; padding:12px; border-radius:10px; font-size:12px; line-height:1.5;">${t.activityProtocolReview}</div></div>`;
+        const swapPane = `<div id="operationSwapPanel" style="border-top:1px solid var(--border-color); margin-top:18px; padding-top:18px;"><h3 style="color:#fff; margin-top:0; font-size:16px;">${t.baseSwapTitle}</h3><p style="color:var(--text-muted); font-size:13px; line-height:1.5;">${t.baseSwapDesc}</p>${renderInterfaceHint('base-swap-safety', t.baseSwapSafety, 'info', '', '🛡️')}<div style="color:var(--text-muted); font-size:12px; margin-top:10px;">${t.baseSwapSlippage}</div><button type="button" id="baseSwapQuoteButton" onclick="requestBaseSwapQuote()" class="btn-purple-lg" style="font-size:13px; padding:12px 18px; width:auto; margin-top:12px;">${t.baseSwapGetQuote}</button><div id="baseSwapResult" style="font-size:12px; line-height:1.5; margin-top:12px;"></div><div style="margin-top:18px; color:#fff; font-weight:700; font-size:13px;">${t.baseSwapHistoryTitle}</div><div id="baseSwapHistory" style="margin-top:7px;"></div></div>`;
+        const planPane = `
+            <div class="dashboard-card">
+                <h3 style="color:#fff; margin-top:0; font-size:16px;">${t.farmTitle}</h3>
+                <p style="color:var(--text-muted); font-size:13px; line-height:1.5; margin-bottom:12px;">${t.farmDesc}</p>
+                ${renderInterfaceHint('operation-plan-signing', t.planSigningNote, 'info', '', '✍')}
+                <label style="color:var(--text-muted); font-size:12px; display:block; margin-bottom:6px;">${t.netSelect}</label>
+                <select class="auth-input" id="planNetwork" style="margin-bottom:12px; font-size:13px; padding:10px 12px;">${plannerNetworkOptions}</select>
+                <div style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px;">
+                    <label style="color:var(--text-muted); font-size:12px;">${t.planOps}<input id="planOperations" type="number" min="1" max="1000" value="1" oninput="updateTransactionPlanEstimate()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"></label>
+                    <label style="color:var(--text-muted); font-size:12px;">${t.planMaxCost}<input id="planMaxCost" type="number" min="0" step="0.01" value="1" oninput="updateTransactionPlanEstimate()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"></label>
+                    <label style="color:var(--text-muted); font-size:12px;">${t.planReserve}<input id="planReserve" type="number" min="0" step="0.01" value="0" oninput="updateTransactionPlanEstimate()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"></label>
+                    <label style="color:var(--text-muted); font-size:12px;">${t.planDailyCap}<input id="planDailyCap" type="number" min="0" step="0.01" value="10" oninput="updateTransactionPlanEstimate()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"></label>
+                    <label style="color:var(--text-muted); font-size:12px; grid-column:1 / -1;">${t.planMonthlyCap}<input id="planMonthlyCap" type="number" min="0" step="0.01" value="50" oninput="updateTransactionPlanEstimate()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"></label>
+                </div>
+                <div style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:14px;">
+                    <div style="background:var(--bg-main); border:1px solid var(--border-color); border-radius:10px; padding:12px;"><div style="font-size:11px; color:var(--text-muted);">${t.planEstimated}</div><div id="planEstimateValue" style="font-size:18px; color:#fff; font-weight:700; margin-top:4px;">$0.00</div></div>
+                    <div style="background:var(--bg-main); border:1px solid var(--border-color); border-radius:10px; padding:12px;"><div style="font-size:11px; color:var(--text-muted);">${t.planRiskCap}</div><div id="planRiskCapValue" style="font-size:18px; color:#fff; font-weight:700; margin-top:4px;">$0.00</div></div>
+                </div>
+                <div id="planBudgetWarning" style="display:none; color:#fca5a5; font-size:12px; margin-top:10px;"></div>
+                <button type="button" onclick="saveTransactionPlan()" class="btn-purple-lg" style="font-size:13px; padding:12px 20px; width:auto; margin-top:14px;">${t.planSave}</button>
+            </div>
+            <div class="dashboard-card">
+                <h3 style="color:#fff; margin-top:0; font-size:16px;">${t.planReminderTitle}</h3>
+                <p style="color:var(--text-muted); font-size:13px; line-height:1.5; margin-bottom:14px;">${t.planReminderDesc}</p>
+                <label style="display:flex; align-items:center; gap:9px; color:#fff; font-size:13px; cursor:pointer;"><input id="actionReminderEnabled" type="checkbox" onchange="toggleActionReminderFields()"> ${t.planReminderEnabled}</label>
+                <div id="actionReminderFields" style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:14px;">
+                    <label style="color:var(--text-muted); font-size:12px;">${t.planReminderDay}<select id="actionReminderDay" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;">${reminderDayOptions}</select></label>
+                    <label style="color:var(--text-muted); font-size:12px;">${t.planReminderTime}<input id="actionReminderTime" type="text" value="18:00" placeholder="15:32" maxlength="5" inputmode="numeric" pattern="[0-2][0-9]:[0-5][0-9]" oninput="format24HourTimeInput(this)" onblur="normalize24HourTimeInput(this)" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"></label>
+                    <label style="grid-column:1 / -1; display:flex; align-items:center; gap:9px; color:var(--text-muted); font-size:12px; cursor:pointer;"><input id="actionReminderTelegram" type="checkbox" checked> ${t.planReminderTelegram}</label>
+                </div>
+                <div id="actionReminderStatus" style="font-size:12px; margin-top:12px;"></div>
+                <button type="button" onclick="saveActionReminder()" class="btn-purple-lg" style="font-size:13px; padding:12px 20px; width:auto; margin-top:14px;">${t.planReminderSave}</button>
+            </div>
+        `;
+        const bridgePane = `
+            <div id="operationBridgePanel" style="display:none; border-top:1px solid var(--border-color); margin-top:18px; padding-top:18px;">
+                <h3 style="color:#fff; margin:0; font-size:16px;">${t.bridgePlanSimpleTitle}</h3>
+                <p style="color:var(--text-muted); font-size:12px; line-height:1.5; margin:7px 0 0;">${t.bridgePlanSimpleDesc}</p>
+                <div id="bridgePlanResult" style="font-size:12px; line-height:1.5; margin-top:12px; color:var(--text-muted);">${t.bridgePlanStart}</div>
+                <div style="display:flex; flex-wrap:wrap; gap:9px; margin-top:14px;">
+                    <button type="button" onclick="checkBridgeReadiness()" class="btn-dark-sm" style="padding:10px 14px; border-color:#7c3aed;">${t.bridgePlanCheck}</button>
+                    <button type="button" id="bridgePlanSaveButton" onclick="saveBridgePlan()" class="btn-purple-lg" style="display:none; font-size:13px; padding:10px 14px; width:auto;">${t.bridgePlanSave}</button>
+                </div>
+                <details style="border-top:1px solid var(--border-color); margin-top:18px; padding-top:14px;"><summary style="color:var(--text-muted); cursor:pointer; font-size:12px;">${t.bridgePlanHistory}</summary><div id="bridgePlansHistory" style="margin-top:10px;">${t.loading}</div></details>
+            </div>
+        `;
+        const universalBridgePane = `
+            <div id="universalBridgePanel" style="display:none; border-top:1px solid var(--border-color); margin-top:18px; padding-top:18px;">
+                <h3 style="color:#fff; margin:0; font-size:16px;">${t.universalBridgeTitle}</h3>
+                <p style="color:var(--text-muted); font-size:12px; line-height:1.5; margin:7px 0 0;">${t.universalBridgeDesc}</p>
+                ${renderInterfaceHint('universal-bridge-safety', t.universalBridgeSafety, 'info', '', '🛡️')}
+                <div style="display:flex; flex-wrap:wrap; gap:9px; margin-top:14px;">
+                    <button type="button" id="universalBridgeQuoteButton" onclick="requestUniversalBridgeQuote()" class="btn-purple-lg" style="font-size:13px; padding:10px 14px; width:auto;">${t.universalBridgeGetQuote}</button>
+                    <button type="button" id="universalBridgeReviewButton" onclick="executeUniversalBridge()" class="btn-dark-sm" style="display:none; padding:10px 14px; border-color:#7c3aed;">${t.universalBridgeReview}</button>
+                </div>
+                <div id="universalBridgeResult" style="font-size:12px; line-height:1.55; margin-top:12px; color:var(--text-muted);">${t.universalBridgeRouteNotReady}</div>
+                <div style="border-top:1px solid var(--border-color); margin-top:16px; padding-top:14px;">
+                    <div style="color:#fff; font-size:13px; font-weight:700;">${t.universalBridgeHistoryTitle}</div>
+                    <div id="universalBridgeHistory" style="margin-top:7px;"><span style="color:var(--text-muted); font-size:12px;">${t.loading}</span></div>
+                </div>
+            </div>
+        `;
+        const tradePane = `
+            <div class="dashboard-card" style="margin-bottom:16px;">
+                <h3 style="color:#fff; margin:0 0 5px; font-size:16px;">${t.operationBuilderTitle}</h3>
+                <p style="color:var(--text-muted); font-size:13px; line-height:1.5; margin:0 0 14px;">${t.operationBuilderDesc}</p>
+                <div style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px;">
+                    <label style="color:var(--text-muted); font-size:12px;">${t.operationSourceNetwork}<select id="operationSourceNetwork" class="auth-input" onchange="handleOperationSourceNetworkChange()" style="margin-top:5px; font-size:13px; padding:10px 12px;">${sourceNetworkOptions}</select></label>
+                    <label style="color:var(--text-muted); font-size:12px;">${t.operationSourceAsset}<input id="operationSourceAssetSearch" class="auth-input" placeholder="${t.universalBridgeTokenSearch}" oninput="filterUniversalBridgeTokenSelect('operationSourceAsset')" style="margin-top:5px; font-size:12px; padding:8px 10px;"><select id="operationSourceAsset" class="auth-input" onchange="handleOperationSourceTokenChange()" disabled style="margin-top:5px; font-size:13px; padding:10px 12px;"><option value="">${t.universalBridgeTokensLoading}</option></select></label>
+                    <label style="color:var(--text-muted); font-size:12px;">${t.operationDestinationNetwork}<select id="operationDestinationNetwork" class="auth-input" onchange="handleOperationDestinationNetworkChange()" style="margin-top:5px; font-size:13px; padding:10px 12px;"><option value="Base">Base</option>${bridgeDestinationOptions}</select></label>
+                    <label style="color:var(--text-muted); font-size:12px;">${t.operationReceiveAsset}<input id="operationReceiveAssetSearch" class="auth-input" placeholder="${t.universalBridgeTokenSearch}" oninput="filterUniversalBridgeTokenSelect('operationReceiveAsset')" style="margin-top:5px; font-size:12px; padding:8px 10px;"><select id="operationReceiveAsset" class="auth-input" onchange="handleOperationDestinationTokenChange()" disabled style="margin-top:5px; font-size:13px; padding:10px 12px;"><option value="">${t.universalBridgeTokensLoading}</option></select></label>
+                    <label style="color:var(--text-muted); font-size:12px; grid-column:1 / -1;">${t.operationAmount}<input id="operationAmount" inputmode="decimal" placeholder="0.01" oninput="validateOperationAmount()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"><div id="operationAmountUsd" style="color:#c4b5fd; font-size:14px; font-weight:700; margin-top:6px;"></div></label>
+                </div>
+                <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:7px;">
+                    <div id="operationAmountAvailability" style="font-size:12px; color:var(--text-muted);">${t.operationAmountBalanceLoading}</div>
+                    <button type="button" onclick="useOperationMaxAmount()" class="btn-dark-sm" style="padding:6px 10px; font-size:11px; white-space:nowrap;">${t.operationAmountMax}</button>
+                </div>
+                <div id="operationWalletStatus" style="display:none;"></div>
+                <div id="operationRouteSummary" style="display:none;"></div>
+                ${renderInterfaceHint('universal-bridge-catalog', t.universalBridgeTokensLoading, 'success', 'universalBridgeCatalogStatus', 'ⓘ')}
+                ${universalBridgePane}${swapPane}${bridgePane}
+            </div>
+        `;
+        const directTransferPane = `<div class="dashboard-card" style="margin-bottom:16px;"><h3 style="color:#fff; margin:0 0 5px; font-size:16px;">${t.directTransferTitle}</h3><p style="color:var(--text-muted); font-size:13px; line-height:1.5; margin:0 0 14px;">${t.directTransferDesc}</p><div id="directTransferPanel">${t.loading}</div></div>`;
+        const defiPane = `<div class="dashboard-card" style="margin-bottom:16px;"><h3 style="color:#fff; margin:0 0 5px; font-size:16px;">${t.defiSupplyTitle}</h3><p style="color:var(--text-muted); font-size:13px; line-height:1.55; margin:0 0 12px;">${t.defiSupplyDesc}</p>${renderInterfaceHint('defi-supply-safety', t.defiSupplySafety, 'warning', '', '🛡️')}<label style="display:block; color:var(--text-muted); font-size:12px; margin-top:13px;">${t.defiSupplyAmount}<input id="aaveSupplyAmount" inputmode="decimal" placeholder="10" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"></label><button type="button" id="aaveSupplyQuoteButton" onclick="requestAaveUsdcSupplyQuote()" class="btn-purple-lg" style="font-size:13px; padding:10px 14px; width:auto; margin-top:12px;">${t.defiSupplyCheck}</button><div id="aaveSupplyResult" style="font-size:12px; line-height:1.5; margin-top:11px;"></div></div><div class="dashboard-card"><div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px;"><div><h3 style="color:#fff; margin:0 0 5px; font-size:16px;">${t.defiOverviewTitle}</h3><p style="color:var(--text-muted); font-size:13px; line-height:1.55; margin:0;">${t.defiOverviewDesc}</p></div><button type="button" id="defiRefreshButton" onclick="loadDefiOverview(true)" class="btn-dark-sm" style="padding:7px 10px; font-size:12px; white-space:nowrap;">${t.defiRefresh}</button></div>${renderInterfaceHint('defi-read-only', t.defiReadOnlyNote, 'info', '', '🛡️')}<div id="defiOverviewPanel" style="margin-top:12px;"><span style="color:var(--text-muted); font-size:13px;">${t.loading}</span></div></div>`;
         const questsPane = `<div class="dashboard-card"><h3 style="color:#fff; margin-top:0; font-size:16px;">${t.activityQuestsTitle}</h3><p style="color:var(--text-muted); font-size:13px; line-height:1.55;">${t.activityQuestsDesc}</p><button type="button" onclick="switchMenu(null, 'Looter')" class="btn-dark-sm" style="margin-top:8px; padding:10px 14px; border-color:#7c3aed;">${t.activityQuestsOpen}</button></div>`;
-        const activePane = { swap: swapPane, plan: planPane, bridge: bridgePane, defi: defiPane, quests: questsPane }[activityPane];
+        const journalFilters = [
+            ['all', t.operationsJournalAll], ['pending', t.operationsJournalPending], ['completed', t.operationsJournalCompleted],
+        ].map(([key, label]) => `<button type="button" onclick="setOperationsJournalFilter('${key}')" style="background:${operationsJournalFilter === key ? 'rgba(124,58,237,.22)' : 'var(--bg-main)'}; color:${operationsJournalFilter === key ? '#e9d5ff' : 'var(--text-muted)'}; border:1px solid ${operationsJournalFilter === key ? '#7c3aed' : 'var(--border-color)'}; padding:7px 10px; border-radius:8px; cursor:pointer; font-size:12px;">${label}</button>`).join('');
+        const journalAction = operationsJournalFilter === 'pending'
+            ? `<button type="button" id="operationsJournalCheckButton" onclick="checkPendingOperations(this)" class="btn-dark-sm" style="padding:7px 10px; font-size:12px; white-space:nowrap; border-color:#7c3aed;">${t.operationsJournalCheckPending}</button>`
+            : `<button type="button" onclick="loadOperationsJournal()" class="btn-dark-sm" style="padding:7px 10px; font-size:12px; white-space:nowrap;">${t.operationsJournalRefresh}</button>`;
+        const journalPane = `<div class="dashboard-card"><div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px;"><div><h3 style="color:#fff; margin:0 0 5px; font-size:16px;">${t.operationsJournalTitle}</h3><p style="color:var(--text-muted); font-size:13px; line-height:1.5; margin:0;">${t.operationsJournalDesc}</p></div>${journalAction}</div><div style="display:flex; flex-wrap:wrap; gap:7px; margin-top:14px;">${journalFilters}</div><div id="operationsJournalList" style="margin-top:12px;"><span style="color:var(--text-muted); font-size:13px;">${t.loading}</span></div></div>`;
+        const activePane = { swap: tradePane, transfer: directTransferPane, plan: planPane, defi: defiPane, quests: questsPane, journal: journalPane }[activityPane];
         centerHtml = `<div class="dashboard-card" style="margin-bottom:16px;"><h3 style="color:#fff; margin:0 0 5px; font-size:17px;">${t.activityTitle}</h3><p style="color:var(--text-muted); font-size:13px; line-height:1.5; margin:0 0 14px;">${t.activityDesc}</p><div style="display:flex; flex-wrap:wrap; gap:8px;">${activityTabs}</div></div>${activePane}`;
-        if (activityPane === 'plan') setTimeout(loadTransactionPlan, 50);
-        if (activityPane === 'swap') setTimeout(loadBaseSwapHistory, 50);
+        if (activityPane === 'plan') setTimeout(() => { loadTransactionPlan(); loadActionReminder(); }, 50);
+        if (activityPane === 'swap') setTimeout(() => { loadOperationBuilderWalletStatus(); updateOperationBuilder(); loadUniversalBridgeHistory(); }, 50);
+        if (activityPane === 'transfer') setTimeout(loadDirectTransferPanel, 50);
+        if (activityPane === 'journal') setTimeout(loadOperationsJournal, 50);
+        if (activityPane === 'defi') setTimeout(loadDefiOverview, 50);
     } else if (section === 'Farming' && false) {
         const plannerNetworkOptions = NETWORKS_CONFIG.map(net => `<option value="${net.key}">${net.name} (${net.symbol})</option>`).join('');
         centerHtml = `
