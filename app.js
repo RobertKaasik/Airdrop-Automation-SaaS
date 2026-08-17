@@ -2458,6 +2458,8 @@ async function loadWalletsFromDB() {
             const walletName = escapeHtml(w.label || `${t.walletDefaultName} ${w.id}`);
             const address = escapeHtml(w.wallet_address);
             const proxyStatus = w.has_proxy ? t.walletProxyConfigured : t.walletNoProxy;
+            const profileReady = Boolean(w.profile_id && w.profile_status === 'active');
+            const profileStatus = profileReady ? t.walletProfileReady : t.walletProfilePending;
             return `
                 <div style="background: var(--bg-main); border: 1px solid var(--border-color); padding: 14px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; gap:12px;">
                     <div>
@@ -2465,6 +2467,7 @@ async function loadWalletsFromDB() {
                         <div style="color: #d1d5db; font-size: 12px; margin-top:4px; font-family:monospace;">${address}</div>
                         <div style="color: ${isActive ? '#86efac' : 'var(--text-muted)'}; font-size: 12px; margin-top:5px;">${isActive ? (isConnectedForActions ? t.walletSessionActive : t.walletActiveNeedsConnection) : t.walletBaseMonitoring}</div>
                         <div style="color: var(--text-muted); font-size: 12px; margin-top:3px;">${proxyStatus}</div>
+                        <div style="color:${profileReady ? '#86efac' : '#fbbf24'}; font-size:12px; margin-top:3px;">${profileReady ? '✓' : '◌'} ${profileStatus}</div>
                         <div id="walletHealthResult-${w.id}" style="font-size:12px; line-height:1.45; margin-top:7px;"></div>
                         <div id="walletEditPanel-${w.id}" style="display:none; margin-top:9px; max-width:360px;"><input id="walletEditLabel-${w.id}" value="${walletName}" maxlength="40" class="auth-input" style="font-size:12px; padding:8px 10px;" aria-label="${t.walletEditLabel}"><button type="button" onclick="saveWalletLabel(${w.id})" class="btn-dark-sm" style="margin-top:6px; padding:7px 10px; border-color:#7c3aed;">${t.walletEditSave}</button></div>
                     </div>
@@ -2473,6 +2476,7 @@ async function loadWalletsFromDB() {
                         <button type="button" onclick="toggleWalletEditor(${w.id})" style="background:rgba(255,255,255,.06); color:#e5e7eb; border:1px solid var(--border-color); padding:6px 10px; border-radius:8px; font-size:12px; cursor:pointer;">${t.walletEdit}</button>
                         <button type="button" onclick="checkWalletHealth(${w.id}, this)" style="background:rgba(59,130,246,0.1); color:#93c5fd; border:1px solid rgba(59,130,246,0.28); padding:6px 10px; border-radius:8px; font-size:12px; cursor:pointer;">${t.walletHealthCheck}</button>
                         ${w.has_proxy ? `<button type="button" onclick="testWalletProxy(${w.id}, this)" style="background: rgba(34,197,94,0.1); color: #22c55e; border: 1px solid rgba(34,197,94,0.2); padding: 6px 10px; border-radius: 8px; font-size: 12px; cursor:pointer;">${t.walletProxyTest}</button>` : ''}
+                        ${!profileReady ? `<button type="button" onclick="createWalletProfile(${w.id}, this)" style="background:rgba(124,58,237,.12); color:#d8b4fe; border:1px solid rgba(124,58,237,.35); padding:6px 10px; border-radius:8px; font-size:12px; cursor:pointer;">${t.walletProfileCreate}</button>` : ''}
                         <button type="button" onclick="deleteWallet(${w.id})" style="background: rgba(239,68,68,0.1); color: #ef4444; border: 1px solid rgba(239,68,68,0.2); padding: 6px 10px; border-radius: 8px; font-size: 12px; cursor:pointer;">${t.walletRemove}</button>
                     </div>
                 </div>
@@ -2516,6 +2520,29 @@ async function saveWalletLabel(walletId) {
         await loadWalletsFromDB();
     } catch (error) {
         showNotification(translateBackendDetail(error.message) || locale.walletEditInvalid, 'error');
+    }
+}
+
+async function createWalletProfile(walletId, button) {
+    const locale = translations[getActiveLang()];
+    const originalText = button?.innerText || locale.walletProfileCreate;
+    try {
+        if (button) {
+            button.disabled = true;
+            button.innerText = locale.walletHealthChecking;
+        }
+        const response = await fetch(`/api/wallets/${walletId}/profile`, { method: 'POST' });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'wallet_profile_create_failed');
+        showNotification(locale.walletProfileCreated, 'success');
+        await loadWalletsFromDB();
+    } catch (error) {
+        showNotification(translateBackendDetail(error.message) || locale.walletLoadError, 'error');
+    } finally {
+        if (button) {
+            button.disabled = false;
+            button.innerText = originalText;
+        }
     }
 }
 
@@ -5248,6 +5275,9 @@ function renderDashboardContent(section) {
                     <input type="text" id="newWalletAddress" placeholder="${t.phAddr}" class="auth-input" style="font-size: 13px; padding: 10px 12px;">
                     ${proxyTipHtml}
                     <input type="text" id="newWalletProxy" placeholder="${t.phProxy}" class="auth-input" style="font-size: 13px; padding: 10px 12px;">
+                    <div style="display:flex; gap:8px; align-items:flex-start; padding:9px 10px; border:1px solid rgba(124,58,237,.28); background:rgba(124,58,237,.08); border-radius:9px; color:#d8b4fe; font-size:12px; line-height:1.4;">
+                        <span aria-hidden="true">✓</span><span>${t.walletProfileHint}</span>
+                    </div>
                     <button type="button" onclick="addNewWalletToDB()" class="btn-modal-primary" style="margin-top:4px; padding: 12px; font-size: 14px;">${t.btnAddWal}</button>
                 </div>
                 <div id="walletResponseMsg" style="margin-top: 8px; font-size:12px;"></div>

@@ -14,6 +14,13 @@ import hmac
 import bcrypt
 import re
 import math
+from core.database import Base, SessionLocal, engine, init_db
+from core.models import FinancialTransferIntent, ProfileRun, UserProfile
+from core.browser_profile_manager import (
+    BrowserProfileManager,
+    ProfileBusyError,
+    ProfileConfigurationError,
+)
 from decimal import Decimal
 from email.message import EmailMessage
 from pathlib import Path
@@ -23,6 +30,10 @@ from dotenv import load_dotenv
 # Securely load environment variables from .env
 BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
+
+browser_manager = BrowserProfileManager(
+    base_profiles_path=str(BASE_DIR / "browser_profiles")
+)
 
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 465
@@ -132,8 +143,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Any, Dict, List, Optional
-from sqlalchemy import create_engine, Column, Integer, String, Float, Boolean, text
-from sqlalchemy.orm import declarative_base, sessionmaker, Session
+from sqlalchemy import Column, Integer, String, Float, Boolean, text
+from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from web3 import Web3
@@ -367,11 +378,6 @@ swap_quote_sessions = {}
 SWAP_SUBMISSION_TTL_SECONDS = 10 * 60
 swap_submission_sessions = {}
 BRIDGE_PLAN_DESTINATIONS = {"Ethereum", "Arbitrum", "Optimism", "Polygon", "Linea", "BNB Chain"}
-
-SQLALCHEMY_DATABASE_URL = "sqlite:///./airdrop_x.db"
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
 
 class User(Base):
     __tablename__ = "users"
@@ -620,7 +626,7 @@ class BridgePlan(Base):
     status = Column(String, nullable=False, default="planned")
     created_at = Column(Integer, nullable=False)
 
-Base.metadata.create_all(bind=engine)
+init_db()
 
 def ensure_schema_columns():
     with engine.connect() as conn:
@@ -1493,6 +1499,96 @@ def get_current_user(
     if not current_user:
         raise HTTPException(status_code=401, detail="Session user not found")
     return current_user
+
+
+@app.post("/api/profiles/{profile_id}/launch")
+async def launch_browser_profile(
+    profile_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    profile = (
+        db.query(UserProfile)
+        .filter(
+            UserProfile.id == profile_id,
+            UserProfile.user_id == current_user.id,
+        )
+        .first()
+    )
+
+    if not profile:
+        raise HTTPException(status_code=404, detail="Profile not found")
+
+    try:
+        await browser_manager.launch_profile(
+            profile_id=profile.id,
+            user_id=current_user.id,
+        )
+
+        return {
+            "status": "success",
+            "profile_id": profile.id,
+            "message": "Profile session started",
+        }
+
+    except ProfileBusyError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except ProfileConfigurationError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except Exception:
+        logging.exception("Unable to launch browser profile_id=%s", profile_id)
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to start profile session",
+        )
+
+
+@app.post("/api/profiles/{profile_id}/close")
+async def close_browser_profile(
+    profile_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    profile = (
+        db.query(UserProfile)
+        .filter(
+            UserProfile.id == profile_id,
+            UserProfile.user_id == current_user.id,
+        )
+        .first()
+    )
+
+    if not profile:
+        raise HTTPException(status_code=404, detail="Profile not found")
+
+    try:
+        closed = await browser_manager.close_profile(profile.id)
+
+        return {
+            "status": "success",
+            "profile_id": profile.id,
+            "closed": closed,
+            "message": (
+                "Profile session closed"
+                if closed
+                else "No active session for this profile"
+            ),
+        }
+
+    except ProfileBusyError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except ProfileConfigurationError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except Exception:
+        logging.exception("Unable to close browser profile_id=%s", profile_id)
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to close profile session",
+        )
 
 @app.post("/api/logout")
 async def logout(
@@ -2902,6 +2998,45 @@ async def login(user: UserLogin, request: Request, db: Session = Depends(get_db)
         "expires_in": AUTH_SESSION_DURATION_SECONDS,
     }
     
+def ensure_wallet_profile(db: Session, user: User, wallet: Wallet) -> tuple[UserProfile, bool]:
+    """Create one owner-scoped local profile for a saved public wallet address.
+
+    The profile contains no private key and does not start a browser session.  It
+    only keeps the address, optional proxy configuration, and isolated-profile
+    settings that may be used later by an explicit, authenticated action.
+    """
+    profiles = (
+        db.query(UserProfile)
+        .filter(UserProfile.user_id == user.id)
+        .all()
+    )
+    wallet_address = wallet.wallet_address.lower()
+    profile = next(
+        (
+            item
+            for item in profiles
+            if item.evm_wallet_address.lower() == wallet_address
+        ),
+        None,
+    )
+
+    if profile:
+        profile.proxy_configuration = wallet.proxy
+        profile.status = "active"
+        return profile, False
+
+    profile = UserProfile(
+        user_id=user.id,
+        profile_name=f"wallet-{wallet.id}",
+        proxy_configuration=wallet.proxy,
+        evm_wallet_address=wallet.wallet_address,
+        status="active",
+    )
+    db.add(profile)
+    db.flush()
+    return profile, True
+
+
 @app.post("/api/wallets/add")
 async def add_wallet(wallet: WalletAdd, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     require_owned_username(wallet.username, current_user)
@@ -2930,8 +3065,15 @@ async def add_wallet(wallet: WalletAdd, db: Session = Depends(get_db), current_u
         proxy=normalize_proxy_configuration(wallet.proxy),
     )
     db.add(new_wallet)
+    db.flush()
+    profile, _ = ensure_wallet_profile(db, user, new_wallet)
     db.commit()
-    return {"status": "success", "message": "Wallet added"}
+    return {
+        "status": "success",
+        "message": "Wallet and local profile added",
+        "wallet_id": new_wallet.id,
+        "profile_id": profile.id,
+    }
 
 @app.post("/api/wallets/buy-slot")
 async def buy_extra_slot(req: BuyExtraSlotReq, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -2969,19 +3111,49 @@ async def add_wallet_batch(
             status_code=409,
             detail=f"Selected wallets exceed your plan limit of {max_allowed} slots",
         )
+    profiles_created = 0
     for address in new_addresses:
-        db.add(Wallet(
+        wallet = Wallet(
             username=current_user.username,
             wallet_address=address,
             label=None,
             proxy=None,
-        ))
+        )
+        db.add(wallet)
+        db.flush()
+        _profile, created = ensure_wallet_profile(db, current_user, wallet)
+        profiles_created += int(created)
     if new_addresses:
         db.commit()
     return {
         "status": "success",
         "added": len(new_addresses),
         "already_saved": len(addresses) - len(new_addresses),
+        "profiles_created": profiles_created,
+    }
+
+
+@app.post("/api/wallets/{wallet_id}/profile")
+async def create_wallet_profile(
+    wallet_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Create a missing local profile for one existing saved wallet."""
+    wallet = db.query(Wallet).filter(
+        Wallet.id == wallet_id,
+        Wallet.username == current_user.username,
+    ).first()
+    if not wallet:
+        raise HTTPException(status_code=404, detail="Wallet not found")
+
+    profile, created = ensure_wallet_profile(db, current_user, wallet)
+    db.commit()
+    return {
+        "status": "success",
+        "profile_id": profile.id,
+        "created": created,
+        "message": "Local profile ready",
     }
 
 @app.patch("/api/wallets/{wallet_id}/label")
@@ -3734,6 +3906,15 @@ async def refresh_universal_bridge_record(
 async def get_wallets(username: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     require_owned_username(username, current_user)
     wallets = db.query(Wallet).filter(Wallet.username == username).all()
+    profiles = (
+        db.query(UserProfile)
+        .filter(UserProfile.user_id == current_user.id)
+        .all()
+    )
+    profiles_by_address = {
+        profile.evm_wallet_address.lower(): profile
+        for profile in profiles
+    }
     user = db.query(User).filter(User.username == username).first()
     plan = user.subscription_plan if user else "Standard"
     extra = user.extra_slots if user else 0
@@ -3745,12 +3926,26 @@ async def get_wallets(username: str, db: Session = Depends(get_db), current_user
         "max_slots": max_allowed,
         "wallets": [
             {
-                "id": w.id,
-                "wallet_address": w.wallet_address,
-                "label": w.label,
-                "has_proxy": bool(w.proxy),
+                "id": wallet.id,
+                "wallet_address": wallet.wallet_address,
+                "label": wallet.label,
+                "has_proxy": bool(wallet.proxy),
+                "profile_id": (
+                    profiles_by_address[wallet.wallet_address.lower()].id
+                    if wallet.wallet_address.lower() in profiles_by_address
+                    else None
+                ),
+                "profile_status": (
+                    profiles_by_address[wallet.wallet_address.lower()].status
+                    if wallet.wallet_address.lower() in profiles_by_address
+                    else None
+                ),
+                "profile_has_proxy": bool(
+                    profiles_by_address.get(wallet.wallet_address.lower())
+                    and profiles_by_address[wallet.wallet_address.lower()].proxy_configuration
+                ),
             }
-            for w in wallets
+            for wallet in wallets
         ]
     }
 
