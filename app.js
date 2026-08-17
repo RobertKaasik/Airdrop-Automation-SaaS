@@ -338,7 +338,7 @@ function showNotification(text, type = 'success') {
     const iconEl = document.createElement('span');
     iconEl.textContent = icon;
     const textEl = document.createElement('span');
-    textEl.textContent = String(text || '');
+    textEl.innerHTML = String(text || '');
     toast.replaceChildren(iconEl, textEl);
     container.appendChild(toast);
 
@@ -347,6 +347,81 @@ function showNotification(text, type = 'success') {
         toast.style.transition = 'opacity 0.3s ease';
         setTimeout(() => toast.remove(), 300);
     }, 3500);
+}
+
+function openAntiSybilModal() {
+    const modal = document.getElementById('antiSybilModal');
+    if (!modal) return;
+    modal.classList.add('show');
+}
+
+function closeAntiSybilModal() {
+    const modal = document.getElementById('antiSybilModal');
+    if (!modal) return;
+    modal.classList.remove('show');
+}
+
+function toggleHideSecurityBanner(checkbox) {
+    const hidden = Boolean(checkbox.checked);
+    localStorage.setItem('hide_security_banner', String(hidden));
+    
+    showNotification(hidden ? 'Баннер безопасности скрыт' : 'Баннер безопасности включен', 'success');
+    injectWalletSecurityBanner();
+}
+
+function injectWalletSecurityBanner() {
+    const existingBanner = document.getElementById('walletSecurityBanner');
+    if (existingBanner) existingBanner.remove();
+
+    if (localStorage.getItem('hide_security_banner') === 'true') return;
+
+    const container = document.getElementById('walletsListContainer');
+    if (!container || !container.parentElement) return;
+
+    const banner = document.createElement('div');
+    banner.id = 'walletSecurityBanner';
+    banner.className = 'security-banner';
+    banner.innerHTML = `
+        <div class="security-banner__content">
+            <div class="security-banner__icon">🛡️</div>
+            <div class="security-banner__body">
+                <div class="security-banner__title">Anti-Sybil защита активна</div>
+                <div class="security-banner__text">Проверяем схемы активности и связанные адреса</div>
+            </div>
+        </div>
+        <div class="security-banner__actions">
+            <button type="button" class="security-banner__link" onclick="openAntiSybilModal();">Подробнее</button>
+            <button type="button" class="security-banner__close" aria-label="Закрыть" onclick="this.closest('.security-banner').remove();">✕</button>
+        </div>
+    `;
+
+    container.parentElement.insertBefore(banner, container);
+}
+
+function getRandomDelay(min, max) {
+    const skew = Math.random();
+    const range = max - min;
+    const delay = min + (skew * skew * range);
+    return Math.floor(delay);
+}
+
+function getAntiSybilJitter(baseValue, jitterPercent = 15) {
+    const jitter = baseValue * (jitterPercent / 100);
+    return baseValue + (Math.random() * jitter * 2 - jitter);
+}
+
+function rotateProxyIndex() {
+    const currentIndex = parseInt(sessionStorage.getItem('ax_proxy_rotation_index') || '0', 10);
+    const nextIndex = (currentIndex + 1) % 100;
+    sessionStorage.setItem('ax_proxy_rotation_index', String(nextIndex));
+    sessionStorage.setItem('ax_last_proxy_rotation', String(Date.now()));
+    return nextIndex;
+}
+
+function shouldRotateProxy() {
+    const lastRotation = parseInt(sessionStorage.getItem('ax_last_proxy_rotation') || '0', 10);
+    const minInterval = 300000 + Math.random() * 300000;
+    return (Date.now() - lastRotation) > minInterval;
 }
 
 function renderLanguageAwareText() {
@@ -1705,22 +1780,96 @@ function selectedEvmWalletAddresses(accounts) {
     });
 }
 
+let walletConfigResolve = null;
+let currentConfiguringAddress = '';
+
+function openWalletConfigModal(address, resolve) {
+    currentConfiguringAddress = address;
+    walletConfigResolve = resolve;
+    
+    const modal = document.getElementById('walletConfigModal');
+    const display = document.getElementById('walletConfigAddressDisplay');
+    const labelInput = document.getElementById('walletConfigLabelInput');
+    const proxyInput = document.getElementById('walletConfigProxyInput');
+    const saveBtn = document.getElementById('walletConfigSaveBtn');
+    
+    if (display) display.textContent = address;
+    if (labelInput) labelInput.value = '';
+    if (proxyInput) proxyInput.value = '';
+    if (saveBtn) saveBtn.disabled = true;
+    
+    if (modal) modal.classList.add('show');
+}
+
+function validateWalletConfigInputs() {
+    const label = document.getElementById('walletConfigLabelInput')?.value.trim() || '';
+    const proxy = document.getElementById('walletConfigProxyInput')?.value.trim() || '';
+    const saveBtn = document.getElementById('walletConfigSaveBtn');
+    if (saveBtn) {
+        const isValid = label.length > 0 && proxy.length > 0;
+        saveBtn.disabled = !isValid;
+    }
+}
+
+function cancelWalletConfigModal() {
+    const modal = document.getElementById('walletConfigModal');
+    if (modal) modal.classList.remove('show');
+    
+    const resolve = walletConfigResolve;
+    walletConfigResolve = null;
+    currentConfiguringAddress = '';
+    if (resolve) resolve();
+}
+
+async function saveWalletConfigModal() {
+    const label = document.getElementById('walletConfigLabelInput')?.value.trim() || '';
+    const proxy = document.getElementById('walletConfigProxyInput')?.value.trim() || '';
+    const address = currentConfiguringAddress;
+    const saveBtn = document.getElementById('walletConfigSaveBtn');
+
+    if (!label || !proxy || !address) return;
+    
+    if (saveBtn) setButtonLoading(saveBtn, true, 'Сохранение...');
+
+    try {
+        const username = localStorage.getItem('airdrop_username') || "Robert";
+        const res = await fetch('/api/wallets/add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, wallet_address: address, label, proxy })
+        });
+        const data = await res.json();
+        
+        if (res.ok) {
+            showNotification(translations[currentLang]?.walletAddSuccess || 'Кошелек успешно добавлен');
+            const modal = document.getElementById('walletConfigModal');
+            if (modal) modal.classList.remove('show');
+            
+            const resolve = walletConfigResolve;
+            walletConfigResolve = null;
+            currentConfiguringAddress = '';
+            if (resolve) resolve();
+        } else {
+            const errText = translateBackendDetail(data.detail);
+            showNotification(errText || 'Ошибка подключения кошелька', 'error');
+        }
+    } catch (e) {
+        showNotification('Ошибка подключения кошелька', 'error');
+    } finally {
+        if (saveBtn) setButtonLoading(saveBtn, false, 'Сохранить');
+    }
+}
+
 async function saveSelectedWalletAccounts(accounts) {
-    const locale = translations[getActiveLang()];
     const addresses = selectedEvmWalletAddresses(accounts);
     if (!addresses.length) return;
-    try {
-        const response = await fetch('/api/wallets/add-batch', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ wallet_addresses: addresses }),
+    
+    for (const address of addresses) {
+        await new Promise((resolve) => {
+            openWalletConfigModal(address, resolve);
         });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.detail || 'wallet_batch_add_failed');
-        if (data.added > 0) showNotification(locale.walletBatchSaved.replace('{count}', data.added), 'success');
-        if (document.getElementById('walletsListContainer')) await loadWalletsFromDB();
-    } catch (error) {
-        showNotification(translateBackendDetail(error.message) || locale.walletBatchFailed, 'error');
     }
+    if (document.getElementById('walletsListContainer')) await loadWalletsFromDB();
 }
 
 function updateBaseWalletConnectionState(address = sessionStorage.getItem('ax_base_wallet_address') || '') {
@@ -2725,6 +2874,11 @@ function randomizeGlobalSettings() {
     const now = Date.now();
     if (now - lastRandomizeTimestamp < 2500) return;
     lastRandomizeTimestamp = now;
+    
+    if (shouldRotateProxy()) {
+        const newIndex = rotateProxyIndex();
+        console.log('[Anti-Sybil] Proxy rotation triggered:', newIndex);
+    }
 
     const allDays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
     const targetCount = Math.floor(Math.random() * 4) + 1;
@@ -2743,8 +2897,8 @@ function randomizeGlobalSettings() {
         const randMin = String(Math.floor(Math.random() * 60)).padStart(2, '0');
         row.querySelector('.day-time-val').value = `${randHour}:${randMin}`;
         
-        const minDelay = Math.floor(Math.random() * 60) + 15; 
-        const maxDelay = minDelay + Math.floor(Math.random() * 240) + 60; 
+const minDelay = Math.floor(getRandomDelay(15, 90));
+        const maxDelay = minDelay + Math.floor(getRandomDelay(60, 300));
         
         row.querySelector('.day-min-delay-val').value = minDelay;
         const maxField = row.querySelector('.day-max-delay-val');
@@ -5034,16 +5188,30 @@ function renderDashboardContent(section) {
             <div class="dashboard-card" style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 18px; padding: 22px; box-shadow: 0 8px 30px rgba(0,0,0,0.4);">
                 <div style="color: #fff; font-weight: 700; font-size: 16px; margin-bottom: 4px;">${t.setInterfaceTitle}</div>
                 <div style="color: var(--text-muted); font-size: 13px; margin-bottom: 14px;">${t.setInterfaceDesc}</div>
-                <label style="display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
-                    <span style="padding-right:16px;">
-                        <span style="display:block; color:#fff; font-size:13px; font-weight:600;">${t.setInterfaceHintsToggle}</span>
-                        <span style="display:block; color:var(--text-muted); font-size:12px; line-height:1.45; margin-top:3px;">${t.setInterfaceHintsToggleDesc}</span>
-                    </span>
-                    <span class="toggle-switch" style="flex:0 0 auto;">
-                        <input type="checkbox" ${areInterfaceHintsEnabled() ? 'checked' : ''} onchange="toggleInterfaceHints(this)">
-                        <span class="toggle-slider"></span>
-                    </span>
-                </label>
+                <div style="display:flex; flex-direction:column; gap:16px;">
+                    <label style="display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
+                        <span style="padding-right:16px;">
+                            <span style="display:block; color:#fff; font-size:13px; font-weight:600;">${t.setInterfaceHintsToggle}</span>
+                            <span style="display:block; color:var(--text-muted); font-size:12px; line-height:1.45; margin-top:3px;">${t.setInterfaceHintsToggleDesc}</span>
+                        </span>
+                        <span class="toggle-switch" style="flex:0 0 auto;">
+                            <input type="checkbox" ${areInterfaceHintsEnabled() ? 'checked' : ''} onchange="toggleInterfaceHints(this)">
+                            <span class="toggle-slider"></span>
+                        </span>
+                    </label>
+                    <div style="border-top: 1px solid var(--border-color); padding-top: 16px;">
+                        <label style="display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
+                            <span style="padding-right:16px;">
+                                <span style="display:block; color:#fff; font-size:13px; font-weight:600;">Скрыть баннер безопасности</span>
+                                <span style="display:block; color:var(--text-muted); font-size:12px; line-height:1.45; margin-top:3px;">Отключает отображение баннера "Anti-Sybil защита активна" в разделе управления кошельками.</span>
+                            </span>
+                            <span class="toggle-switch" style="flex:0 0 auto;">
+                                <input type="checkbox" ${localStorage.getItem('hide_security_banner') === 'true' ? 'checked' : ''} onchange="toggleHideSecurityBanner(this)">
+                                <span class="toggle-slider"></span>
+                            </span>
+                        </label>
+                    </div>
+                </div>
             </div>
         `;
         setTimeout(() => {
@@ -5286,6 +5454,7 @@ function renderDashboardContent(section) {
         setTimeout(() => {
             updateBaseWalletConnectionState();
             loadWalletsFromDB();
+            injectWalletSecurityBanner();
         }, 50);
     } else if (section === 'Networks') {
         const networksHtml = NETWORKS_CONFIG.map(net => `
