@@ -189,7 +189,6 @@ window.AIRDROP_LOCALES.zh = {
   activityTitle: '单钱包操作中心',
   activityDesc: '每个场景都有独立窗口。选择操作、查看条件，并在钱包中确认每笔交易。',
   activityTabSwap: '兑换与跨链桥',
-  activityTabTransfer: '转账',
   activityTabPlan: '计划',
   activityTabBridge: '跨链桥',
   activityTabDefi: 'DeFi',

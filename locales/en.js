@@ -189,7 +189,6 @@ window.AIRDROP_LOCALES.en = {
   activityTitle: 'One-wallet action center',
   activityDesc: 'Every scenario has its own window. Choose an action, review its terms, and confirm every transaction in your wallet.',
   activityTabSwap: 'Swap & bridges',
-  activityTabTransfer: 'Transfer',
   activityTabPlan: 'Routine',
   activityTabBridge: 'Bridges',
   activityTabDefi: 'DeFi',

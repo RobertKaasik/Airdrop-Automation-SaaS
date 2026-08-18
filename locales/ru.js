@@ -189,7 +189,6 @@ window.AIRDROP_LOCALES.ru = {
   activityTitle: 'Центр действий одного кошелька',
   activityDesc: 'Все сценарии собраны по отдельным окнам. Вы выбираете действие, проверяете условия и подтверждаете каждую транзакцию в своём кошельке.',
   activityTabSwap: 'Обмен и мосты',
-  activityTabTransfer: 'Перевод',
   activityTabPlan: 'Регулярность',
   activityTabBridge: 'Мосты',
   activityTabDefi: 'DeFi',

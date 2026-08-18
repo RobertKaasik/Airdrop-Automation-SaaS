@@ -361,19 +361,11 @@ function closeAntiSybilModal() {
     modal.classList.remove('show');
 }
 
-function toggleHideSecurityBanner(checkbox) {
-    const hidden = Boolean(checkbox.checked);
-    localStorage.setItem('hide_security_banner', String(hidden));
-    
-    showNotification(hidden ? 'Баннер безопасности скрыт' : 'Баннер безопасности включен', 'success');
-    injectWalletSecurityBanner();
-}
-
 function injectWalletSecurityBanner() {
     const existingBanner = document.getElementById('walletSecurityBanner');
     if (existingBanner) existingBanner.remove();
 
-    if (localStorage.getItem('hide_security_banner') === 'true') return;
+    if (!areInterfaceHintsEnabled()) return;
 
     const container = document.getElementById('walletsListContainer');
     if (!container || !container.parentElement) return;
@@ -1753,7 +1745,7 @@ function switchMenu(element, sectionName) {
 }
 
 function switchActivityPane(pane) {
-    const allowedPanes = new Set(['swap', 'transfer', 'plan', 'defi', 'quests', 'journal']);
+    const allowedPanes = new Set(['swap', 'plan', 'defi', 'quests', 'journal']);
     localStorage.setItem('ax_activity_pane', allowedPanes.has(pane) ? pane : 'swap');
     renderDashboardContent('Farming');
 }
@@ -3018,6 +3010,9 @@ function areInterfaceHintsEnabled() {
     const value = localStorage.getItem('ax_interface_hints_enabled');
     if (value !== null) return value !== 'false';
 
+    const securityBannerSetting = localStorage.getItem('hide_security_banner');
+    if (securityBannerSetting !== null) return securityBannerSetting !== 'true';
+
     // Migrate the previous inverse setting without changing the user's choice.
     return localStorage.getItem('hide_all_banners') !== 'true';
 }
@@ -3065,6 +3060,7 @@ function renderInterfaceHint(hintId, message, tone = 'info', contentId = '', ico
 function toggleInterfaceHints(checkbox) {
     const enabled = Boolean(checkbox.checked);
     localStorage.setItem('ax_interface_hints_enabled', String(enabled));
+    localStorage.setItem('hide_security_banner', String(!enabled));
     localStorage.removeItem('hide_all_banners');
     if (enabled) localStorage.removeItem('ax_dismissed_interface_hints');
 
@@ -5199,18 +5195,6 @@ function renderDashboardContent(section) {
                             <span class="toggle-slider"></span>
                         </span>
                     </label>
-                    <div style="border-top: 1px solid var(--border-color); padding-top: 16px;">
-                        <label style="display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
-                            <span style="padding-right:16px;">
-                                <span style="display:block; color:#fff; font-size:13px; font-weight:600;">Скрыть баннер безопасности</span>
-                                <span style="display:block; color:var(--text-muted); font-size:12px; line-height:1.45; margin-top:3px;">Отключает отображение баннера "Anti-Sybil защита активна" в разделе управления кошельками.</span>
-                            </span>
-                            <span class="toggle-switch" style="flex:0 0 auto;">
-                                <input type="checkbox" ${localStorage.getItem('hide_security_banner') === 'true' ? 'checked' : ''} onchange="toggleHideSecurityBanner(this)">
-                                <span class="toggle-slider"></span>
-                            </span>
-                        </label>
-                    </div>
                 </div>
             </div>
         `;
@@ -5246,7 +5230,8 @@ function renderDashboardContent(section) {
         }, 50);
     } else if (section === 'Farming') {
         const storedActivityPane = localStorage.getItem('ax_activity_pane');
-        const activityPane = ['swap', 'transfer', 'plan', 'defi', 'quests', 'journal'].includes(storedActivityPane) ? storedActivityPane : 'swap';
+        const activityPane = ['swap', 'plan', 'defi', 'quests', 'journal'].includes(storedActivityPane) ? storedActivityPane : 'swap';
+        if (storedActivityPane === 'transfer') localStorage.setItem('ax_activity_pane', 'swap');
         const plannerNetworkOptions = NETWORKS_CONFIG.map(net => `<option value="${net.key}">${net.name} (${net.symbol})</option>`).join('');
         const bridgeDestinationOptions = NETWORKS_CONFIG
             .filter(net => ['Ethereum', 'Arbitrum', 'Optimism', 'Polygon', 'Linea', 'BNB Chain'].includes(net.key))
@@ -5259,7 +5244,7 @@ function renderDashboardContent(section) {
             ['Thu', t.planReminderThursday], ['Fri', t.planReminderFriday], ['Sat', t.planReminderSaturday], ['Sun', t.planReminderSunday],
         ].map(([value, label]) => `<option value="${value}">${label}</option>`).join('');
         const activityTabs = [
-            ['swap', t.activityTabSwap], ['transfer', t.activityTabTransfer], ['plan', t.activityTabPlan], ['defi', t.activityTabDefi], ['quests', t.activityTabQuests], ['journal', t.activityTabJournal],
+            ['swap', t.activityTabSwap], ['plan', t.activityTabPlan], ['defi', t.activityTabDefi], ['quests', t.activityTabQuests], ['journal', t.activityTabJournal],
         ].map(([key, label]) => `<button type="button" onclick="switchActivityPane('${key}')" style="background:${activityPane === key ? 'rgba(124,58,237,.22)' : 'var(--bg-main)'}; color:${activityPane === key ? '#e9d5ff' : 'var(--text-muted)'}; border:1px solid ${activityPane === key ? '#7c3aed' : 'var(--border-color)'}; padding:9px 11px; border-radius:9px; cursor:pointer; font-size:12px; white-space:nowrap;">${label}</button>`).join('');
         const swapPane = `<div id="operationSwapPanel" style="border-top:1px solid var(--border-color); margin-top:18px; padding-top:18px;"><h3 style="color:#fff; margin-top:0; font-size:16px;">${t.baseSwapTitle}</h3><p style="color:var(--text-muted); font-size:13px; line-height:1.5;">${t.baseSwapDesc}</p>${renderInterfaceHint('base-swap-safety', t.baseSwapSafety, 'info', '', '🛡️')}<div style="color:var(--text-muted); font-size:12px; margin-top:10px;">${t.baseSwapSlippage}</div><button type="button" id="baseSwapQuoteButton" onclick="requestBaseSwapQuote()" class="btn-purple-lg" style="font-size:13px; padding:12px 18px; width:auto; margin-top:12px;">${t.baseSwapGetQuote}</button><div id="baseSwapResult" style="font-size:12px; line-height:1.5; margin-top:12px;"></div><div style="margin-top:18px; color:#fff; font-weight:700; font-size:13px;">${t.baseSwapHistoryTitle}</div><div id="baseSwapHistory" style="margin-top:7px;"></div></div>`;
         const planPane = `
@@ -5345,7 +5330,6 @@ function renderDashboardContent(section) {
                 ${universalBridgePane}${swapPane}${bridgePane}
             </div>
         `;
-        const directTransferPane = `<div class="dashboard-card" style="margin-bottom:16px;"><h3 style="color:#fff; margin:0 0 5px; font-size:16px;">${t.directTransferTitle}</h3><p style="color:var(--text-muted); font-size:13px; line-height:1.5; margin:0 0 14px;">${t.directTransferDesc}</p><div id="directTransferPanel">${t.loading}</div></div>`;
         const defiPane = `<div class="dashboard-card" style="margin-bottom:16px;"><h3 style="color:#fff; margin:0 0 5px; font-size:16px;">${t.defiSupplyTitle}</h3><p style="color:var(--text-muted); font-size:13px; line-height:1.55; margin:0 0 12px;">${t.defiSupplyDesc}</p>${renderInterfaceHint('defi-supply-safety', t.defiSupplySafety, 'warning', '', '🛡️')}<label style="display:block; color:var(--text-muted); font-size:12px; margin-top:13px;">${t.defiSupplyAmount}<input id="aaveSupplyAmount" inputmode="decimal" placeholder="10" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"></label><button type="button" id="aaveSupplyQuoteButton" onclick="requestAaveUsdcSupplyQuote()" class="btn-purple-lg" style="font-size:13px; padding:10px 14px; width:auto; margin-top:12px;">${t.defiSupplyCheck}</button><div id="aaveSupplyResult" style="font-size:12px; line-height:1.5; margin-top:11px;"></div></div><div class="dashboard-card"><div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px;"><div><h3 style="color:#fff; margin:0 0 5px; font-size:16px;">${t.defiOverviewTitle}</h3><p style="color:var(--text-muted); font-size:13px; line-height:1.55; margin:0;">${t.defiOverviewDesc}</p></div><button type="button" id="defiRefreshButton" onclick="loadDefiOverview(true)" class="btn-dark-sm" style="padding:7px 10px; font-size:12px; white-space:nowrap;">${t.defiRefresh}</button></div>${renderInterfaceHint('defi-read-only', t.defiReadOnlyNote, 'info', '', '🛡️')}<div id="defiOverviewPanel" style="margin-top:12px;"><span style="color:var(--text-muted); font-size:13px;">${t.loading}</span></div><div style="border-top:1px solid var(--border-color); margin-top:16px; padding-top:14px;"><div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px;"><div><div style="color:#fff; font-size:13px; font-weight:700;">${t.defiHistoryTitle}</div><div style="color:var(--text-muted); font-size:12px; line-height:1.45; margin-top:4px;">${t.defiHistoryDesc}</div></div><button type="button" onclick="loadAaveDefiHistory()" class="btn-dark-sm" style="padding:7px 10px; font-size:12px; white-space:nowrap;">${t.defiHistoryRefresh}</button></div><div id="defiHistoryPanel" style="margin-top:10px;"><span style="color:var(--text-muted); font-size:12px;">${t.loading}</span></div></div></div>`;
         const questsPane = `<div class="dashboard-card"><h3 style="color:#fff; margin-top:0; font-size:16px;">${t.activityQuestsTitle}</h3><p style="color:var(--text-muted); font-size:13px; line-height:1.55;">${t.activityQuestsDesc}</p><button type="button" onclick="switchMenu(null, 'Looter')" class="btn-dark-sm" style="margin-top:8px; padding:10px 14px; border-color:#7c3aed;">${t.activityQuestsOpen}</button></div>`;
         const journalFilters = [
@@ -5355,11 +5339,10 @@ function renderDashboardContent(section) {
             ? `<button type="button" id="operationsJournalCheckButton" onclick="checkPendingOperations(this)" class="btn-dark-sm" style="padding:7px 10px; font-size:12px; white-space:nowrap; border-color:#7c3aed;">${t.operationsJournalCheckPending}</button>`
             : `<button type="button" onclick="loadOperationsJournal()" class="btn-dark-sm" style="padding:7px 10px; font-size:12px; white-space:nowrap;">${t.operationsJournalRefresh}</button>`;
         const journalPane = `<div class="dashboard-card"><div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px;"><div><h3 style="color:#fff; margin:0 0 5px; font-size:16px;">${t.operationsJournalTitle}</h3><p style="color:var(--text-muted); font-size:13px; line-height:1.5; margin:0;">${t.operationsJournalDesc}</p></div>${journalAction}</div><div style="display:flex; flex-wrap:wrap; gap:7px; margin-top:14px;">${journalFilters}</div><div id="operationsJournalList" style="margin-top:12px;"><span style="color:var(--text-muted); font-size:13px;">${t.loading}</span></div></div>`;
-        const activePane = { swap: tradePane, transfer: directTransferPane, plan: planPane, defi: defiPane, quests: questsPane, journal: journalPane }[activityPane];
+        const activePane = { swap: tradePane, plan: planPane, defi: defiPane, quests: questsPane, journal: journalPane }[activityPane];
         centerHtml = `<div class="dashboard-card" style="margin-bottom:16px;"><h3 style="color:#fff; margin:0 0 5px; font-size:17px;">${t.activityTitle}</h3><p style="color:var(--text-muted); font-size:13px; line-height:1.5; margin:0 0 14px;">${t.activityDesc}</p><div style="display:flex; flex-wrap:wrap; gap:8px;">${activityTabs}</div></div>${activePane}`;
         if (activityPane === 'plan') setTimeout(() => { loadTransactionPlan(); loadActionReminder(); }, 50);
         if (activityPane === 'swap') setTimeout(() => { loadOperationBuilderWalletStatus(); updateOperationBuilder(); loadUniversalBridgeHistory(); }, 50);
-        if (activityPane === 'transfer') setTimeout(loadDirectTransferPanel, 50);
         if (activityPane === 'journal') setTimeout(loadOperationsJournal, 50);
         if (activityPane === 'defi') setTimeout(() => { loadDefiOverview(); loadAaveDefiHistory(); }, 50);
     } else if (section === 'Farming' && false) {
