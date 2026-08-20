@@ -483,9 +483,28 @@ function updateStaticText(lang) {
     if (counterEl && window.cachedStatsData) {
         counterEl.innerHTML = `${t('privateSoftware')}. <b style="color:#fff; margin-left:8px;">${window.cachedStatsData.current_slots} / ${window.cachedStatsData.max_slots} ${t('slotsShort')}</b>`;
     }
+    updateLocalizedDemoMedia();
     updateRouteLab();
     updateRegistrationContinueAction();
     syncEmailCodeCooldown();
+}
+
+const LOCALIZED_DEMO_MEDIA = [
+    { id: 'demo-gas-media', name: 'gas', altKey: 'demoGasAlt' },
+    { id: 'demo-wallets-media', name: 'wallets', altKey: 'demoWalletsAlt' },
+    { id: 'demo-checks-media', name: 'checks', altKey: 'demoChecksAlt' },
+    { id: 'demo-telegram-media', name: 'telegram', altKey: 'demoTelegramAlt' },
+];
+
+function updateLocalizedDemoMedia() {
+    const language = getActiveLang();
+    LOCALIZED_DEMO_MEDIA.forEach(({ id, name, altKey }) => {
+        const image = document.getElementById(id);
+        if (!image) return;
+        const nextSource = `demo-${name}-${language}.gif?v=20260820`;
+        if (image.getAttribute('src') !== nextSource) image.setAttribute('src', nextSource);
+        image.setAttribute('alt', t(altKey));
+    });
 }
 
 window.translateBackendMessage = function(msg) {
