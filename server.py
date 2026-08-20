@@ -163,7 +163,6 @@ USER_SETTINGS_DB = {}
 verification_codes = {}
 SUBSCRIPTION_DURATION_SECONDS = 30 * 24 * 60 * 60
 PLAN_PRICES = {"Standard": 29, "Pro": 49, "Premium": 89}
-ONBOARDING_PRICE = 49
 BASE_SLOT_LIMITS = {"Standard": 5, "Pro": 15, "Premium": 30}
 request_rate_limits = {}
 gas_cache = {}
@@ -711,6 +710,9 @@ PUBLIC_STATIC_PATHS = {
     "wallets.gif",
     "looter.gif",
     "support.gif",
+    "ui-dist/react-ui.js",
+    "ui-dist/react-ui.css",
+    "favicon.svg",
     "locales/ru.js",
     "locales/en.js",
     "locales/zh.js",
@@ -2571,7 +2573,7 @@ async def recover_payment_session(
         plan=req.plan,
         amount_usdc=format(amount_usdc, ".2f"),
         amount_atomic=str(int(amount_usdc * Decimal(1_000_000))),
-        onboarding=req.onboarding,
+        onboarding=False,
         payment_mode=payment_config["mode"],
         status="paid",
         txid=req.txid.strip(),
@@ -2585,7 +2587,7 @@ async def recover_payment_session(
         client_session_id=client_session_id,
         plan=req.plan,
         amount=format(amount_usdc, ".2f"),
-        onboarding=req.onboarding,
+        onboarding=False,
         checkout_session_id=recovery_session.id,
     )
     return {
@@ -2593,7 +2595,7 @@ async def recover_payment_session(
         "payment_token": payment_token,
         "plan": req.plan,
         "amount": format(amount_usdc, ".2f"),
-        "onboarding": req.onboarding,
+        "onboarding": False,
     }
 
 @app.post("/api/send-code")
@@ -2750,7 +2752,7 @@ async def create_payment_session(
     amount_usdc = (
         SUBSCRIPTION_TEST_AMOUNT_USDC
         if payment_config["is_testnet"]
-        else Decimal(base_amount) + (Decimal(ONBOARDING_PRICE) if req.onboarding else Decimal(0))
+        else Decimal(base_amount)
     ).quantize(Decimal("0.01"))
     amount_atomic = int(amount_usdc * Decimal(1_000_000))
     
@@ -2766,7 +2768,7 @@ async def create_payment_session(
         plan=req.plan,
         amount_usdc=format(amount_usdc, ".2f"),
         amount_atomic=str(amount_atomic),
-        onboarding=req.onboarding,
+        onboarding=False,
         payment_mode=payment_config["mode"],
         status="pending",
         created_at=now_ts,
@@ -2785,7 +2787,7 @@ async def create_payment_session(
             "amount": format(amount_usdc, ".2f"),
         },
         "plan": req.plan,
-        "onboarding": req.onboarding,
+        "onboarding": False,
         "is_testnet": payment_config["is_testnet"],
     }
 

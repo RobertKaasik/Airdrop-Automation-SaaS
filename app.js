@@ -120,7 +120,6 @@ let lastRandomizeTimestamp = 0;
 let cachedStatsData = { current_slots: 1, max_slots: 300, is_sold_out: false };
 
 const PLAN_PRICES = { Standard: 29, Pro: 49, Premium: 89 };
-const ONBOARDING_PRICE = 49;
 const clientSessionId = getOrCreateClientSessionId();
 let paymentAccessToken = sessionStorage.getItem('ax_payment_token') || '';
 let paymentUnlocked = sessionStorage.getItem('ax_paid_session_id') === clientSessionId && !!paymentAccessToken;
@@ -231,6 +230,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const savedAccessToken = sessionStorage.getItem('ax_access_token');
     if (savedUsername && savedAccessToken) {
         isLoggedIn = true;
+        document.documentElement.classList.add('ax-dashboard-active');
         userPlan = localStorage.getItem('selected_plan') || 'Standard';
         
         const loginBtn = document.getElementById('login-btn');
@@ -247,6 +247,12 @@ window.addEventListener('DOMContentLoaded', () => {
     syncEmailCodeCooldown();
     updateRegistrationContinueAction();
     if (!isLoggedIn && !paymentUnlocked && !isPendingRegistrationDismissed()) void restorePaidRegistrationAccess();
+    
+    // --- Инициализация продвинутых интерактивных анимаций ---
+    initButtonGlowEffect();
+    initFeatureCardsInteraction();
+    initRouteLab();
+    initAirdropXVisualSystem();
 });
 
 // --- Вспомогательные функции ---
@@ -447,8 +453,10 @@ function checkInputLimit(input, maxLimit) {
 // 🌍 Обновление всего статического текста
 const STATIC_TEXT_BINDINGS = [
     ['login-btn', 'login'], ['hero-title', 'heroTitle', true], ['hero-desc', 'heroDesc'], ['farm-btn', 'farmBtn'], ['settings-btn', 'settingsBtn'],
-    ['core-status-label', 'coreStatusLabel'], ['core-status-val', 'coreStatus'], ['features-heading', 'featuresHeading'], ['instr-title', 'instructionHeading'], ['faq-heading', 'faqHeading'],
+    ['core-status-label', 'coreStatusLabel'], ['core-status-val', 'coreStatus'], ['features-heading', 'featuresHeading', true], ['instr-title', 'instructionHeading'], ['faq-heading', 'faqHeading'],
     ['c1-t', 'c1t'], ['c1-d', 'c1d'], ['c2-t', 'c2t'], ['c2-d', 'c2d'], ['c3-t', 'c3t'], ['c3-d', 'c3d'],
+    ['c8-t', 'routeLabTitle'], ['c8-d', 'routeLabDesc'], ['route-tab-swap', 'routeLabSwap'], ['route-tab-bridge', 'routeLabBridge'], ['route-tab-defi', 'routeLabDefi'],
+    ['c7-t', 'environmentCardTitle'], ['c7-d', 'environmentCardDesc'],
     ['sc1-t', 'sc1t'], ['sc1-b1', 'sc1b1'], ['sc1-d1', 'sc1d1'], ['sc1-d2', 'sc1d2'], ['sc1-l1', 'sc1l1'], ['sc1-l2', 'sc1l2'], ['sc1-l3', 'sc1l3'],
     ['sc2-t', 'sc2t'], ['sc2-b1', 'sc2b1'], ['sc2-d1', 'sc2d1'], ['sc2-d2', 'sc2d2'], ['sc2-l1', 'sc2l1'], ['sc2-l2', 'sc2l2'], ['sc2-l3', 'sc2l3'],
     ['sc3-t', 'sc3t'], ['sc3-b1', 'sc3b1'], ['sc3-d1', 'sc3d1'], ['sc3-d2', 'sc3d2'], ['sc3-l1', 'sc3l1'], ['sc3-l2', 'sc3l2'], ['sc3-l3', 'sc3l3'],
@@ -458,7 +466,6 @@ const STATIC_TEXT_BINDINGS = [
     ['p-title-modal', 'pTitleModal'], ['p-desc-modal', 'pDescModal'], ['p-std-top', 'subTop'], ['p-std-name', 'stdName'], ['p-std-per', 'stdPer'], ['p-std-f1', 'stdF1'], ['p-std-f2', 'stdF2'], ['p-std-f3', 'stdF3'], ['p-std-btn', 'stdBtn'],
     ['p-pro-badge', 'proBadge'], ['p-pro-top', 'subTop'], ['p-pro-name', 'proName'], ['p-pro-per', 'proPer'], ['p-pro-f1', 'proF1'], ['p-pro-f2', 'proF2'], ['p-pro-f3', 'proF3'], ['p-pro-f4', 'proF4'], ['p-pro-btn', 'proBtn'],
     ['p-prem-top', 'subTop'], ['p-prem-name', 'premName'], ['p-prem-per', 'premPer'], ['p-prem-f1', 'premF1'], ['p-prem-f2', 'premF2'], ['p-prem-f3', 'premF3'], ['p-prem-f4', 'premF4'], ['p-prem-btn', 'premBtn'],
-    ['onboarding-title', 'onboardingTitle'], ['onboarding-desc', 'onboardingDesc'],
     ['footer-rights', 'footerRights'], ['footer-privacy', 'footerPrivacy'], ['footer-terms', 'footerTerms'], ['page-title', 'pageTitle']
 ];
 
@@ -476,6 +483,7 @@ function updateStaticText(lang) {
     if (counterEl && window.cachedStatsData) {
         counterEl.innerHTML = `${t('privateSoftware')}. <b style="color:#fff; margin-left:8px;">${window.cachedStatsData.current_slots} / ${window.cachedStatsData.max_slots} ${t('slotsShort')}</b>`;
     }
+    updateRouteLab();
     updateRegistrationContinueAction();
     syncEmailCodeCooldown();
 }
@@ -531,6 +539,7 @@ function translateBackendDetail(detail, fallbackKey = 'errors.genericRequestFail
 
 function returnToMainSite() {
     isLoggedIn = false;
+    document.documentElement.classList.remove('ax-dashboard-active');
     localStorage.removeItem('airdrop_username');
     localStorage.removeItem('airdrop_current_section');
     sessionStorage.removeItem('ax_access_token');
@@ -599,11 +608,10 @@ function handlePricingOverlayClick(event) { if (event.target.id === 'pricingModa
 
 function selectPlanAndRegister(planName, price) {
     closePricingModal();
-    const onboarding = document.getElementById('onboardingOption')?.checked ?? false;
     userPlan = planName;
     localStorage.setItem('selected_plan', planName);
     localStorage.setItem('selected_price', String(price));
-    localStorage.setItem('selected_onboarding', onboarding);
+    localStorage.removeItem('selected_onboarding');
     clearPaymentAccess();
     openModal('payment');
 }
@@ -724,8 +732,7 @@ function openModal(type) {
     } else if (type === 'payment') {
         const chosenPlan = localStorage.getItem('selected_plan') || 'Standard';
         const basePrice = Number(localStorage.getItem('selected_price') || PLAN_PRICES[chosenPlan] || PLAN_PRICES.Standard);
-        const withOnboarding = localStorage.getItem('selected_onboarding') === 'true';
-        const displayAmount = (basePrice + (withOnboarding ? ONBOARDING_PRICE : 0)).toFixed(2);
+        const displayAmount = basePrice.toFixed(2);
         const planDisplayLabel = chosenPlan === 'Standard' ? t('stdName') : chosenPlan === 'Pro' ? t('proName') : t('premName');
 
         container.innerHTML = `
@@ -741,7 +748,6 @@ function openModal(type) {
             <div style="background:#0a0a0a; border:1px solid var(--border-color); border-radius:12px; padding:12px; margin-bottom:12px; text-align:center;">
                 <div style="font-size:11px; color:#a3a3a3; margin-bottom:2px;">${t('payAmount')}</div>
                 <div id="paymentAmountValue" style="font-size:20px; color:#fff; font-weight:700; margin-bottom:8px;">${displayAmount} USDC</div>
-                ${withOnboarding ? `<div style="font-size:11px; color:#b19cd9; margin-bottom:8px;">${t('onboardingSelected')}</div>` : ''}
                 <div id="paymentTestModeNotice" style="display:none; font-size:11px; color:#86efac; margin-bottom:8px;"></div>
                 <div style="font-size:11px; color:#a3a3a3;">${t('payAssetNotice')}</div>
             </div>
@@ -1025,6 +1031,202 @@ function scrollToFeatures() {
     }
 }
 
+// --- Продвинутые интерактивные анимации в стиле Huly.io ---
+
+/**
+ * Инициализация эффекта свечения кнопок за курсором
+ * Оптимизированный обработчик без утечек памяти
+ */
+function initButtonGlowEffect() {
+    const glowButtons = document.querySelectorAll('.glow-button-target');
+    
+    glowButtons.forEach(button => {
+        const handleMouseMove = (e) => {
+            const rect = button.getBoundingClientRect();
+            const x = ((e.clientX - rect.left) / rect.width) * 100;
+            const y = ((e.clientY - rect.top) / rect.height) * 100;
+            
+            button.style.setProperty('--mouse-x', `${x}%`);
+            button.style.setProperty('--mouse-y', `${y}%`);
+        };
+        
+        const handleMouseLeave = () => {
+            button.style.removeProperty('--mouse-x');
+            button.style.removeProperty('--mouse-y');
+        };
+        
+        // Используем passive listeners для лучшей производительности
+        button.addEventListener('mousemove', handleMouseMove, { passive: true });
+        button.addEventListener('mouseleave', handleMouseLeave, { passive: true });
+    });
+}
+
+/**
+ * Инициализация интерактивных карточек с эффектами 3D-tilt и Bento Box Border Glow
+ */
+function initFeatureCardsInteraction() {
+    const cards = document.querySelectorAll('.feature-card-placeholder');
+    const grid = document.querySelector('.features-placeholder-grid');
+    
+    if (!grid || cards.length === 0) return;
+    
+    // Глобальный обработчик для Border Glow эффекта
+    const handleGridMouseMove = (e) => {
+        const gridRect = grid.getBoundingClientRect();
+        
+        cards.forEach(card => {
+            const cardRect = card.getBoundingClientRect();
+            const cardCenterX = cardRect.left + cardRect.width / 2;
+            const cardCenterY = cardRect.top + cardRect.height / 2;
+            
+            const deltaX = e.clientX - cardCenterX;
+            const deltaY = e.clientY - cardCenterY;
+            const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+            
+            // Определяем, с какой стороны подсвечивать границу
+            const angle = Math.atan2(deltaY, deltaX);
+            const glowOpacity = Math.max(0, 1 - distance / 400);
+            
+            // Применяем градиент на границу
+            if (glowOpacity > 0.05) {
+                card.style.borderImage = `linear-gradient(${angle}rad, rgba(139, 92, 246, ${glowOpacity * 0.8}), rgba(168, 85, 247, ${glowOpacity * 0.4}), transparent 50%) 1`;
+            } else {
+                card.style.borderImage = '';
+            }
+        });
+    };
+    
+    const handleGridMouseLeave = () => {
+        cards.forEach(card => {
+            card.style.borderImage = '';
+        });
+    };
+    
+    // 3D tilt эффект для каждой карточки
+    cards.forEach(card => {
+        const handleCardMouseMove = (e) => {
+            const rect = card.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            const centerX = rect.width / 2;
+            const centerY = rect.height / 2;
+            
+            // Вычисляем углы поворота (ограничиваем для плавности)
+            const rotateX = ((y - centerY) / centerY) * -8;
+            const rotateY = ((x - centerX) / centerX) * 8;
+            
+            card.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) translateY(-2px)`;
+        };
+        
+        const handleCardMouseLeave = () => {
+            card.style.transform = '';
+        };
+        
+        card.addEventListener('mousemove', handleCardMouseMove, { passive: true });
+        card.addEventListener('mouseleave', handleCardMouseLeave, { passive: true });
+    });
+    
+    // Привязываем Border Glow к сетке
+    grid.addEventListener('mousemove', handleGridMouseMove, { passive: true });
+    grid.addEventListener('mouseleave', handleGridMouseLeave, { passive: true });
+}
+
+const ROUTE_LAB_ROUTES = {
+    swap: { from: 'ETH', to: 'USDC', statusKey: 'routeLabSwapFlow' },
+    bridge: { from: 'Base', to: 'Arbitrum', statusKey: 'routeLabBridgeFlow' },
+    defi: { from: 'USDC', to: 'Aave', statusKey: 'routeLabDefiFlow' }
+};
+
+function updateRouteLab(mode) {
+    const card = document.getElementById('route-lab-card');
+    if (!card) return;
+    const activeButton = card.querySelector('.route-lab__tabs button.active');
+    const selectedMode = mode || activeButton?.dataset.routeMode || 'swap';
+    const route = ROUTE_LAB_ROUTES[selectedMode] || ROUTE_LAB_ROUTES.swap;
+    const from = document.getElementById('route-lab-from');
+    const to = document.getElementById('route-lab-to');
+    const status = document.getElementById('route-lab-status');
+    if (from) from.textContent = route.from;
+    if (to) to.textContent = route.to;
+    if (status) status.textContent = t(route.statusKey);
+    card.dataset.routeMode = selectedMode;
+}
+
+function initRouteLab() {
+    const card = document.getElementById('route-lab-card');
+    if (!card || card.dataset.routeReady === 'true') return;
+    card.dataset.routeReady = 'true';
+    card.querySelectorAll('.route-lab__tabs button').forEach(button => {
+        button.addEventListener('click', () => {
+            card.querySelectorAll('.route-lab__tabs button').forEach(item => {
+                const selected = item === button;
+                item.classList.toggle('active', selected);
+                item.setAttribute('aria-pressed', selected ? 'true' : 'false');
+            });
+            card.classList.remove('route-changing');
+            void card.offsetWidth;
+            card.classList.add('route-changing');
+            updateRouteLab(button.dataset.routeMode);
+            window.setTimeout(() => card.classList.remove('route-changing'), 320);
+        });
+    });
+    updateRouteLab();
+}
+
+/**
+ * React Bits-inspired progressive effects for the new AIRDROP-X surface.
+ * The content remains fully usable when motion is disabled or unsupported.
+ */
+function initAirdropXVisualSystem() {
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const supportsHover = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+    const cards = document.querySelectorAll('.border-glow-card');
+    cards.forEach(card => {
+        card.addEventListener('pointermove', event => {
+            const rect = card.getBoundingClientRect();
+            card.style.setProperty('--card-x', `${event.clientX - rect.left}px`);
+            card.style.setProperty('--card-y', `${event.clientY - rect.top}px`);
+        }, { passive: true });
+    });
+
+    if (supportsHover && !reducedMotion) {
+        document.querySelectorAll('.feature-card, .showcase-card, .pricing-card').forEach(card => {
+            card.classList.add('ax-motion-card');
+            card.addEventListener('pointermove', event => {
+                const rect = card.getBoundingClientRect();
+                const horizontal = (event.clientX - rect.left) / rect.width - 0.5;
+                const vertical = (event.clientY - rect.top) / rect.height - 0.5;
+                card.style.setProperty('--tilt-x', `${(-vertical * 4.5).toFixed(2)}deg`);
+                card.style.setProperty('--tilt-y', `${(horizontal * 5.5).toFixed(2)}deg`);
+            }, { passive: true });
+            card.addEventListener('pointerleave', () => {
+                card.style.setProperty('--tilt-x', '0deg');
+                card.style.setProperty('--tilt-y', '0deg');
+            }, { passive: true });
+        });
+    }
+
+    if (!('IntersectionObserver' in window) || reducedMotion) {
+        document.documentElement.classList.add('ax-reveal-ready');
+        return;
+    }
+
+    const targets = document.querySelectorAll('.feature-card, .showcase-card, .interface-preview, .status-wrap');
+    targets.forEach(target => target.classList.add('ax-reveal'));
+
+    const observer = new IntersectionObserver(entries => {
+        entries.forEach(entry => {
+            if (!entry.isIntersecting) return;
+            entry.target.classList.add('ax-reveal--visible');
+            observer.unobserve(entry.target);
+        });
+    }, { threshold: 0.12, rootMargin: '0px 0px -40px' });
+
+    targets.forEach(target => observer.observe(target));
+    document.documentElement.classList.add('ax-reveal-ready');
+}
+
 function copyWalletAddress(address, btn) {
     navigator.clipboard.writeText(address);
     const originalText = btn.innerHTML;
@@ -1169,7 +1371,7 @@ async function recoverTestnetSubscriptionPayment(pending) {
                 txid: pending.txid,
                 client_session_id: clientSessionId,
                 plan: localStorage.getItem('selected_plan') || 'Standard',
-                onboarding: localStorage.getItem('selected_onboarding') === 'true',
+                onboarding: false,
             }),
         });
         const data = await response.json();
@@ -1197,7 +1399,6 @@ async function startPlanPayment() {
     const locale = translations[getActiveLang()];
     const chosenPlan = localStorage.getItem('selected_plan') || 'Standard';
     const basePrice = PLAN_PRICES[chosenPlan] || PLAN_PRICES.Standard;
-    const onboarding = localStorage.getItem('selected_onboarding') === 'true';
     const button = document.getElementById('paymentActionBtn');
 
     try {
@@ -1205,7 +1406,7 @@ async function startPlanPayment() {
         const createRes = await fetch('/api/payment/create-session', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ plan: chosenPlan, amount: basePrice, onboarding, client_session_id: clientSessionId }),
+            body: JSON.stringify({ plan: chosenPlan, amount: basePrice, onboarding: false, client_session_id: clientSessionId }),
         });
         const createData = await createRes.json();
         if (!createRes.ok) {
@@ -1439,6 +1640,7 @@ async function validateLogin() {
 
 function handleLoginSuccess() {
     isLoggedIn = true;
+    document.documentElement.classList.add('ax-dashboard-active');
     const loginBtn = document.getElementById('login-btn');
     if (loginBtn) loginBtn.style.display = 'none';
     document.getElementById('authModal').classList.remove('show');
@@ -5509,27 +5711,24 @@ function renderDashboardContent(section) {
 
     // Общий вывод дашборда
     content.innerHTML = `
-        <div class="desktop-sidebar" style="height: fit-content; align-self: flex-start;">
-            <div style="border-bottom: 1px solid var(--border-color); padding-bottom: 12px; margin-bottom: 8px;">
-                <div style="font-weight: 600; color: #fff; font-size: 14px;">${username}</div>
-                <div style="font-size: 12px; color: var(--text-muted);">${t.subPlan}: ${userPlan}</div>
-                <div style="font-size: 11px; color: #22c55e; margin-top: 4px;">${t.subActive} (${subscriptionDaysLeft} ${t.days})</div>
+        <div class="dashboard-topbar">
+            <div class="dashboard-identity">
+                <span class="dashboard-identity__mark">AX</span>
+                <span class="dashboard-identity__copy">
+                    <b>${username}</b>
+                    <small>${userPlan} · ${t.subActive} · ${subscriptionDaysLeft} ${t.days}</small>
+                </span>
             </div>
-
-            <div style="display: flex; flex-direction: column; gap: 2px;">
-                <div style="font-size: 11px; color: #737373; text-transform: uppercase; padding: 4px 8px; font-weight: bold;">${t.menuMain}</div>
-                <div class="sidebar-menu-item ${section === 'Account' ? 'active' : ''}" onclick="switchMenu(this, 'Account')">${t.menuAcc}</div>
-                <div class="sidebar-menu-item ${section === 'Looter' ? 'active' : ''}" onclick="switchMenu(this, 'Looter')">${t.menuLooter}</div>
-                <div class="sidebar-menu-item ${section === 'Farming' ? 'active' : ''}" onclick="switchMenu(this, 'Farming')">${t.menuFarm}</div>
-                <div class="sidebar-menu-item ${section === 'Wallets' ? 'active' : ''}" onclick="switchMenu(this, 'Wallets')">${t.menuWallets}</div>
-                <div class="sidebar-menu-item ${section === 'Networks' ? 'active' : ''}" onclick="switchMenu(this, 'Networks')">${t.menuNet}</div>
-                <div class="sidebar-menu-item ${section === 'Settings' ? 'active' : ''}" onclick="switchMenu(this, 'Settings')">${t.menuSet}</div>
-                
-                <div class="sidebar-menu-item" style="color: #ef4444; margin-top: 4px;" onclick="logoutUser()">
-                    ${t.menuExit}
-                </div>
-            </div>
+            <nav class="dashboard-topnav" aria-label="${t.menuMain}">
+                <button type="button" class="dashboard-nav-item ${section === 'Account' ? 'active' : ''}" onclick="switchMenu(this, 'Account')">${t.menuAcc}</button>
+                <button type="button" class="dashboard-nav-item ${section === 'Looter' ? 'active' : ''}" onclick="switchMenu(this, 'Looter')">${t.menuLooter}</button>
+                <button type="button" class="dashboard-nav-item ${section === 'Farming' ? 'active' : ''}" onclick="switchMenu(this, 'Farming')">${t.menuFarm}</button>
+                <button type="button" class="dashboard-nav-item ${section === 'Wallets' ? 'active' : ''}" onclick="switchMenu(this, 'Wallets')">${t.menuWallets}</button>
+                <button type="button" class="dashboard-nav-item ${section === 'Networks' ? 'active' : ''}" onclick="switchMenu(this, 'Networks')">${t.menuNet}</button>
+                <button type="button" class="dashboard-nav-item ${section === 'Settings' ? 'active' : ''}" onclick="switchMenu(this, 'Settings')">${t.menuSet}</button>
+            </nav>
+            <button type="button" class="dashboard-logout" onclick="logoutUser()">${t.menuExit}</button>
         </div>
-        <div style="flex: 1; display: flex; flex-direction: column; gap: 16px; min-width: 0;">${centerHtml}</div>
+        <div class="dashboard-main">${centerHtml}</div>
     `;
 }
