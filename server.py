@@ -1184,7 +1184,16 @@ async def startup_event():
     scheduler.add_job(run_scheduled_action_reminder_job, 'interval', minutes=1)
     scheduler.add_job(run_defi_status_notification_job, 'interval', minutes=2, id='defi_status_notifications', replace_existing=True)
     scheduler.start()
-    print("✅ Background async task scheduler started.")
+    logging.info("Background async task scheduler started.")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Release local resources cleanly when the API process stops."""
+    if scheduler.running:
+        scheduler.shutdown(wait=False)
+    await browser_manager.shutdown()
+    logging.info("AIRDROP-X backend stopped cleanly.")
 
 class DailyScheduleItem(BaseModel):
     time: str
@@ -2385,7 +2394,7 @@ def send_real_email(to_email: str, code: str):
             server.send_message(msg)
         return True
     except Exception as e:
-        print(f"🔥 EMAIL SEND ERROR: {e}")
+        logging.exception("Email delivery failed: %s", e)
         return False
 
 def send_password_reset_email(to_email: str, code: str) -> bool:
@@ -2969,7 +2978,7 @@ async def register(user: UserRegister, db: Session = Depends(get_db)):
     try:
         send_payment_receipt_email(user.email, user.plan, payment_data.amount, "Base Blockchain Gateway")
     except Exception as e:
-        print(f"[Warning] Failed to send email: {e}")
+        logging.warning("Failed to send email: %s", e)
 
     return {"status": "success", "message": "Registered successfully", "onboarding": payment_data.onboarding}
 
@@ -4827,8 +4836,48 @@ def get_platform_stats(db: Session = Depends(get_db)):
         "is_sold_out": total_users >= 300
     }
 
+
+@app.get("/api/health")
+def get_service_health():
+    """Return a minimal, secret-free readiness report for local monitoring."""
+    database_ready = False
+    db = SessionLocal()
+    try:
+        db.execute(text("SELECT 1"))
+        database_ready = True
+    except Exception:
+        logging.exception("Health check could not reach the database")
+    finally:
+        db.close()
+
+    scheduler_ready = bool(getattr(scheduler, "running", False))
+    ready = database_ready and scheduler_ready
+    payload = {
+        "status": "ok" if ready else "degraded",
+        "database": "ok" if database_ready else "unavailable",
+        "scheduler": "running" if scheduler_ready else "stopped",
+        "capabilities": {
+            "walletconnect_configured": bool(WALLETCONNECT_PROJECT_ID),
+            "telegram_configured": bool(TELEGRAM_BOT_TOKEN and TELEGRAM_BOT_USERNAME),
+            "subscription_payments_enabled": SUBSCRIPTION_PAYMENTS_ENABLED,
+        },
+    }
+    if not ready:
+        raise HTTPException(status_code=503, detail=payload)
+    return payload
+
 app.mount("/", RestrictedStaticFiles(directory=".", html=True), name="static")
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("server:app", host="127.0.0.1", port=8000, reload=True)
+    # Hot reload is useful only while developing.  Keep it opt-in so a normal
+    # `python server.py` run starts one predictable process for MVP testing.
+    reload_enabled = os.getenv("APP_RELOAD", "false").strip().lower() == "true"
+    if reload_enabled:
+        # Uvicorn needs an import string to create its reloader child process.
+        uvicorn.run("server:app", host="127.0.0.1", port=8000, reload=True)
+    else:
+        # Passing the already-created app prevents server.py from being
+        # imported twice in one process, which would duplicate SQLAlchemy
+        # model declarations such as the users table.
+        uvicorn.run(app, host="127.0.0.1", port=8000)
