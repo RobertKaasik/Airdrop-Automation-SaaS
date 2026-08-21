@@ -218,6 +218,7 @@ document.getElementById('main-logo-btn').addEventListener('click', function(e) {
 });
 
 window.addEventListener('DOMContentLoaded', () => {
+    initializeInterfaceHintsPreference();
     updateStaticText(currentLang);
     loadPlatformStats();
     const line = document.getElementById('preloader-line');
@@ -360,13 +361,13 @@ function showNotification(text, type = 'success') {
 function openAntiSybilModal() {
     const modal = document.getElementById('antiSybilModal');
     if (!modal) return;
-    modal.classList.add('show');
+    showAppModal('antiSybilModal');
 }
 
 function closeAntiSybilModal() {
     const modal = document.getElementById('antiSybilModal');
     if (!modal) return;
-    modal.classList.remove('show');
+    hideAppModal('antiSybilModal');
 }
 
 function injectWalletSecurityBanner() {
@@ -627,20 +628,51 @@ function changeLanguage(lang) {
 }
 
 // --- Модальные окна и авторизация ---
-function openPricingModal() { 
-    closeAuthModal(); 
-    document.getElementById('pricingModal').classList.add('show'); 
+const APP_MODAL_IDS = [
+    'pricingModal', 'authModal', 'antiSybilModal', 'walletConfigModal',
+    'walletConnectModal', 'baseSwapConfirmModal', 'appConfirmModal', 'walletScheduleModal', 'legalModal'
+];
+
+function syncModalScrollLock() {
+    const isAnyModalOpen = APP_MODAL_IDS.some(id => document.getElementById(id)?.classList.contains('show'));
+    document.body.classList.toggle('modal-open', isAnyModalOpen);
 }
 
-function closePricingModal() { 
-    document.getElementById('pricingModal').classList.remove('show'); 
+function showAppModal(modalId) {
+    APP_MODAL_IDS.forEach(id => {
+        if (id !== modalId) document.getElementById(id)?.classList.remove('show');
+    });
+    const modal = document.getElementById(modalId);
+    if (!modal) return null;
+    modal.classList.add('show');
+    syncModalScrollLock();
+    return modal;
+}
+
+function hideAppModal(modalId) {
+    document.getElementById(modalId)?.classList.remove('show');
+    syncModalScrollLock();
+}
+
+function hideAllAppModals() {
+    APP_MODAL_IDS.forEach(id => document.getElementById(id)?.classList.remove('show'));
+    syncModalScrollLock();
+}
+
+function openPricingModal() {
+    if (isLoggedIn) return;
+    showAppModal('pricingModal');
+}
+
+function closePricingModal() {
+    hideAppModal('pricingModal');
 }
 
 let mousedownOverlayTarget = null;
 window.addEventListener('mousedown', (e) => { mousedownOverlayTarget = e.target; });
 
-function handleOverlayClick(event) { if (event.target.id === 'authModal' && mousedownOverlayTarget.id === 'authModal') closeAuthModal(); }
-function handlePricingOverlayClick(event) { if (event.target.id === 'pricingModal' && mousedownOverlayTarget.id === 'pricingModal') closePricingModal(); }
+function handleOverlayClick(event) { if (event.target.id === 'authModal' && mousedownOverlayTarget?.id === 'authModal') closeAuthModal(); }
+function handlePricingOverlayClick(event) { if (event.target.id === 'pricingModal' && mousedownOverlayTarget?.id === 'pricingModal') closePricingModal(); }
 
 function selectPlanAndRegister(planName, price) {
     closePricingModal();
@@ -652,7 +684,7 @@ function selectPlanAndRegister(planName, price) {
     openModal('payment');
 }
 
-function closeAuthModal() { document.getElementById('authModal').classList.remove('show'); }
+function closeAuthModal() { hideAppModal('authModal'); }
 
 let appConfirmResolver = null;
 
@@ -664,12 +696,12 @@ function openAppConfirm({ title, message, confirmText }) {
     document.getElementById('appConfirmMessage').textContent = message || '';
     document.getElementById('appConfirmCancel').textContent = locale.confirmCancel;
     document.getElementById('appConfirmProceed').textContent = confirmText || locale.walletRemoveAction;
-    modal.classList.add('show');
+    showAppModal('appConfirmModal');
     return new Promise((resolve) => { appConfirmResolver = resolve; });
 }
 
 function finishAppConfirm(confirmed) {
-    document.getElementById('appConfirmModal')?.classList.remove('show');
+    hideAppModal('appConfirmModal');
     const resolve = appConfirmResolver;
     appConfirmResolver = null;
     if (resolve) resolve(Boolean(confirmed));
@@ -703,7 +735,7 @@ function openModal(type) {
         return;
     }
 
-    modal.classList.add('show');
+    showAppModal('authModal');
 
     if (type === 'login') {
         container.innerHTML = `
@@ -1297,6 +1329,7 @@ function initSafeStart() {
  * The content remains fully usable when motion is disabled or unsupported.
  */
 function initAirdropXVisualSystem() {
+    initPixelSnowBackdrop();
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const supportsHover = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
     const cards = document.querySelectorAll('.border-glow-card');
@@ -1343,6 +1376,107 @@ function initAirdropXVisualSystem() {
 
     targets.forEach(target => observer.observe(target));
     document.documentElement.classList.add('ax-reveal-ready');
+}
+
+/**
+ * Lightweight, original ambient particle backdrop. It stays decorative only:
+ * no network requests, no pointer handling and a static fallback for reduced motion.
+ */
+function initPixelSnowBackdrop() {
+    const root = document.getElementById('pixel-snow-root');
+    if (!root || root.dataset.pixelSnowReady === 'true') return;
+    root.dataset.pixelSnowReady = 'true';
+
+    const canvas = document.createElement('canvas');
+    canvas.className = 'pixel-snow-canvas';
+    canvas.setAttribute('aria-hidden', 'true');
+    root.replaceChildren(canvas);
+
+    const context = canvas.getContext('2d', { alpha: true });
+    if (!context) return;
+
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const density = 0.65;
+    const brightness = 0.4;
+    const direction = 145 * (Math.PI / 180);
+    const driftX = Math.cos(direction) * 0.23;
+    const driftY = Math.sin(direction) * 0.23;
+    let particles = [];
+    let width = 0;
+    let height = 0;
+    let previousTime = performance.now();
+    let frameId = null;
+
+    const createParticle = (randomY = true) => {
+        const depth = 0.22 + Math.random() * 0.78;
+        return {
+            x: Math.random() * width,
+            y: randomY ? Math.random() * height : -12,
+            depth,
+            radius: 0.45 + depth * 1.55,
+            speed: (0.18 + depth * 0.52) * 0.7,
+            phase: Math.random() * Math.PI * 2
+        };
+    };
+
+    const resize = () => {
+        const ratio = Math.min(window.devicePixelRatio || 1, 1.5);
+        width = Math.max(window.innerWidth, 1);
+        height = Math.max(window.innerHeight, 1);
+        canvas.width = Math.round(width * ratio);
+        canvas.height = Math.round(height * ratio);
+        canvas.style.width = `${width}px`;
+        canvas.style.height = `${height}px`;
+        context.setTransform(ratio, 0, 0, ratio, 0, 0);
+        const count = Math.min(190, Math.max(50, Math.round((width * height / 13000) * density)));
+        particles = Array.from({ length: count }, () => createParticle());
+    };
+
+    const paint = (now) => {
+        const delta = Math.min(32, now - previousTime);
+        previousTime = now;
+        context.clearRect(0, 0, width, height);
+
+        particles.forEach(particle => {
+            if (!reducedMotion) {
+                particle.x += driftX * particle.speed * delta;
+                particle.y += driftY * particle.speed * delta;
+                particle.phase += delta * 0.0007;
+                if (particle.y > height + 12 || particle.x < -12 || particle.x > width + 12) {
+                    Object.assign(particle, createParticle(false), { x: Math.random() * width });
+                }
+            }
+
+            const twinkle = 0.78 + Math.sin(particle.phase) * 0.22;
+            const alpha = (0.06 + particle.depth * 0.20) * brightness * twinkle;
+            context.beginPath();
+            context.arc(particle.x, particle.y, particle.radius, 0, Math.PI * 2);
+            context.fillStyle = `rgba(214, 198, 255, ${alpha.toFixed(3)})`;
+            context.fill();
+        });
+
+        if (!reducedMotion && !document.hidden) frameId = window.requestAnimationFrame(paint);
+    };
+
+    const resume = () => {
+        if (reducedMotion || !document.hidden || frameId !== null) return;
+        previousTime = performance.now();
+        frameId = window.requestAnimationFrame(paint);
+    };
+
+    const pause = () => {
+        if (!document.hidden || frameId === null) return;
+        window.cancelAnimationFrame(frameId);
+        frameId = null;
+    };
+
+    resize();
+    paint(previousTime);
+    window.addEventListener('resize', resize, { passive: true });
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) pause();
+        else resume();
+    });
 }
 
 function copyWalletAddress(address, btn) {
@@ -1761,7 +1895,7 @@ function handleLoginSuccess() {
     document.documentElement.classList.add('ax-dashboard-active');
     const loginBtn = document.getElementById('login-btn');
     if (loginBtn) loginBtn.style.display = 'none';
-    document.getElementById('authModal').classList.remove('show');
+    hideAllAppModals();
     document.getElementById('main-content').style.display = 'none';
     document.getElementById('dashboard-content').style.display = 'flex';
     const mobileNav = document.getElementById('mobileNavBar');
@@ -1781,7 +1915,7 @@ function handleExpiredAuthSession() {
 }
 
 function closeWalletConnectModal() {
-    document.getElementById('walletConnectModal')?.classList.remove('show');
+    hideAppModal('walletConnectModal');
 }
 
 function handleWalletConnectOverlayClick(event) {
@@ -1870,7 +2004,7 @@ function openBaseSwapConfirmation(amount, output) {
     document.getElementById('baseSwapConfirmNotice').textContent = locale.baseSwapModalNotice;
     document.getElementById('baseSwapConfirmCancel').textContent = locale.baseSwapModalCancel;
     document.getElementById('baseSwapConfirmProceed').textContent = locale.baseSwapModalProceed;
-    modal.classList.add('show');
+    showAppModal('baseSwapConfirmModal');
     return new Promise((resolve) => {
         baseSwapConfirmationResolver = resolve;
     });
@@ -1896,7 +2030,7 @@ function openBaseTransferConfirmation(amount, recipientAddress, recipientName) {
     document.getElementById('baseSwapConfirmNotice').textContent = locale.directTransferModalNotice;
     document.getElementById('baseSwapConfirmCancel').textContent = locale.baseSwapModalCancel;
     document.getElementById('baseSwapConfirmProceed').textContent = locale.directTransferModalProceed;
-    modal.classList.add('show');
+    showAppModal('baseSwapConfirmModal');
     return new Promise((resolve) => {
         baseSwapConfirmationResolver = resolve;
     });
@@ -1946,7 +2080,7 @@ function openUniversalBridgeConfirmation(quote, approval = false) {
     document.getElementById('baseSwapConfirmProceed').textContent = approval
         ? locale.universalBridgeApprovalProceed
         : locale.universalBridgeModalProceed;
-    modal.classList.add('show');
+    showAppModal('baseSwapConfirmModal');
     return new Promise((resolve) => {
         baseSwapConfirmationResolver = resolve;
     });
@@ -1989,7 +2123,7 @@ function openAaveSupplyConfirmation(quote, approval = false) {
     document.getElementById('baseSwapConfirmProceed').textContent = approval
         ? locale.defiSupplyApprovalProceed
         : locale.defiSupplyProceed;
-    modal.classList.add('show');
+    showAppModal('baseSwapConfirmModal');
     return new Promise((resolve) => {
         baseSwapConfirmationResolver = resolve;
     });
@@ -2017,14 +2151,14 @@ function openAaveWithdrawConfirmation(quote) {
     document.getElementById('baseSwapConfirmNotice').textContent = locale.defiWithdrawModalNotice;
     document.getElementById('baseSwapConfirmCancel').textContent = locale.baseSwapModalCancel;
     document.getElementById('baseSwapConfirmProceed').textContent = locale.defiWithdrawProceed;
-    modal.classList.add('show');
+    showAppModal('baseSwapConfirmModal');
     return new Promise((resolve) => {
         baseSwapConfirmationResolver = resolve;
     });
 }
 
 function finishBaseSwapConfirmation(confirmed) {
-    document.getElementById('baseSwapConfirmModal')?.classList.remove('show');
+    hideAppModal('baseSwapConfirmModal');
     const resolve = baseSwapConfirmationResolver;
     baseSwapConfirmationResolver = null;
     if (resolve) resolve(Boolean(confirmed));
@@ -2055,7 +2189,7 @@ function openWalletConnectQr(uri) {
     qr.addData(uri);
     qr.make();
     qrContainer.innerHTML = qr.createSvgTag({ cellSize: 5, margin: 1 });
-    modal.classList.add('show');
+    showAppModal('walletConnectModal');
 }
 
 function switchMenu(element, sectionName) {
@@ -2110,7 +2244,7 @@ function openWalletConfigModal(address, resolve) {
     if (proxyInput) proxyInput.value = '';
     if (saveBtn) saveBtn.disabled = true;
     
-    if (modal) modal.classList.add('show');
+    if (modal) showAppModal('walletConfigModal');
 }
 
 function validateWalletConfigInputs() {
@@ -2125,7 +2259,7 @@ function validateWalletConfigInputs() {
 
 function cancelWalletConfigModal() {
     const modal = document.getElementById('walletConfigModal');
-    if (modal) modal.classList.remove('show');
+    if (modal) hideAppModal('walletConfigModal');
     
     const resolve = walletConfigResolve;
     walletConfigResolve = null;
@@ -2155,7 +2289,7 @@ async function saveWalletConfigModal() {
         if (res.ok) {
             showNotification(translations[currentLang]?.walletAddSuccess || 'Кошелек успешно добавлен');
             const modal = document.getElementById('walletConfigModal');
-            if (modal) modal.classList.remove('show');
+            if (modal) hideAppModal('walletConfigModal');
             
             const resolve = walletConfigResolve;
             walletConfigResolve = null;
@@ -2930,11 +3064,19 @@ async function loadWalletsFromDB() {
                         <div style="color: var(--text-muted); font-size: 12px; margin-top:3px;">${proxyStatus}</div>
                         <div style="color:${profileReady ? '#86efac' : '#fbbf24'}; font-size:12px; margin-top:3px;">${profileReady ? '✓' : '◌'} ${profileStatus}</div>
                         <div id="walletHealthResult-${w.id}" style="font-size:12px; line-height:1.45; margin-top:7px;"></div>
-                        <div id="walletEditPanel-${w.id}" style="display:none; margin-top:9px; max-width:360px;"><input id="walletEditLabel-${w.id}" value="${walletName}" maxlength="40" class="auth-input" style="font-size:12px; padding:8px 10px;" aria-label="${t.walletEditLabel}"><button type="button" onclick="saveWalletLabel(${w.id})" class="btn-dark-sm" style="margin-top:6px; padding:7px 10px; border-color:#7c3aed;">${t.walletEditSave}</button></div>
+                        <div id="walletEditPanel-${w.id}" style="display:none; margin-top:9px; max-width:390px;">
+                            <label for="walletEditLabel-${w.id}" style="display:block; margin-bottom:4px; color:var(--text-muted); font-size:11px;">${t.walletEditLabel}</label>
+                            <input id="walletEditLabel-${w.id}" value="${walletName}" maxlength="40" class="auth-input" style="font-size:12px; padding:8px 10px;" aria-label="${t.walletEditLabel}">
+                            <label for="walletEditProxy-${w.id}" style="display:block; margin:8px 0 4px; color:var(--text-muted); font-size:11px;">${t.walletEditProxy}</label>
+                            <input id="walletEditProxy-${w.id}" maxlength="512" class="auth-input" style="font-size:12px; padding:8px 10px;" placeholder="${t.walletEditProxyPlaceholder}" aria-describedby="walletEditProxyNote-${w.id}">
+                            <div id="walletEditProxyNote-${w.id}" style="margin-top:4px; color:var(--text-muted); font-size:10px; line-height:1.35;">${t.walletEditProxyNote}</div>
+                            <button type="button" onclick="saveWalletDetails(${w.id})" class="btn-dark-sm" style="margin-top:8px; padding:7px 10px; border-color:#7c3aed;">${t.walletEditSave}</button>
+                        </div>
                     </div>
                     <div style="display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end;">
                         <button type="button" onclick="activateSavedWallet(${w.id}, '${w.wallet_address}')" ${isActive ? 'disabled' : ''} style="background:${isActive ? 'rgba(34,197,94,0.12)' : 'rgba(124,58,237,0.12)'}; color:${isActive ? '#86efac' : '#c4b5fd'}; border:1px solid ${isActive ? 'rgba(34,197,94,0.28)' : 'rgba(124,58,237,0.32)'}; padding:6px 10px; border-radius:8px; font-size:12px; cursor:${isActive ? 'default' : 'pointer'};">${isActive ? t.walletActive : t.walletActivate}</button>
                         <button type="button" onclick="toggleWalletEditor(${w.id})" style="background:rgba(255,255,255,.06); color:#e5e7eb; border:1px solid var(--border-color); padding:6px 10px; border-radius:8px; font-size:12px; cursor:pointer;">${t.walletEdit}</button>
+                        <button type="button" onclick="openWalletScheduleModal(${w.id})" style="background:rgba(124,58,237,.12); color:#ddd6fe; border:1px solid rgba(139,92,246,.38); padding:6px 10px; border-radius:8px; font-size:12px; cursor:pointer;">${t.walletScheduleButton}</button>
                         <button type="button" onclick="checkWalletHealth(${w.id}, this)" style="background:rgba(59,130,246,0.1); color:#93c5fd; border:1px solid rgba(59,130,246,0.28); padding:6px 10px; border-radius:8px; font-size:12px; cursor:pointer;">${t.walletHealthCheck}</button>
                         ${w.has_proxy ? `<button type="button" onclick="testWalletProxy(${w.id}, this)" style="background: rgba(34,197,94,0.1); color: #22c55e; border: 1px solid rgba(34,197,94,0.2); padding: 6px 10px; border-radius: 8px; font-size: 12px; cursor:pointer;">${t.walletProxyTest}</button>` : ''}
                         ${!profileReady ? `<button type="button" onclick="createWalletProfile(${w.id}, this)" style="background:rgba(124,58,237,.12); color:#d8b4fe; border:1px solid rgba(124,58,237,.35); padding:6px 10px; border-radius:8px; font-size:12px; cursor:pointer;">${t.walletProfileCreate}</button>` : ''}
@@ -2964,16 +3106,18 @@ function toggleWalletEditor(walletId) {
     if (panel) panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
 }
 
-async function saveWalletLabel(walletId) {
+async function saveWalletDetails(walletId) {
     const locale = translations[getActiveLang()];
     const label = document.getElementById(`walletEditLabel-${walletId}`)?.value.trim() || '';
+    const proxyInput = document.getElementById(`walletEditProxy-${walletId}`);
+    const proxy = proxyInput?.value.trim() || null;
     if (!label) {
         showNotification(locale.walletEditInvalid, 'error');
         return;
     }
     try {
-        const response = await fetch(`/api/wallets/${walletId}/label`, {
-            method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ label }),
+        const response = await fetch(`/api/wallets/${walletId}`, {
+            method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ label, proxy }),
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.detail || 'wallet_label_update_failed');
@@ -3323,6 +3467,205 @@ async function saveGlobalProfileSettings() {
         }
     } catch (err) {
         showNotification("Error", "error");
+    }
+}
+
+// A new visitor should see the contextual explanations at least once.  We only
+// create the preference when no current or legacy choice exists, so a user's
+// later decision is never overwritten on subsequent visits.
+function initializeInterfaceHintsPreference() {
+    const hasCurrentChoice = localStorage.getItem('ax_interface_hints_enabled') !== null;
+    const hasLegacyChoice = localStorage.getItem('hide_security_banner') !== null
+        || localStorage.getItem('hide_all_banners') !== null;
+
+    if (!hasCurrentChoice && !hasLegacyChoice) {
+        localStorage.setItem('ax_interface_hints_enabled', 'true');
+    }
+}
+
+let activeWalletScheduleId = null;
+let activeWalletScheduleHasProxy = false;
+
+function walletScheduleDayOptions(locale) {
+    return [
+        ['Mon', locale.planReminderMonday], ['Tue', locale.planReminderTuesday],
+        ['Wed', locale.planReminderWednesday], ['Thu', locale.planReminderThursday],
+        ['Fri', locale.planReminderFriday], ['Sat', locale.planReminderSaturday],
+        ['Sun', locale.planReminderSunday],
+    ];
+}
+
+function populateWalletScheduleText() {
+    const locale = translations[getActiveLang()];
+    const textMap = {
+        walletScheduleTitle: locale.walletScheduleTitle,
+        walletScheduleSafety: locale.walletScheduleSafety,
+        walletScheduleActionLabel: locale.walletScheduleActionLabel,
+        walletScheduleActionSwap: locale.walletScheduleActionSwap,
+        walletScheduleActionBridge: locale.walletScheduleActionBridge,
+        walletScheduleActionDefi: locale.walletScheduleActionDefi,
+        walletScheduleDayLabel: locale.walletScheduleDayLabel,
+        walletScheduleTimeLabel: locale.walletScheduleTimeLabel,
+        walletScheduleTimezoneLabel: locale.walletScheduleTimezoneLabel,
+        walletScheduleTelegramLabel: locale.walletScheduleTelegramLabel,
+        walletScheduleAcknowledgementLabel: locale.walletScheduleAcknowledgementLabel,
+        walletScheduleSave: locale.walletScheduleSave,
+        walletScheduleListTitle: locale.walletScheduleListTitle,
+    };
+    Object.entries(textMap).forEach(([id, value]) => {
+        const element = document.getElementById(id);
+        if (element) element.textContent = value;
+    });
+    const daySelect = document.getElementById('walletScheduleDay');
+    if (daySelect) {
+        const selected = daySelect.value || 'Mon';
+        daySelect.innerHTML = walletScheduleDayOptions(locale)
+            .map(([value, label]) => `<option value="${value}">${escapeHtml(label)}</option>`).join('');
+        daySelect.value = selected;
+    }
+}
+
+async function openWalletScheduleModal(walletId) {
+    activeWalletScheduleId = Number(walletId);
+    populateWalletScheduleText();
+    const timezoneInput = document.getElementById('walletScheduleTimezone');
+    if (timezoneInput) timezoneInput.value = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    const acknowledgement = document.getElementById('walletScheduleAcknowledgement');
+    if (acknowledgement) acknowledgement.checked = false;
+    const status = document.getElementById('walletScheduleStatus');
+    if (status) status.textContent = '';
+    showAppModal('walletScheduleModal');
+    await loadWalletSchedules();
+}
+
+function closeWalletScheduleModal() {
+    activeWalletScheduleId = null;
+    hideAppModal('walletScheduleModal');
+}
+
+function handleWalletScheduleOverlayClick(event) {
+    if (event.target.id === 'walletScheduleModal' && mousedownOverlayTarget?.id === 'walletScheduleModal') {
+        closeWalletScheduleModal();
+    }
+}
+
+async function loadWalletSchedules() {
+    if (!activeWalletScheduleId) return;
+    const locale = translations[getActiveLang()];
+    const list = document.getElementById('walletScheduleList');
+    const status = document.getElementById('walletScheduleStatus');
+    if (list) list.textContent = locale.loading;
+    try {
+        const response = await fetch(`/api/wallets/${activeWalletScheduleId}/schedules`);
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'wallet_schedule_load_failed');
+        activeWalletScheduleHasProxy = Boolean(data.wallet?.has_proxy);
+        const walletDisplay = document.getElementById('walletScheduleWallet');
+        if (walletDisplay) {
+            const label = data.wallet?.label || `${locale.walletDefaultName} ${activeWalletScheduleId}`;
+            const address = data.wallet?.wallet_address || '';
+            walletDisplay.textContent = `${label} · ${address.slice(0, 8)}…${address.slice(-6)}`;
+        }
+        const proxyNotice = document.getElementById('walletScheduleProxyNotice');
+        if (proxyNotice) {
+            proxyNotice.textContent = activeWalletScheduleHasProxy
+                ? locale.walletScheduleProxyReady
+                : locale.walletScheduleProxyRequired;
+            proxyNotice.classList.toggle('missing', !activeWalletScheduleHasProxy);
+        }
+        const saveButton = document.getElementById('walletScheduleSave');
+        if (saveButton) saveButton.disabled = !activeWalletScheduleHasProxy;
+        renderWalletSchedules(data.schedules || []);
+        if (status && !data.telegram_linked) status.textContent = locale.walletScheduleTelegramMissing;
+    } catch (error) {
+        if (list) list.textContent = locale.walletScheduleLoadError;
+        if (status) status.textContent = translateBackendDetail(error.message) || locale.walletScheduleLoadError;
+    }
+}
+
+function renderWalletSchedules(schedules) {
+    const locale = translations[getActiveLang()];
+    const list = document.getElementById('walletScheduleList');
+    if (!list) return;
+    if (!schedules.length) {
+        list.innerHTML = `<div style="color:var(--text-muted);font-size:12px;">${escapeHtml(locale.walletScheduleEmpty)}</div>`;
+        return;
+    }
+    const actionNames = {
+        swap: locale.walletScheduleActionSwap,
+        bridge: locale.walletScheduleActionBridge,
+        defi: locale.walletScheduleActionDefi,
+    };
+    const dayNames = Object.fromEntries(walletScheduleDayOptions(locale));
+    list.innerHTML = schedules.map(item => `
+        <div class="wallet-schedule-item">
+            <div>
+                <b>${escapeHtml(actionNames[item.action_type] || item.action_type)}</b>
+                <small>${escapeHtml(dayNames[item.day_of_week] || item.day_of_week)} · ${escapeHtml(item.time_of_day)} · ${escapeHtml(item.timezone)}${item.enabled ? '' : ` · ${escapeHtml(locale.walletScheduleDisabled)}`}</small>
+            </div>
+            <button type="button" class="wallet-schedule-delete" onclick="deleteWalletSchedule(${Number(item.id)})">${escapeHtml(locale.walletScheduleDelete)}</button>
+        </div>`).join('');
+}
+
+async function saveWalletSchedule() {
+    if (!activeWalletScheduleId) return;
+    const locale = translations[getActiveLang()];
+    const status = document.getElementById('walletScheduleStatus');
+    const button = document.getElementById('walletScheduleSave');
+    const timeInput = document.getElementById('walletScheduleTime');
+    const timeValue = normalize24HourTime(timeInput?.value);
+    if (!activeWalletScheduleHasProxy) {
+        if (status) status.textContent = locale.walletScheduleProxyRequired;
+        return;
+    }
+    if (!timeValue) {
+        if (status) status.textContent = locale.planReminderTimeInvalid;
+        return;
+    }
+    const acknowledgement = Boolean(document.getElementById('walletScheduleAcknowledgement')?.checked);
+    if (!acknowledgement) {
+        if (status) status.textContent = locale.walletScheduleAcknowledgementRequired;
+        return;
+    }
+    const payload = {
+        action_type: document.getElementById('walletScheduleAction')?.value || 'swap',
+        day_of_week: document.getElementById('walletScheduleDay')?.value || 'Mon',
+        time_of_day: timeValue,
+        timezone: document.getElementById('walletScheduleTimezone')?.value || 'UTC',
+        enabled: true,
+        telegram_enabled: Boolean(document.getElementById('walletScheduleTelegram')?.checked),
+        acknowledgement,
+    };
+    try {
+        if (button) { button.disabled = true; button.textContent = locale.loading; }
+        const response = await fetch(`/api/wallets/${activeWalletScheduleId}/schedules`, {
+            method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'wallet_schedule_save_failed');
+        if (status) status.textContent = locale.walletScheduleSaved;
+        const consent = document.getElementById('walletScheduleAcknowledgement');
+        if (consent) consent.checked = false;
+        await loadWalletSchedules();
+    } catch (error) {
+        if (status) status.textContent = translateBackendDetail(error.message) || locale.walletScheduleSaveError;
+    } finally {
+        if (button) { button.disabled = !activeWalletScheduleHasProxy; button.textContent = locale.walletScheduleSave; }
+    }
+}
+
+async function deleteWalletSchedule(scheduleId) {
+    if (!activeWalletScheduleId) return;
+    const locale = translations[getActiveLang()];
+    const status = document.getElementById('walletScheduleStatus');
+    try {
+        const response = await fetch(`/api/wallets/${activeWalletScheduleId}/schedules/${scheduleId}`, {method: 'DELETE'});
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'wallet_schedule_delete_failed');
+        if (status) status.textContent = locale.walletScheduleDeleted;
+        await loadWalletSchedules();
+    } catch (error) {
+        if (status) status.textContent = translateBackendDetail(error.message) || locale.walletScheduleSaveError;
     }
 }
 

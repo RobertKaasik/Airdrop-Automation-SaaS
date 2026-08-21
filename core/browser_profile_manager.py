@@ -207,7 +207,9 @@ class BrowserProfileManager:
         При ошибках формата выбрасывает ProfileConfigurationError (не выпускает браузер в открытый интернет).
         """
         if not proxy_value or not proxy_value.strip():
-            return None
+            raise ProfileConfigurationError(
+                "Для запуска изолированного профиля требуется настроенный прокси."
+            )
 
         raw = proxy_value.strip()
 

@@ -14,6 +14,7 @@ import hmac
 import bcrypt
 import re
 import math
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from core.database import Base, SessionLocal, engine, init_db
 from core.models import FinancialTransferIntent, ProfileRun, UserProfile
 from core.browser_profile_manager import (
@@ -143,7 +144,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Any, Dict, List, Optional
-from sqlalchemy import Column, Integer, String, Float, Boolean, text
+from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, text
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -611,6 +612,28 @@ class ActionReminder(Base):
     enabled = Column(Boolean, nullable=False, default=False)
     telegram_enabled = Column(Boolean, nullable=False, default=True)
     last_sent_slot = Column(String, nullable=True)
+    updated_at = Column(Integer, nullable=False)
+
+class WalletActionSchedule(Base):
+    """A per-wallet calendar rule that only prepares and reminds about an action.
+
+    The record never contains a private key, signature, or authority to submit a
+    blockchain transaction. Every real action still requires confirmation in the
+    user's connected MetaMask or WalletConnect wallet.
+    """
+    __tablename__ = "wallet_action_schedules"
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, index=True, nullable=False)
+    wallet_id = Column(Integer, ForeignKey("wallets.id", ondelete="CASCADE"), index=True, nullable=False)
+    action_type = Column(String, nullable=False)
+    day_of_week = Column(String, nullable=False)
+    time_of_day = Column(String, nullable=False)
+    timezone = Column(String, nullable=False, default="UTC")
+    enabled = Column(Boolean, nullable=False, default=True)
+    telegram_enabled = Column(Boolean, nullable=False, default=True)
+    acknowledgement = Column(Boolean, nullable=False, default=False)
+    last_sent_slot = Column(String, nullable=True)
+    created_at = Column(Integer, nullable=False)
     updated_at = Column(Integer, nullable=False)
 
 class BridgePlan(Base):
@@ -1083,6 +1106,73 @@ async def run_scheduled_action_reminder_job():
                     messages[normalize_language(subscription.language)],
                 )
             reminder.last_sent_slot = current_slot
+
+        wallet_schedules = db.query(WalletActionSchedule).filter(
+            WalletActionSchedule.enabled.is_(True),
+        ).all()
+        action_labels = {
+            "ru": {"swap": "Обмен", "bridge": "Мост", "defi": "DeFi"},
+            "en": {"swap": "Swap", "bridge": "Bridge", "defi": "DeFi"},
+            "zh": {"swap": "兑换", "bridge": "跨链桥", "defi": "DeFi"},
+        }
+        for schedule in wallet_schedules:
+            try:
+                local_now = datetime.datetime.now(ZoneInfo(schedule.timezone))
+            except (ZoneInfoNotFoundError, ValueError):
+                logging.warning("Invalid timezone on wallet schedule id=%s", schedule.id)
+                continue
+            local_day = current_day_map.get(local_now.weekday())
+            local_time = local_now.strftime("%H:%M")
+            local_slot = f"{local_now.strftime('%Y-%m-%d %H:%M')}|{schedule.timezone}"
+            if schedule.day_of_week != local_day or schedule.time_of_day != local_time:
+                continue
+            if schedule.last_sent_slot == local_slot:
+                continue
+
+            wallet = db.query(Wallet).filter(
+                Wallet.id == schedule.wallet_id,
+                Wallet.username == schedule.username,
+            ).first()
+            if not wallet or not wallet.proxy:
+                schedule.enabled = False
+                schedule.updated_at = int(time.time())
+                continue
+
+            subscription = get_telegram_subscription(db, schedule.username)
+            if subscription and schedule.telegram_enabled and subscription.notify_reminders:
+                language = normalize_language(subscription.language)
+                wallet_name = re.sub(
+                    r"([_*`\[])",
+                    r"\\\1",
+                    (wallet.label or f"Wallet {wallet.id}")[:80],
+                )
+                short_address = f"{wallet.wallet_address[:8]}…{wallet.wallet_address[-6:]}"
+                action_name = action_labels[language].get(schedule.action_type, schedule.action_type)
+                messages = {
+                    "ru": (
+                        "🗓 *AIRDROP-X: действие по расписанию*\n"
+                        f"Кошелёк: *{wallet_name}* (`{short_address}`)\n"
+                        f"Действие: *{action_name}*\n"
+                        "Откройте Центр действий, проверьте параметры и подтвердите операцию в MetaMask или WalletConnect. "
+                        "Без подтверждения средства не перемещаются."
+                    ),
+                    "en": (
+                        "🗓 *AIRDROP-X: scheduled action*\n"
+                        f"Wallet: *{wallet_name}* (`{short_address}`)\n"
+                        f"Action: *{action_name}*\n"
+                        "Open the Action Center, review the parameters, and approve the operation in MetaMask or WalletConnect. "
+                        "No funds move without your confirmation."
+                    ),
+                    "zh": (
+                        "🗓 *AIRDROP-X：计划操作*\n"
+                        f"钱包：*{wallet_name}* (`{short_address}`)\n"
+                        f"操作：*{action_name}*\n"
+                        "请打开操作中心、检查参数，并在 MetaMask 或 WalletConnect 中确认。未经确认不会转移资金。"
+                    ),
+                }
+                send_telegram_notification(subscription.chat_id, messages[language])
+            schedule.last_sent_slot = local_slot
+            schedule.updated_at = int(time.time())
         db.commit()
     except Exception:
         db.rollback()
@@ -1309,6 +1399,15 @@ class ActionReminderRequest(BaseModel):
     enabled: bool = False
     telegram_enabled: bool = True
 
+class WalletActionScheduleRequest(BaseModel):
+    action_type: str
+    day_of_week: str
+    time_of_day: str
+    timezone: str = "UTC"
+    enabled: bool = True
+    telegram_enabled: bool = True
+    acknowledgement: bool = False
+
 class BridgePlanRequest(BaseModel):
     wallet_address: str
     to_network: str
@@ -1370,8 +1469,11 @@ class DirectTransferRecordCreateRequest(BaseModel):
 class WalletBatchAddRequest(BaseModel):
     wallet_addresses: List[str]
 
-class WalletLabelUpdateRequest(BaseModel):
+class WalletUpdateRequest(BaseModel):
     label: str
+    # None means that the existing proxy remains unchanged. Credentials are
+    # accepted only for an explicit replacement and are never returned by APIs.
+    proxy: Optional[str] = None
 
 class BaseSwapQuoteRequest(BaseModel):
     wallet_address: str
@@ -1554,6 +1656,11 @@ async def launch_browser_profile(
 
     if not profile:
         raise HTTPException(status_code=404, detail="Profile not found")
+    if not profile.proxy_configuration:
+        raise HTTPException(
+            status_code=422,
+            detail="A proxy is required before launching an isolated profile",
+        )
 
     try:
         await browser_manager.launch_profile(
@@ -3192,10 +3299,10 @@ async def create_wallet_profile(
         "message": "Local profile ready",
     }
 
-@app.patch("/api/wallets/{wallet_id}/label")
-async def update_wallet_label(
+@app.patch("/api/wallets/{wallet_id}")
+async def update_wallet(
     wallet_id: int,
-    payload: WalletLabelUpdateRequest,
+    payload: WalletUpdateRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -3209,8 +3316,11 @@ async def update_wallet_label(
     if not label or len(label) > 40 or any(ord(char) < 32 for char in label):
         raise HTTPException(status_code=422, detail="Wallet label is invalid")
     wallet.label = label
+    if payload.proxy is not None:
+        wallet.proxy = normalize_proxy_configuration(payload.proxy)
+        ensure_wallet_profile(db, current_user, wallet)
     db.commit()
-    return {"status": "success", "label": wallet.label}
+    return {"status": "success", "label": wallet.label, "has_proxy": bool(wallet.proxy)}
 
 @app.get("/api/wallets/{wallet_id}/health")
 async def get_wallet_health(wallet_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -4034,6 +4144,10 @@ async def delete_wallet(wallet_id: int, db: Session = Depends(get_db), current_u
     wallet = db.query(Wallet).filter(Wallet.id == wallet_id, Wallet.username == current_user.username).first()
     if not wallet:
         raise HTTPException(status_code=404, detail="Wallet not found")
+    db.query(WalletActionSchedule).filter(
+        WalletActionSchedule.wallet_id == wallet.id,
+        WalletActionSchedule.username == current_user.username,
+    ).delete(synchronize_session=False)
     db.delete(wallet)
     db.commit()
     return {"status": "success", "message": "Wallet deleted"}
@@ -4126,6 +4240,149 @@ async def get_action_reminder(db: Session = Depends(get_db), current_user: User 
         },
         "telegram_linked": bool(subscription),
     }
+
+def serialize_wallet_action_schedule(schedule: WalletActionSchedule) -> dict:
+    return {
+        "id": schedule.id,
+        "wallet_id": schedule.wallet_id,
+        "action_type": schedule.action_type,
+        "day_of_week": schedule.day_of_week,
+        "time_of_day": schedule.time_of_day,
+        "timezone": schedule.timezone,
+        "enabled": bool(schedule.enabled),
+        "telegram_enabled": bool(schedule.telegram_enabled),
+        "acknowledgement": bool(schedule.acknowledgement),
+        "last_sent_slot": schedule.last_sent_slot,
+    }
+
+def validate_wallet_schedule_payload(payload: WalletActionScheduleRequest) -> None:
+    if payload.action_type not in {"swap", "bridge", "defi"}:
+        raise HTTPException(status_code=422, detail="Unsupported scheduled action")
+    if payload.day_of_week not in {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"}:
+        raise HTTPException(status_code=422, detail="Unsupported schedule day")
+    if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", payload.time_of_day):
+        raise HTTPException(status_code=422, detail="Invalid schedule time")
+    if not payload.timezone or len(payload.timezone) > 64:
+        raise HTTPException(status_code=422, detail="Invalid schedule timezone")
+    try:
+        ZoneInfo(payload.timezone)
+    except (ZoneInfoNotFoundError, ValueError):
+        raise HTTPException(status_code=422, detail="Invalid schedule timezone")
+    if payload.enabled and not payload.acknowledgement:
+        raise HTTPException(status_code=422, detail="Schedule acknowledgement is required")
+
+def get_owned_wallet_or_404(db: Session, wallet_id: int, current_user: User) -> Wallet:
+    wallet = db.query(Wallet).filter(
+        Wallet.id == wallet_id,
+        Wallet.username == current_user.username,
+    ).first()
+    if not wallet:
+        raise HTTPException(status_code=404, detail="Wallet not found")
+    return wallet
+
+@app.get("/api/wallets/{wallet_id}/schedules")
+async def get_wallet_action_schedules(
+    wallet_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    wallet = get_owned_wallet_or_404(db, wallet_id, current_user)
+    schedules = db.query(WalletActionSchedule).filter(
+        WalletActionSchedule.wallet_id == wallet.id,
+        WalletActionSchedule.username == current_user.username,
+    ).order_by(WalletActionSchedule.created_at.asc()).all()
+    return {
+        "status": "success",
+        "wallet": {
+            "id": wallet.id,
+            "label": wallet.label,
+            "wallet_address": wallet.wallet_address,
+            "has_proxy": bool(wallet.proxy),
+        },
+        "telegram_linked": bool(get_telegram_subscription(db, current_user.username)),
+        "schedules": [serialize_wallet_action_schedule(item) for item in schedules],
+    }
+
+@app.post("/api/wallets/{wallet_id}/schedules")
+async def create_wallet_action_schedule(
+    wallet_id: int,
+    payload: WalletActionScheduleRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    wallet = get_owned_wallet_or_404(db, wallet_id, current_user)
+    validate_wallet_schedule_payload(payload)
+    if payload.enabled and not wallet.proxy:
+        raise HTTPException(status_code=422, detail="A proxy is required before enabling a wallet schedule")
+    now_ts = int(time.time())
+    schedule = WalletActionSchedule(
+        username=current_user.username,
+        wallet_id=wallet.id,
+        action_type=payload.action_type,
+        day_of_week=payload.day_of_week,
+        time_of_day=payload.time_of_day,
+        timezone=payload.timezone,
+        enabled=payload.enabled,
+        telegram_enabled=payload.telegram_enabled,
+        acknowledgement=payload.acknowledgement,
+        created_at=now_ts,
+        updated_at=now_ts,
+    )
+    db.add(schedule)
+    db.commit()
+    db.refresh(schedule)
+    return {"status": "success", "schedule": serialize_wallet_action_schedule(schedule)}
+
+@app.patch("/api/wallets/{wallet_id}/schedules/{schedule_id}")
+async def update_wallet_action_schedule(
+    wallet_id: int,
+    schedule_id: int,
+    payload: WalletActionScheduleRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    wallet = get_owned_wallet_or_404(db, wallet_id, current_user)
+    validate_wallet_schedule_payload(payload)
+    if payload.enabled and not wallet.proxy:
+        raise HTTPException(status_code=422, detail="A proxy is required before enabling a wallet schedule")
+    schedule = db.query(WalletActionSchedule).filter(
+        WalletActionSchedule.id == schedule_id,
+        WalletActionSchedule.wallet_id == wallet.id,
+        WalletActionSchedule.username == current_user.username,
+    ).first()
+    if not schedule:
+        raise HTTPException(status_code=404, detail="Wallet schedule not found")
+    schedule.action_type = payload.action_type
+    schedule.day_of_week = payload.day_of_week
+    schedule.time_of_day = payload.time_of_day
+    schedule.timezone = payload.timezone
+    schedule.enabled = payload.enabled
+    schedule.telegram_enabled = payload.telegram_enabled
+    schedule.acknowledgement = payload.acknowledgement
+    schedule.last_sent_slot = None
+    schedule.updated_at = int(time.time())
+    db.commit()
+    db.refresh(schedule)
+    return {"status": "success", "schedule": serialize_wallet_action_schedule(schedule)}
+
+@app.delete("/api/wallets/{wallet_id}/schedules/{schedule_id}")
+async def delete_wallet_action_schedule(
+    wallet_id: int,
+    schedule_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    wallet = get_owned_wallet_or_404(db, wallet_id, current_user)
+    schedule = db.query(WalletActionSchedule).filter(
+        WalletActionSchedule.id == schedule_id,
+        WalletActionSchedule.wallet_id == wallet.id,
+        WalletActionSchedule.username == current_user.username,
+    ).first()
+    if not schedule:
+        raise HTTPException(status_code=404, detail="Wallet schedule not found")
+    db.delete(schedule)
+    db.commit()
+    return {"status": "success"}
 
 @app.post("/api/action-reminder")
 async def save_action_reminder(

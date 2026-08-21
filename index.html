@@ -17,17 +17,18 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
-    <script src="locales/ru.js?v=20260821"></script>
-    <script src="locales/en.js?v=20260821"></script>
-    <script src="locales/zh.js?v=20260821"></script>
+    <script src="locales/ru.js?v=20260821-modal-restore-1"></script>
+    <script src="locales/en.js?v=20260821-modal-restore-1"></script>
+    <script src="locales/zh.js?v=20260821-modal-restore-1"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=20260821-safe-start-3">
+    <link rel="stylesheet" href="style.css?v=20260821-wallet-schedule-1">
 </head>
 <body>
 
     <div id="react-ambient-root"></div>
+    <div id="pixel-snow-root" aria-hidden="true"></div>
 
     <div id="preloader-line"></div>
 
@@ -206,14 +207,54 @@
                     <input type="text" id="walletConfigProxyInput" class="auth-input" placeholder="http://user:pass@ip:port или ip:port" oninput="validateWalletConfigInputs()">
                 </div>
                 <div style="display:flex; gap:8px; align-items:flex-start; padding:10px 12px; border:1px solid rgba(139,92,246,.25); background:rgba(139,92,246,.06); border-radius:8px; color:#c4b5fd; font-size:11px; line-height:1.4;">
-                    <span style="font-weight:bold;">🛡️ Anti-Sybil:</span><span>Ни один импортированный адрес не может быть сохранен без индивидуального прокси и имени для защиты от связывания.</span>
+                    <span style="font-weight:bold;">Сетевой профиль:</span><span>Для расписания и запуска изолированной сессии нужен отдельный прокси. Рекомендуется стабильный мобильный или резидентный прокси нужного региона.</span>
                 </div>
             </div>
 
             <div style="display:flex; gap:10px; justify-content:flex-end;">
-                <button type="button" id="walletConfigCancelBtn" onclick="cancelWalletConfigModal()" class="btn-dark-sm" style="padding:10px 16px; border-color:rgba(239, 68, 68, 0.3); color:#fca5a5;">Пропустить</button>
+                <button type="button" id="walletConfigCancelBtn" onclick="cancelWalletConfigModal()" class="btn-dark-sm" style="padding:10px 16px; border-color:rgba(239, 68, 68, 0.3); color:#fca5a5;">Отмена</button>
                 <button type="button" id="walletConfigSaveBtn" onclick="saveWalletConfigModal()" class="btn-purple-lg" style="width:auto; padding:10px 20px; box-shadow:0 0 12px rgba(157,78,221,0.2);" disabled>Сохранить</button>
             </div>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="walletScheduleModal" onclick="handleWalletScheduleOverlayClick(event)">
+        <div class="auth-modal wallet-schedule-modal" role="dialog" aria-modal="true" aria-labelledby="walletScheduleTitle">
+            <div class="wallet-schedule-head">
+                <div>
+                    <div id="walletScheduleTitle" class="wallet-schedule-title"></div>
+                    <div id="walletScheduleWallet" class="wallet-schedule-wallet"></div>
+                </div>
+                <button type="button" class="wallet-schedule-close" onclick="closeWalletScheduleModal()" aria-label="Close">×</button>
+            </div>
+            <div id="walletScheduleSafety" class="wallet-schedule-notice"></div>
+            <div id="walletScheduleProxyNotice" class="wallet-schedule-proxy"></div>
+
+            <div class="wallet-schedule-form">
+                <label><span id="walletScheduleActionLabel"></span>
+                    <select id="walletScheduleAction" class="auth-input">
+                        <option value="swap" id="walletScheduleActionSwap"></option>
+                        <option value="bridge" id="walletScheduleActionBridge"></option>
+                        <option value="defi" id="walletScheduleActionDefi"></option>
+                    </select>
+                </label>
+                <label><span id="walletScheduleDayLabel"></span>
+                    <select id="walletScheduleDay" class="auth-input"></select>
+                </label>
+                <label><span id="walletScheduleTimeLabel"></span>
+                    <input id="walletScheduleTime" type="text" value="18:00" placeholder="15:32" maxlength="5" inputmode="numeric" pattern="[0-2][0-9]:[0-5][0-9]" oninput="format24HourTimeInput(this)" onblur="normalize24HourTimeInput(this)" class="auth-input">
+                </label>
+                <label><span id="walletScheduleTimezoneLabel"></span>
+                    <input id="walletScheduleTimezone" type="text" value="UTC" readonly class="auth-input">
+                </label>
+            </div>
+            <label class="wallet-schedule-check"><input id="walletScheduleTelegram" type="checkbox" checked> <span id="walletScheduleTelegramLabel"></span></label>
+            <label class="wallet-schedule-check wallet-schedule-consent"><input id="walletScheduleAcknowledgement" type="checkbox"> <span id="walletScheduleAcknowledgementLabel"></span></label>
+            <div id="walletScheduleStatus" class="wallet-schedule-status"></div>
+            <button type="button" id="walletScheduleSave" onclick="saveWalletSchedule()" class="btn-purple-lg wallet-schedule-save"></button>
+
+            <div class="wallet-schedule-list-head" id="walletScheduleListTitle"></div>
+            <div id="walletScheduleList" class="wallet-schedule-list"></div>
         </div>
     </div>
 
@@ -618,7 +659,7 @@
     <div class="auth-modal" style="max-width: 680px; max-height: 85vh; overflow-y: auto;">
         <div class="modal-logo">
             <span id="legalModalTitle" style="font-size: 16px; font-weight: bold; color: #fff;"></span>
-            <span onclick="document.getElementById('legalModal').classList.remove('show')" style="cursor: pointer; color: var(--text-muted); font-size: 18px;">✕</span>
+            <span onclick="hideAppModal('legalModal')" style="cursor: pointer; color: var(--text-muted); font-size: 18px;">✕</span>
         </div>
         <div id="legalModalContent" style="color: var(--text-muted); font-size: 12px; line-height: 1.6;"></div>
     </div>
@@ -634,16 +675,16 @@
         const prefix = type === 'terms' ? 'legal.terms' : 'legal.privacy';
         title.innerText = window.t(`${prefix}Title`);
         content.innerHTML = window.t(`${prefix}Content`);
-        modal.classList.add('show');
+        showAppModal('legalModal');
     }
 
     function closeLegalModal(event) {
         if (event.target.id === 'legalModal') {
-            document.getElementById('legalModal').classList.remove('show');
+            hideAppModal('legalModal');
         }
     }
 </script>
 <script type="module" src="ui-dist/react-ui.js"></script>
-<script src="app.js?v=20260821"></script>
+<script src="app.js?v=20260821-wallet-schedule-1"></script>
 </body>
 </html>
