@@ -96,6 +96,7 @@ let userPlan = 'Standard';
 let deviceFingerprint = generateDeviceFingerprint();
 let subscriptionDaysLeft = 29;
 let showWelcomeGuide = true;
+let activeSafeStartStep = 0;
 
 let codeCooldownTimer = null;
 let codeCooldownSeconds = 0;
@@ -252,6 +253,7 @@ window.addEventListener('DOMContentLoaded', () => {
     initButtonGlowEffect();
     initFeatureCardsInteraction();
     initRouteLab();
+    initSafeStart();
     initAirdropXVisualSystem();
 });
 
@@ -453,10 +455,16 @@ function checkInputLimit(input, maxLimit) {
 // 🌍 Обновление всего статического текста
 const STATIC_TEXT_BINDINGS = [
     ['login-btn', 'login'], ['hero-title', 'heroTitle', true], ['hero-desc', 'heroDesc'], ['farm-btn', 'farmBtn'], ['settings-btn', 'settingsBtn'],
-    ['core-status-label', 'coreStatusLabel'], ['core-status-val', 'coreStatus'], ['features-heading', 'featuresHeading', true], ['instr-title', 'instructionHeading'], ['faq-heading', 'faqHeading'],
+    ['nav-features', 'navFeatures'], ['nav-safe-start', 'navSafeStart'], ['nav-how', 'navHow'], ['nav-pricing', 'navPricing'], ['hero-signing', 'heroSigning'],
+    ['core-status-label', 'coreStatusLabel'], ['core-status-val', 'coreStatus'], ['features-heading', 'featuresHeading', true], ['features-desc', 'featuresDesc'], ['instr-title', 'instructionHeading'], ['faq-heading', 'faqHeading'],
     ['c1-t', 'c1t'], ['c1-d', 'c1d'], ['c2-t', 'c2t'], ['c2-d', 'c2d'], ['c3-t', 'c3t'], ['c3-d', 'c3d'],
+    ['c4-t', 'c4t'], ['c4-d', 'c4d'], ['c6-t', 'c6t'], ['c6-d', 'c6d'], ['c7-tg-t', 'c7tgT'], ['c7-tg-d', 'c7tgD'], ['telegram-preview-title', 'telegramPreviewTitle'], ['telegram-preview-meta', 'telegramPreviewMeta'],
     ['c8-t', 'routeLabTitle'], ['c8-d', 'routeLabDesc'], ['route-tab-swap', 'routeLabSwap'], ['route-tab-bridge', 'routeLabBridge'], ['route-tab-defi', 'routeLabDefi'],
     ['c7-t', 'environmentCardTitle'], ['c7-d', 'environmentCardDesc'],
+    ['preview-title', 'previewTitle', true], ['preview-desc', 'previewDesc'], ['preview-networks', 'previewNetworks'], ['preview-statuses', 'previewStatuses'], ['preview-no-keys', 'previewNoKeys'], ['preview-private-keys', 'previewPrivateKeys'],
+    ['safe-start-eyebrow', 'safeStartEyebrow'], ['safe-start-title', 'safeStartTitle'], ['safe-start-desc', 'safeStartDesc'],
+    ['safe-step-label-1', 'safeStartLabels.account'], ['safe-step-label-2', 'safeStartLabels.wallet'], ['safe-step-label-3', 'safeStartLabels.review'], ['safe-step-label-4', 'safeStartLabels.alerts'],
+    ['summary-card-1-title', 'safeStartSummary.connectTitle'], ['summary-card-1-desc', 'safeStartSummary.connectDesc'], ['summary-card-2-title', 'safeStartSummary.reviewTitle'], ['summary-card-2-desc', 'safeStartSummary.reviewDesc'], ['summary-card-3-title', 'safeStartSummary.signTitle'], ['summary-card-3-desc', 'safeStartSummary.signDesc'],
     ['sc1-t', 'sc1t'], ['sc1-b1', 'sc1b1'], ['sc1-d1', 'sc1d1'], ['sc1-d2', 'sc1d2'], ['sc1-l1', 'sc1l1'], ['sc1-l2', 'sc1l2'], ['sc1-l3', 'sc1l3'],
     ['sc2-t', 'sc2t'], ['sc2-b1', 'sc2b1'], ['sc2-d1', 'sc2d1'], ['sc2-d2', 'sc2d2'], ['sc2-l1', 'sc2l1'], ['sc2-l2', 'sc2l2'], ['sc2-l3', 'sc2l3'],
     ['sc3-t', 'sc3t'], ['sc3-b1', 'sc3b1'], ['sc3-d1', 'sc3d1'], ['sc3-d2', 'sc3d2'], ['sc3-l1', 'sc3l1'], ['sc3-l2', 'sc3l2'], ['sc3-l3', 'sc3l3'],
@@ -485,6 +493,7 @@ function updateStaticText(lang) {
     }
     updateLocalizedDemoMedia();
     updateRouteLab();
+    renderSafeStart(activeSafeStartStep);
     updateRegistrationContinueAction();
     syncEmailCodeCooldown();
 }
@@ -505,6 +514,14 @@ function updateLocalizedDemoMedia() {
         if (image.getAttribute('src') !== nextSource) image.setAttribute('src', nextSource);
         image.setAttribute('alt', t(altKey));
     });
+    const mainNav = document.getElementById('header-nav');
+    if (mainNav) mainNav.setAttribute('aria-label', t('mainNavAria'));
+    const heroProof = document.getElementById('hero-proof');
+    if (heroProof) heroProof.setAttribute('aria-label', t('heroProofAria'));
+    const routeLab = document.getElementById('route-lab');
+    if (routeLab) routeLab.setAttribute('aria-label', t('routeLabAria'));
+    const interfacePreview = document.getElementById('interface-preview');
+    if (interfacePreview) interfacePreview.setAttribute('aria-label', t('previewAria'));
 }
 
 window.translateBackendMessage = function(msg) {
@@ -1191,6 +1208,88 @@ function initRouteLab() {
         });
     });
     updateRouteLab();
+}
+
+function getSafeStartSteps() {
+    const steps = translations[getActiveLang()]?.safeStartSteps;
+    return Array.isArray(steps) ? steps : [];
+}
+
+function renderSafeStart(nextStep = activeSafeStartStep) {
+    const panel = document.getElementById('safe-start-panel');
+    const steps = getSafeStartSteps();
+    if (!panel || !steps.length) return;
+
+    document.getElementById('safe-stepper')?.setAttribute('aria-label', t('safeStartAria'));
+
+    activeSafeStartStep = Math.max(0, Math.min(Number(nextStep) || 0, steps.length - 1));
+    const step = steps[activeSafeStartStep];
+    const byId = (id) => document.getElementById(id);
+    const setText = (id, value) => {
+        const element = byId(id);
+        if (element) element.textContent = value || '';
+    };
+
+    setText('safe-start-current', String(activeSafeStartStep + 1).padStart(2, '0'));
+    setText('safe-shot-number', String(activeSafeStartStep + 1).padStart(2, '0'));
+    setText('safe-shot-title', step.title);
+    setText('safe-shot-desc', step.description);
+    setText('safe-shot-brow', step.screenEyebrow);
+    setText('safe-shot-screen-title', step.screenTitle);
+    setText('safe-shot-screen-desc', step.screenDescription);
+    setText('safe-shot-row-1', step.rows?.[0]);
+    setText('safe-shot-row-2', step.rows?.[1]);
+    setText('safe-shot-row-3', step.rows?.[2]);
+    setText('safe-shot-status', step.status);
+
+    const list = byId('safe-shot-list');
+    if (list) {
+        list.replaceChildren(...(step.points || []).map(point => {
+            const item = document.createElement('li');
+            const marker = document.createElement('i');
+            const content = document.createElement('span');
+            content.textContent = point;
+            item.append(marker, content);
+            return item;
+        }));
+    }
+
+    document.querySelectorAll('.safe-step').forEach((button, index) => {
+        const selected = index === activeSafeStartStep;
+        button.classList.toggle('active', selected);
+        button.setAttribute('aria-selected', selected ? 'true' : 'false');
+        button.tabIndex = selected ? 0 : -1;
+    });
+
+    const previous = byId('safe-step-prev');
+    const following = byId('safe-step-next');
+    if (previous) {
+        previous.disabled = activeSafeStartStep === 0;
+        previous.textContent = t('safeStartPrevious');
+    }
+    if (following) {
+        following.textContent = activeSafeStartStep === steps.length - 1 ? t('safeStartFinish') : t('safeStartNext');
+    }
+
+    panel.classList.remove('is-switching');
+    void panel.offsetWidth;
+    panel.classList.add('is-switching');
+}
+
+function initSafeStart() {
+    const stepper = document.getElementById('safe-stepper');
+    if (!stepper || stepper.dataset.ready === 'true') return;
+    stepper.dataset.ready = 'true';
+    stepper.querySelectorAll('.safe-step').forEach(button => {
+        button.addEventListener('click', () => renderSafeStart(Number(button.dataset.safeStep)));
+    });
+    document.getElementById('safe-step-prev')?.addEventListener('click', () => renderSafeStart(activeSafeStartStep - 1));
+    document.getElementById('safe-step-next')?.addEventListener('click', () => {
+        const steps = getSafeStartSteps();
+        renderSafeStart(activeSafeStartStep === steps.length - 1 ? 0 : activeSafeStartStep + 1);
+    });
+    stepper.setAttribute('aria-label', t('safeStartAria'));
+    renderSafeStart(activeSafeStartStep);
 }
 
 /**

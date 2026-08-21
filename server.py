@@ -765,6 +765,10 @@ async def add_security_headers(request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    # API responses can carry session-scoped state, account data, or payment
+    # progress. Never let a browser or an intermediate proxy reuse them.
+    if request.url.path.startswith("/api/"):
+        response.headers.setdefault("Cache-Control", "no-store")
     if os.getenv("APP_ENV", "development").lower() == "production":
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
@@ -1113,7 +1117,12 @@ def enforce_request_rate_limit(scope: str, key: str, limit: int, window_seconds:
         request_rate_limits[bucket_key] = {"count": 1, "reset_at": now_ts + window_seconds}
         return
     if bucket["count"] >= limit:
-        raise HTTPException(status_code=429, detail="Too many requests. Please wait and try again")
+        retry_after = max(1, bucket["reset_at"] - now_ts)
+        raise HTTPException(
+            status_code=429,
+            detail="Too many requests. Please wait and try again",
+            headers={"Retry-After": str(retry_after)},
+        )
     bucket["count"] += 1
 
 def normalize_registration_email(value: str) -> str:
