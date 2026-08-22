@@ -2967,12 +2967,21 @@ input.auth-input {
 .wallet-schedule-notice { color:#bfdbfe; border:1px solid rgba(59,130,246,.28); background:rgba(59,130,246,.08); }
 .wallet-schedule-proxy { color:#d1fae5; border:1px solid rgba(16,185,129,.3); background:rgba(16,185,129,.08); }
 .wallet-schedule-proxy.missing { color:#fecaca; border-color:rgba(239,68,68,.32); background:rgba(239,68,68,.08); }
+.wallet-schedule-flex-toggle { width:100%; margin-top:12px; padding:11px 13px; border-radius:11px; border:1px solid rgba(139,92,246,.34); background:rgba(124,58,237,.08); color:#ddd6fe; font-size:12px; font-weight:750; cursor:pointer; transition:border-color .2s ease, background .2s ease, box-shadow .2s ease; }
+.wallet-schedule-flex-toggle:hover { border-color:rgba(167,139,250,.72); background:rgba(124,58,237,.16); box-shadow:0 0 18px rgba(124,58,237,.12); }
+.wallet-schedule-flex-toggle.active { color:#fff; background:linear-gradient(135deg,rgba(124,58,237,.3),rgba(14,165,233,.12)); border-color:#8b5cf6; }
 .wallet-schedule-form { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; margin-top:16px; }
 .wallet-schedule-form label { color:var(--text-muted); font-size:11px; }
 .wallet-schedule-form .auth-input { margin-top:6px; padding:10px 12px; font-size:13px; }
 .wallet-schedule-check { display:flex; align-items:flex-start; gap:9px; color:#d1d5db; font-size:12px; line-height:1.45; margin-top:13px; cursor:pointer; }
 .wallet-schedule-check input { margin-top:2px; accent-color:#8b5cf6; }
 .wallet-schedule-consent { border:1px solid rgba(167,139,250,.22); background:rgba(124,58,237,.06); border-radius:10px; padding:10px 12px; }
+.wallet-schedule-flex-panel { margin-top:13px; border:1px solid rgba(139,92,246,.26); background:rgba(9,5,18,.5); border-radius:12px; padding:13px; }
+.wallet-schedule-flex-description { color:#c4b5fd; font-size:12px; line-height:1.5; margin-bottom:12px; }
+.wallet-schedule-flex-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:11px; }
+.wallet-schedule-flex-grid label { color:var(--text-muted); font-size:11px; }
+.wallet-schedule-flex-grid .auth-input { margin-top:6px; padding:10px 12px; font-size:13px; }
+.wallet-schedule-generated-preview { color:#a7f3d0; font-size:11px; line-height:1.55; margin-top:11px; }
 .wallet-schedule-status { min-height:18px; margin-top:10px; font-size:12px; }
 .wallet-schedule-save { width:auto; padding:11px 18px; margin-top:8px; }
 .wallet-schedule-list-head { color:#fff; font-size:14px; font-weight:750; border-top:1px solid var(--border-color); padding-top:17px; margin-top:20px; }
@@ -2980,9 +2989,13 @@ input.auth-input {
 .wallet-schedule-item { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:11px 12px; border:1px solid var(--border-color); background:rgba(0,0,0,.25); border-radius:11px; }
 .wallet-schedule-item b { color:#fff; font-size:12px; }
 .wallet-schedule-item small { display:block; color:var(--text-muted); font-size:11px; margin-top:4px; }
+.wallet-schedule-actions { display:flex; align-items:center; gap:7px; flex-wrap:wrap; justify-content:flex-end; }
+.wallet-schedule-reroll { border:1px solid rgba(139,92,246,.45); background:rgba(124,58,237,.12); color:#d8b4fe; border-radius:8px; padding:7px 9px; cursor:pointer; font-size:11px; }
+.wallet-schedule-reroll:hover { background:rgba(124,58,237,.24); box-shadow:0 0 16px rgba(124,58,237,.16); }
 .wallet-schedule-delete { border:1px solid rgba(239,68,68,.3); background:rgba(239,68,68,.08); color:#fca5a5; border-radius:8px; padding:7px 9px; cursor:pointer; font-size:11px; }
 @media (max-width: 620px) {
     .wallet-schedule-form { grid-template-columns:1fr; }
+    .wallet-schedule-flex-grid { grid-template-columns:1fr; }
     .wallet-schedule-modal { padding:19px; }
 }
 

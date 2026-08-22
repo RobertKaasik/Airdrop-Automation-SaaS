@@ -25,6 +25,7 @@ function setLanguage(lang) {
     const normalizedLang = lang === 'cn' ? 'zh' : lang;
     currentLang = translations[normalizedLang] ? normalizedLang : 'ru';
     localStorage.setItem('ax_lang', currentLang);
+    document.documentElement.setAttribute('lang', currentLang);
     document.documentElement.setAttribute('data-lang', currentLang);
     document.body.setAttribute('data-lang', currentLang);
     return currentLang;
@@ -2199,8 +2200,8 @@ function switchMenu(element, sectionName) {
 }
 
 function switchActivityPane(pane) {
-    const allowedPanes = new Set(['swap', 'plan', 'defi', 'quests', 'journal']);
-    localStorage.setItem('ax_activity_pane', allowedPanes.has(pane) ? pane : 'swap');
+    const allowedPanes = new Set(['dex', 'bridges', 'lending', 'journal']);
+    localStorage.setItem('ax_activity_pane', allowedPanes.has(pane) ? pane : 'dex');
     renderDashboardContent('Farming');
 }
 
@@ -2816,6 +2817,10 @@ async function loadBaseSwapHistory() {
 async function requestBaseSwapQuote() {
     const locale = translations[getActiveLang()];
     const amount = normalizeEthInput(document.getElementById('operationAmount')?.value || document.getElementById('baseSwapAmount')?.value);
+    const requestedSlippage = Number(document.getElementById('dexSlippage')?.value || 0.5);
+    const slippage = Number.isFinite(requestedSlippage) && requestedSlippage >= 0.1 && requestedSlippage <= 1
+        ? requestedSlippage
+        : 0.5;
     const connectedAddress = getActiveBaseWalletAddress();
     const result = document.getElementById('baseSwapResult');
     const button = document.getElementById('baseSwapQuoteButton');
@@ -2843,7 +2848,7 @@ async function requestBaseSwapQuote() {
         setButtonLoading(button, true, locale.baseSwapQuoting);
         const response = await fetch('/api/base-swap/quote', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ wallet_address: connectedAddress, amount, slippage: 0.5 }),
+            body: JSON.stringify({ wallet_address: connectedAddress, amount, slippage }),
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.detail || 'base_swap_quote_failed');
@@ -3485,6 +3490,7 @@ function initializeInterfaceHintsPreference() {
 
 let activeWalletScheduleId = null;
 let activeWalletScheduleHasProxy = false;
+let activeWalletScheduleFlexible = false;
 
 function walletScheduleDayOptions(locale) {
     return [
@@ -3511,6 +3517,11 @@ function populateWalletScheduleText() {
         walletScheduleAcknowledgementLabel: locale.walletScheduleAcknowledgementLabel,
         walletScheduleSave: locale.walletScheduleSave,
         walletScheduleListTitle: locale.walletScheduleListTitle,
+        walletScheduleFlexibleDescription: locale.walletScheduleFlexibleDescription,
+        walletScheduleWeeklyMinLabel: locale.walletScheduleWeeklyMinLabel,
+        walletScheduleWeeklyMaxLabel: locale.walletScheduleWeeklyMaxLabel,
+        walletScheduleWindowStartLabel: locale.walletScheduleWindowStartLabel,
+        walletScheduleWindowEndLabel: locale.walletScheduleWindowEndLabel,
     };
     Object.entries(textMap).forEach(([id, value]) => {
         const element = document.getElementById(id);
@@ -3523,10 +3534,33 @@ function populateWalletScheduleText() {
             .map(([value, label]) => `<option value="${value}">${escapeHtml(label)}</option>`).join('');
         daySelect.value = selected;
     }
+    updateWalletScheduleFlexibleUi();
+}
+
+function updateWalletScheduleFlexibleUi() {
+    const locale = translations[getActiveLang()];
+    const toggle = document.getElementById('walletScheduleFlexibleToggle');
+    const panel = document.getElementById('walletScheduleFlexiblePanel');
+    document.querySelectorAll('.wallet-schedule-fixed-field').forEach(element => {
+        element.style.display = activeWalletScheduleFlexible ? 'none' : '';
+    });
+    if (panel) panel.hidden = !activeWalletScheduleFlexible;
+    if (toggle) {
+        toggle.classList.toggle('active', activeWalletScheduleFlexible);
+        toggle.textContent = activeWalletScheduleFlexible
+            ? locale.walletScheduleFlexibleEnabled
+            : locale.walletScheduleFlexibleButton;
+    }
+}
+
+function toggleWalletScheduleFlexible() {
+    activeWalletScheduleFlexible = !activeWalletScheduleFlexible;
+    updateWalletScheduleFlexibleUi();
 }
 
 async function openWalletScheduleModal(walletId) {
     activeWalletScheduleId = Number(walletId);
+    activeWalletScheduleFlexible = false;
     populateWalletScheduleText();
     const timezoneInput = document.getElementById('walletScheduleTimezone');
     if (timezoneInput) timezoneInput.value = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
@@ -3597,14 +3631,50 @@ function renderWalletSchedules(schedules) {
         defi: locale.walletScheduleActionDefi,
     };
     const dayNames = Object.fromEntries(walletScheduleDayOptions(locale));
-    list.innerHTML = schedules.map(item => `
+    list.innerHTML = schedules.map(item => {
+        const generatedSlots = Array.isArray(item.generated_slots) ? item.generated_slots : [];
+        const flexibleSummary = item.schedule_mode === 'flexible'
+            ? `${escapeHtml(locale.walletScheduleFlexibleShort
+                .replace('{min}', item.weekly_min)
+                .replace('{max}', item.weekly_max))} · ${escapeHtml(item.window_start)}–${escapeHtml(item.window_end)}`
+            : `${escapeHtml(dayNames[item.day_of_week] || item.day_of_week)} · ${escapeHtml(item.time_of_day)}`;
+        const preview = generatedSlots.length
+            ? `<small>${escapeHtml(locale.walletScheduleGeneratedLabel)}: ${generatedSlots.map(slot => `${escapeHtml(dayNames[slot.day] || slot.day)} ${escapeHtml(slot.time)}`).join(' · ')}</small>`
+            : '';
+        const rerollButton = item.schedule_mode === 'flexible'
+            ? `<button type="button" class="wallet-schedule-reroll" onclick="rerollWalletSchedule(${Number(item.id)})">${escapeHtml(locale.walletScheduleReroll)}</button>`
+            : '';
+        return `
         <div class="wallet-schedule-item">
             <div>
                 <b>${escapeHtml(actionNames[item.action_type] || item.action_type)}</b>
-                <small>${escapeHtml(dayNames[item.day_of_week] || item.day_of_week)} · ${escapeHtml(item.time_of_day)} · ${escapeHtml(item.timezone)}${item.enabled ? '' : ` · ${escapeHtml(locale.walletScheduleDisabled)}`}</small>
+                <small>${flexibleSummary} · ${escapeHtml(item.timezone)}${item.enabled ? '' : ` · ${escapeHtml(locale.walletScheduleDisabled)}`}</small>
+                ${preview}
             </div>
-            <button type="button" class="wallet-schedule-delete" onclick="deleteWalletSchedule(${Number(item.id)})">${escapeHtml(locale.walletScheduleDelete)}</button>
-        </div>`).join('');
+            <div class="wallet-schedule-actions">
+                ${rerollButton}
+                <button type="button" class="wallet-schedule-delete" onclick="deleteWalletSchedule(${Number(item.id)})">${escapeHtml(locale.walletScheduleDelete)}</button>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+async function rerollWalletSchedule(scheduleId) {
+    if (!activeWalletScheduleId) return;
+    const locale = translations[getActiveLang()];
+    const status = document.getElementById('walletScheduleStatus');
+    try {
+        if (status) status.textContent = locale.walletScheduleRerolling;
+        const response = await fetch(`/api/wallets/${activeWalletScheduleId}/schedules/${scheduleId}/reroll`, {
+            method: 'POST',
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'wallet_schedule_reroll_failed');
+        if (status) status.textContent = locale.walletScheduleRerolled;
+        await loadWalletSchedules();
+    } catch (error) {
+        if (status) status.textContent = translateBackendDetail(error.message) || locale.walletScheduleSaveError;
+    }
 }
 
 async function saveWalletSchedule() {
@@ -3618,8 +3688,22 @@ async function saveWalletSchedule() {
         if (status) status.textContent = locale.walletScheduleProxyRequired;
         return;
     }
-    if (!timeValue) {
+    if (!activeWalletScheduleFlexible && !timeValue) {
         if (status) status.textContent = locale.planReminderTimeInvalid;
+        return;
+    }
+    const windowStartInput = document.getElementById('walletScheduleWindowStart');
+    const windowEndInput = document.getElementById('walletScheduleWindowEnd');
+    const windowStart = normalize24HourTime(windowStartInput?.value);
+    const windowEnd = normalize24HourTime(windowEndInput?.value);
+    const weeklyMin = Number(document.getElementById('walletScheduleWeeklyMin')?.value || 3);
+    const weeklyMax = Number(document.getElementById('walletScheduleWeeklyMax')?.value || 4);
+    if (activeWalletScheduleFlexible && (
+        !windowStart || !windowEnd || windowStart >= windowEnd
+        || !Number.isInteger(weeklyMin) || !Number.isInteger(weeklyMax)
+        || weeklyMin < 1 || weeklyMax > 7 || weeklyMin > weeklyMax
+    )) {
+        if (status) status.textContent = locale.walletScheduleFlexibleInvalid;
         return;
     }
     const acknowledgement = Boolean(document.getElementById('walletScheduleAcknowledgement')?.checked);
@@ -3630,11 +3714,17 @@ async function saveWalletSchedule() {
     const payload = {
         action_type: document.getElementById('walletScheduleAction')?.value || 'swap',
         day_of_week: document.getElementById('walletScheduleDay')?.value || 'Mon',
-        time_of_day: timeValue,
+        time_of_day: timeValue || '18:00',
         timezone: document.getElementById('walletScheduleTimezone')?.value || 'UTC',
         enabled: true,
         telegram_enabled: Boolean(document.getElementById('walletScheduleTelegram')?.checked),
         acknowledgement,
+        schedule_mode: activeWalletScheduleFlexible ? 'flexible' : 'fixed',
+        weekly_min: weeklyMin,
+        weekly_max: weeklyMax,
+        window_start: windowStart || '10:00',
+        window_end: windowEnd || '21:00',
+        reroll: activeWalletScheduleFlexible,
     };
     try {
         if (button) { button.disabled = true; button.textContent = locale.loading; }
@@ -4230,6 +4320,26 @@ async function loadUniversalBridgeTokenSelectors() {
         catalogStatus.style.color = 'var(--text-muted)';
     }
     try {
+        const isBaseSwapPane = localStorage.getItem('ax_activity_pane') === 'dex'
+            && sourceNetwork === 'Base'
+            && !document.getElementById('operationReceiveAsset');
+        if (isBaseSwapPane) {
+            await loadUniversalBridgeTokens('Base');
+            const nativeToken = (universalBridgeTokensByNetwork.Base || []).find(
+                token => token.address?.toLowerCase() === UNIVERSAL_BRIDGE_NATIVE_TOKEN
+            );
+            const sourceSelect = document.getElementById('operationSourceAsset');
+            if (!nativeToken || !sourceSelect) throw new Error('base_native_token_unavailable');
+            sourceSelect.replaceChildren();
+            const option = document.createElement('option');
+            option.value = nativeToken.address;
+            option.textContent = `${nativeToken.symbol} · ${nativeToken.name}`;
+            sourceSelect.append(option);
+            sourceSelect.value = nativeToken.address;
+            sourceSelect.disabled = true;
+            await loadSelectedUniversalBridgeSourceBalance();
+            return;
+        }
         await Promise.all([loadUniversalBridgeTokens(sourceNetwork), loadUniversalBridgeTokens(destinationNetwork)]);
         populateUniversalBridgeTokenSelect('operationSourceAsset', sourceNetwork);
         populateUniversalBridgeTokenSelect('operationReceiveAsset', destinationNetwork);
@@ -4518,6 +4628,10 @@ async function requestUniversalBridgeQuote() {
     const amount = normalizeUniversalBridgeAmount(document.getElementById('operationAmount')?.value, sourceToken?.decimals);
     activeUniversalBridgeQuote = null;
     setUniversalBridgeReviewVisible(false);
+    if (sourceNetwork === destinationNetwork) {
+        setUniversalBridgeResult(locale.universalBridgeNetworksMustDiffer, '#fca5a5');
+        return;
+    }
     if (!sourceToken || !destinationToken || !amount || !validateOperationAmount() || !/^0x[0-9a-fA-F]{40}$/.test(activeAddress)) {
         setUniversalBridgeResult(locale.universalBridgeInvalid, '#fca5a5');
         return;
@@ -5709,6 +5823,105 @@ function hideProxyTip() {
     if (box) box.style.display = 'none';
 }
 
+// --- DEX, Bridges, Lending Global Handlers ---
+
+let activeDexQuote = null;
+let activeBridgeQuote = null;
+
+function updateDexTokens() {
+}
+
+function setDexMaxAmount() {
+    return useOperationMaxAmount();
+}
+
+async function requestDexQuote() {
+    return requestBaseSwapQuote();
+}
+async function executeDexSwap() {
+    return submitBaseSwap();
+}
+async function requestBridgeQuote() {
+    return requestUniversalBridgeQuote();
+}
+async function executeBridgeTransfer() {
+    return executeUniversalBridge();
+}
+async function buildLendingOperation() {
+    return buildVerifiedLendingOperation();
+}
+async function loadLendingPositions() {
+    const locale = translations[getActiveLang()];
+    const activeAddress = getActiveBaseWalletAddress();
+    const container = document.getElementById('lendingPositionsList');
+    if (!container) return;
+
+    if (!activeAddress) {
+        container.textContent = locale.defiSupplyWalletRequired;
+        return;
+    }
+
+    try {
+        container.textContent = locale.loading;
+        const username = localStorage.getItem('airdrop_username') || '';
+        const walletsResponse = await fetch(`/api/wallets/${encodeURIComponent(username)}`);
+        const walletsData = await walletsResponse.json();
+        const wallet = walletsData.wallets?.find((item) => String(item.wallet_address || '').toLowerCase() === activeAddress.toLowerCase());
+        if (!walletsResponse.ok || !wallet) throw new Error('wallet_not_saved');
+        const res = await fetch(`/api/defi/aave-base-positions/${encodeURIComponent(wallet.id)}`);
+        const data = await res.json();
+        if (!res.ok || !data.positions || !data.positions.length) {
+            container.textContent = locale.defiOverviewEmpty;
+            return;
+        }
+
+        const positions = data.positions.filter((position) => position.has_supply || position.has_borrow);
+        if (!positions.length) {
+            container.textContent = locale.defiOverviewEmpty;
+            return;
+        }
+        container.innerHTML = positions.map((pos) => `
+            <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-main); border:1px solid var(--border-color); border-radius:10px; padding:10px; margin-bottom:6px;">
+                <div>
+                    <b>${escapeHtml(pos.asset || 'USDC')}</b><br>
+                    <span style="color:var(--text-muted);">Aave V3 · Base</span>
+                </div>
+                <div style="text-align:right;">
+                    <b>${escapeHtml(locale.defiOverviewSupplied)}:</b> ${escapeHtml(pos.supplied || '0')}<br>
+                    <span style="color:var(--text-muted);">${escapeHtml(locale.defiOverviewBorrowed)}: ${escapeHtml(pos.borrowed || '0')}</span>
+                </div>
+            </div>
+        `).join('');
+    } catch (_) {
+        container.textContent = locale.defiOverviewLoadError;
+    }
+}
+
+async function buildVerifiedLendingOperation() {
+    const locale = translations[getActiveLang()];
+    const action = document.getElementById('lendingActionType')?.value || 'supply';
+    const amount = document.getElementById('lendingAmount')?.value || '';
+    const result = document.getElementById('lendingResultContainer');
+    if (!result) return;
+    result.replaceChildren();
+    const hiddenAmount = document.createElement('input');
+    hiddenAmount.type = 'hidden';
+    hiddenAmount.value = amount;
+    const quoteResult = document.createElement('div');
+    if (action === 'withdraw') {
+        hiddenAmount.id = 'aaveWithdrawAmount';
+        quoteResult.id = 'aaveWithdrawResult';
+        result.append(hiddenAmount, quoteResult);
+        await requestAaveUsdcWithdrawQuote();
+    } else {
+        hiddenAmount.id = 'aaveSupplyAmount';
+        quoteResult.id = 'aaveSupplyResult';
+        result.append(hiddenAmount, quoteResult);
+        await requestAaveUsdcSupplyQuote();
+    }
+    if (!quoteResult.textContent.trim()) quoteResult.textContent = locale.errors_genericRequestFailed || 'Request failed';
+}
+
 // --- Рендеринг Дашборда ---
 function renderDashboardContent(section) {
     currentSection = section;
@@ -5753,35 +5966,6 @@ function renderDashboardContent(section) {
                         <h3 style="color: #fff; margin: 0 0 4px 0; font-size: 16px; font-weight: 600;">${t.setTitle}</h3>
                         <p style="color: var(--text-muted); font-size: 13px; margin: 0;">${t.setDesc}</p>
                     </div>
-                    <button type="button" onclick="randomizeGlobalSettings()" style="background: linear-gradient(135deg, #2563eb, #1d4ed8); color:#fff; border:none; padding: 8px 14px; border-radius: 10px; font-size: 12px; cursor:pointer; font-weight: 600; box-shadow: 0 4px 12px rgba(37,99,235,0.3);">${t.btnRand}</button>
-                </div>
-                
-                <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-main); padding:14px 16px; border-radius:14px; border:1px solid var(--border-color); margin-bottom:18px;">
-                    <div>
-                        <div style="color:#fff; font-size:14px; font-weight:600;">${t.setBgTitle}</div>
-                        <div style="color:var(--text-muted); font-size:12px; margin-top:2px;">${t.setBgDesc}</div>
-                    </div>
-                    <label class="toggle-switch">
-                        <input type="checkbox" id="bgSchedulerToggle" checked onchange="toggleSchedulerState(this)">
-                        <span class="toggle-slider"></span>
-                    </label>
-                </div>
-
-                <div id="schedulerSettingsWrapper" style="transition: opacity 0.3s ease;">
-                    <div style="font-size:13px; color:var(--text-muted); margin-bottom:8px; font-weight:600;">${t.setDays}</div>
-                    
-                    <div class="calendar-grid" id="globalCalendarGrid" style="margin-bottom:16px; display: flex; gap: 8px; flex-wrap: wrap;">
-                        <div class="calendar-day active" data-raw-day="Пн" onclick="handleCalendarDayClick(this)" style="cursor:pointer; user-select:none; flex: 1; min-width: 45px; padding: 12px 6px; font-size: 13px;">${t.calDays['Пн']}</div>
-                        <div class="calendar-day active" data-raw-day="Вт" onclick="handleCalendarDayClick(this)" style="cursor:pointer; user-select:none; flex: 1; min-width: 45px; padding: 12px 6px; font-size: 13px;">${t.calDays['Вт']}</div>
-                        <div class="calendar-day active" data-raw-day="Ср" onclick="handleCalendarDayClick(this)" style="cursor:pointer; user-select:none; flex: 1; min-width: 45px; padding: 12px 6px; font-size: 13px;">${t.calDays['Ср']}</div>
-                        <div class="calendar-day active" data-raw-day="Чт" onclick="handleCalendarDayClick(this)" style="cursor:pointer; user-select:none; flex: 1; min-width: 45px; padding: 12px 6px; font-size: 13px;">${t.calDays['Чт']}</div>
-                        <div class="calendar-day" data-raw-day="Пт" onclick="handleCalendarDayClick(this)" style="cursor:pointer; user-select:none; flex: 1; min-width: 45px; padding: 12px 6px; font-size: 13px;">${t.calDays['Пт']}</div>
-                        <div class="calendar-day" data-raw-day="Сб" onclick="handleCalendarDayClick(this)" style="cursor:pointer; user-select:none; flex: 1; min-width: 45px; padding: 12px 6px; font-size: 13px;">${t.calDays['Сб']}</div>
-                        <div class="calendar-day" data-raw-day="Вс" onclick="handleCalendarDayClick(this)" style="cursor:pointer; user-select:none; flex: 1; min-width: 45px; padding: 12px 6px; font-size: 13px;">${t.calDays['Вс']}</div>
-                    </div>
-
-                    <div style="font-size:13px; color:var(--text-muted); margin-bottom:8px; font-weight:600;">${t.setTimeTitle}</div>
-                    <div id="dailyTimeConfigsContainer" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px;"></div>
                 </div>
 
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px;">
@@ -5862,7 +6046,6 @@ function renderDashboardContent(section) {
             </div>
         `;
         setTimeout(() => {
-            updateDailyConfigsUI();
             refreshTelegramConnectionState();
             loadSecurityOverview();
         }, 50);
@@ -5891,110 +6074,153 @@ function renderDashboardContent(section) {
             loadOfficialOpportunities();
             loadAirdropEligibility();
         }, 50);
-    } else if (section === 'Farming') {
+        } else if (section === 'Farming') {
         const storedActivityPane = localStorage.getItem('ax_activity_pane');
-        const activityPane = ['swap', 'plan', 'defi', 'quests', 'journal'].includes(storedActivityPane) ? storedActivityPane : 'swap';
-        if (storedActivityPane === 'transfer') localStorage.setItem('ax_activity_pane', 'swap');
-        const plannerNetworkOptions = NETWORKS_CONFIG.map(net => `<option value="${net.key}">${net.name} (${net.symbol})</option>`).join('');
-        const bridgeDestinationOptions = NETWORKS_CONFIG
-            .filter(net => ['Ethereum', 'Arbitrum', 'Optimism', 'Polygon', 'Linea', 'BNB Chain'].includes(net.key))
-            .map(net => `<option value="${net.key}">${net.name}</option>`).join('');
-        const sourceNetworkOptions = NETWORKS_CONFIG
-            .filter(net => ['Ethereum', 'Base', 'Arbitrum', 'Optimism', 'Polygon', 'Linea', 'BNB Chain'].includes(net.key))
-            .map(net => `<option value="${net.key}">${net.name}</option>`).join('');
-        const reminderDayOptions = [
-            ['Mon', t.planReminderMonday], ['Tue', t.planReminderTuesday], ['Wed', t.planReminderWednesday],
-            ['Thu', t.planReminderThursday], ['Fri', t.planReminderFriday], ['Sat', t.planReminderSaturday], ['Sun', t.planReminderSunday],
-        ].map(([value, label]) => `<option value="${value}">${label}</option>`).join('');
+        const activityPane = ['dex', 'bridges', 'lending', 'journal'].includes(storedActivityPane) ? storedActivityPane : 'dex';
+
         const activityTabs = [
-            ['swap', t.activityTabSwap], ['plan', t.activityTabPlan], ['defi', t.activityTabDefi], ['quests', t.activityTabQuests], ['journal', t.activityTabJournal],
+            ['dex', t.activityTabDex || 'DEX'],
+            ['bridges', t.activityTabBridges || 'Bridges'],
+            ['lending', t.activityTabLending || 'Lending'],
+            ['journal', t.activityTabJournal || 'Journal'],
         ].map(([key, label]) => `<button type="button" onclick="switchActivityPane('${key}')" style="background:${activityPane === key ? 'rgba(124,58,237,.22)' : 'var(--bg-main)'}; color:${activityPane === key ? '#e9d5ff' : 'var(--text-muted)'}; border:1px solid ${activityPane === key ? '#7c3aed' : 'var(--border-color)'}; padding:9px 11px; border-radius:9px; cursor:pointer; font-size:12px; white-space:nowrap;">${label}</button>`).join('');
-        const swapPane = `<div id="operationSwapPanel" style="border-top:1px solid var(--border-color); margin-top:18px; padding-top:18px;"><h3 style="color:#fff; margin-top:0; font-size:16px;">${t.baseSwapTitle}</h3><p style="color:var(--text-muted); font-size:13px; line-height:1.5;">${t.baseSwapDesc}</p>${renderInterfaceHint('base-swap-safety', t.baseSwapSafety, 'info', '', '🛡️')}<div style="color:var(--text-muted); font-size:12px; margin-top:10px;">${t.baseSwapSlippage}</div><button type="button" id="baseSwapQuoteButton" onclick="requestBaseSwapQuote()" class="btn-purple-lg" style="font-size:13px; padding:12px 18px; width:auto; margin-top:12px;">${t.baseSwapGetQuote}</button><div id="baseSwapResult" style="font-size:12px; line-height:1.5; margin-top:12px;"></div><div style="margin-top:18px; color:#fff; font-weight:700; font-size:13px;">${t.baseSwapHistoryTitle}</div><div id="baseSwapHistory" style="margin-top:7px;"></div></div>`;
-        const planPane = `
-            <div class="dashboard-card">
-                <h3 style="color:#fff; margin-top:0; font-size:16px;">${t.farmTitle}</h3>
-                <p style="color:var(--text-muted); font-size:13px; line-height:1.5; margin-bottom:12px;">${t.farmDesc}</p>
-                ${renderInterfaceHint('operation-plan-signing', t.planSigningNote, 'info', '', '✍')}
-                <label style="color:var(--text-muted); font-size:12px; display:block; margin-bottom:6px;">${t.netSelect}</label>
-                <select class="auth-input" id="planNetwork" style="margin-bottom:12px; font-size:13px; padding:10px 12px;">${plannerNetworkOptions}</select>
-                <div style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px;">
-                    <label style="color:var(--text-muted); font-size:12px;">${t.planOps}<input id="planOperations" type="number" min="1" max="1000" value="1" oninput="updateTransactionPlanEstimate()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"></label>
-                    <label style="color:var(--text-muted); font-size:12px;">${t.planMaxCost}<input id="planMaxCost" type="number" min="0" step="0.01" value="1" oninput="updateTransactionPlanEstimate()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"></label>
-                    <label style="color:var(--text-muted); font-size:12px;">${t.planReserve}<input id="planReserve" type="number" min="0" step="0.01" value="0" oninput="updateTransactionPlanEstimate()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"></label>
-                    <label style="color:var(--text-muted); font-size:12px;">${t.planDailyCap}<input id="planDailyCap" type="number" min="0" step="0.01" value="10" oninput="updateTransactionPlanEstimate()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"></label>
-                    <label style="color:var(--text-muted); font-size:12px; grid-column:1 / -1;">${t.planMonthlyCap}<input id="planMonthlyCap" type="number" min="0" step="0.01" value="50" oninput="updateTransactionPlanEstimate()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"></label>
-                </div>
-                <div style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:14px;">
-                    <div style="background:var(--bg-main); border:1px solid var(--border-color); border-radius:10px; padding:12px;"><div style="font-size:11px; color:var(--text-muted);">${t.planEstimated}</div><div id="planEstimateValue" style="font-size:18px; color:#fff; font-weight:700; margin-top:4px;">$0.00</div></div>
-                    <div style="background:var(--bg-main); border:1px solid var(--border-color); border-radius:10px; padding:12px;"><div style="font-size:11px; color:var(--text-muted);">${t.planRiskCap}</div><div id="planRiskCapValue" style="font-size:18px; color:#fff; font-weight:700; margin-top:4px;">$0.00</div></div>
-                </div>
-                <div id="planBudgetWarning" style="display:none; color:#fca5a5; font-size:12px; margin-top:10px;"></div>
-                <button type="button" onclick="saveTransactionPlan()" class="btn-purple-lg" style="font-size:13px; padding:12px 20px; width:auto; margin-top:14px;">${t.planSave}</button>
-            </div>
-            <div class="dashboard-card">
-                <h3 style="color:#fff; margin-top:0; font-size:16px;">${t.planReminderTitle}</h3>
-                <p style="color:var(--text-muted); font-size:13px; line-height:1.5; margin-bottom:14px;">${t.planReminderDesc}</p>
-                <label style="display:flex; align-items:center; gap:9px; color:#fff; font-size:13px; cursor:pointer;"><input id="actionReminderEnabled" type="checkbox" onchange="toggleActionReminderFields()"> ${t.planReminderEnabled}</label>
-                <div id="actionReminderFields" style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:14px;">
-                    <label style="color:var(--text-muted); font-size:12px;">${t.planReminderDay}<select id="actionReminderDay" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;">${reminderDayOptions}</select></label>
-                    <label style="color:var(--text-muted); font-size:12px;">${t.planReminderTime}<input id="actionReminderTime" type="text" value="18:00" placeholder="15:32" maxlength="5" inputmode="numeric" pattern="[0-2][0-9]:[0-5][0-9]" oninput="format24HourTimeInput(this)" onblur="normalize24HourTimeInput(this)" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"></label>
-                    <label style="grid-column:1 / -1; display:flex; align-items:center; gap:9px; color:var(--text-muted); font-size:12px; cursor:pointer;"><input id="actionReminderTelegram" type="checkbox" checked> ${t.planReminderTelegram}</label>
-                </div>
-                <div id="actionReminderStatus" style="font-size:12px; margin-top:12px;"></div>
-                <button type="button" onclick="saveActionReminder()" class="btn-purple-lg" style="font-size:13px; padding:12px 20px; width:auto; margin-top:14px;">${t.planReminderSave}</button>
-            </div>
-        `;
-        const bridgePane = `
-            <div id="operationBridgePanel" style="display:none; border-top:1px solid var(--border-color); margin-top:18px; padding-top:18px;">
-                <h3 style="color:#fff; margin:0; font-size:16px;">${t.bridgePlanSimpleTitle}</h3>
-                <p style="color:var(--text-muted); font-size:12px; line-height:1.5; margin:7px 0 0;">${t.bridgePlanSimpleDesc}</p>
-                <div id="bridgePlanResult" style="font-size:12px; line-height:1.5; margin-top:12px; color:var(--text-muted);">${t.bridgePlanStart}</div>
-                <div style="display:flex; flex-wrap:wrap; gap:9px; margin-top:14px;">
-                    <button type="button" onclick="checkBridgeReadiness()" class="btn-dark-sm" style="padding:10px 14px; border-color:#7c3aed;">${t.bridgePlanCheck}</button>
-                    <button type="button" id="bridgePlanSaveButton" onclick="saveBridgePlan()" class="btn-purple-lg" style="display:none; font-size:13px; padding:10px 14px; width:auto;">${t.bridgePlanSave}</button>
-                </div>
-                <details style="border-top:1px solid var(--border-color); margin-top:18px; padding-top:14px;"><summary style="color:var(--text-muted); cursor:pointer; font-size:12px;">${t.bridgePlanHistory}</summary><div id="bridgePlansHistory" style="margin-top:10px;">${t.loading}</div></details>
-            </div>
-        `;
-        const universalBridgePane = `
-            <div id="universalBridgePanel" style="display:none; border-top:1px solid var(--border-color); margin-top:18px; padding-top:18px;">
-                <h3 style="color:#fff; margin:0; font-size:16px;">${t.universalBridgeTitle}</h3>
-                <p style="color:var(--text-muted); font-size:12px; line-height:1.5; margin:7px 0 0;">${t.universalBridgeDesc}</p>
-                ${renderInterfaceHint('universal-bridge-safety', t.universalBridgeSafety, 'info', '', '🛡️')}
-                <div style="display:flex; flex-wrap:wrap; gap:9px; margin-top:14px;">
-                    <button type="button" id="universalBridgeQuoteButton" onclick="requestUniversalBridgeQuote()" class="btn-purple-lg" style="font-size:13px; padding:10px 14px; width:auto;">${t.universalBridgeGetQuote}</button>
-                    <button type="button" id="universalBridgeReviewButton" onclick="executeUniversalBridge()" class="btn-dark-sm" style="display:none; padding:10px 14px; border-color:#7c3aed;">${t.universalBridgeReview}</button>
-                </div>
-                <div id="universalBridgeResult" style="font-size:12px; line-height:1.55; margin-top:12px; color:var(--text-muted);">${t.universalBridgeRouteNotReady}</div>
-                <div style="border-top:1px solid var(--border-color); margin-top:16px; padding-top:14px;">
-                    <div style="color:#fff; font-size:13px; font-weight:700;">${t.universalBridgeHistoryTitle}</div>
-                    <div id="universalBridgeHistory" style="margin-top:7px;"><span style="color:var(--text-muted); font-size:12px;">${t.loading}</span></div>
-                </div>
-            </div>
-        `;
-        const tradePane = `
+
+        const dexPane = `
             <div class="dashboard-card" style="margin-bottom:16px;">
-                <h3 style="color:#fff; margin:0 0 5px; font-size:16px;">${t.operationBuilderTitle}</h3>
-                <p style="color:var(--text-muted); font-size:13px; line-height:1.5; margin:0 0 14px;">${t.operationBuilderDesc}</p>
+                <h3 style="color:#fff; margin:0 0 5px; font-size:16px;">${t.dexTitle || 'DEX Exchange'}</h3>
+                <p style="color:var(--text-muted); font-size:13px; line-height:1.5; margin:0 0 14px;">${t.dexDesc || 'Verified ETH → USDC route through Uniswap on Base.'}</p>
                 <div style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px;">
-                    <label style="color:var(--text-muted); font-size:12px;">${t.operationSourceNetwork}<select id="operationSourceNetwork" class="auth-input" onchange="handleOperationSourceNetworkChange()" style="margin-top:5px; font-size:13px; padding:10px 12px;">${sourceNetworkOptions}</select></label>
-                    <label style="color:var(--text-muted); font-size:12px;">${t.operationSourceAsset}<input id="operationSourceAssetSearch" class="auth-input" placeholder="${t.universalBridgeTokenSearch}" oninput="filterUniversalBridgeTokenSelect('operationSourceAsset')" style="margin-top:5px; font-size:12px; padding:8px 10px;"><select id="operationSourceAsset" class="auth-input" onchange="handleOperationSourceTokenChange()" disabled style="margin-top:5px; font-size:13px; padding:10px 12px;"><option value="">${t.universalBridgeTokensLoading}</option></select></label>
-                    <label style="color:var(--text-muted); font-size:12px;">${t.operationDestinationNetwork}<select id="operationDestinationNetwork" class="auth-input" onchange="handleOperationDestinationNetworkChange()" style="margin-top:5px; font-size:13px; padding:10px 12px;"><option value="Base">Base</option>${bridgeDestinationOptions}</select></label>
-                    <label style="color:var(--text-muted); font-size:12px;">${t.operationReceiveAsset}<input id="operationReceiveAssetSearch" class="auth-input" placeholder="${t.universalBridgeTokenSearch}" oninput="filterUniversalBridgeTokenSelect('operationReceiveAsset')" style="margin-top:5px; font-size:12px; padding:8px 10px;"><select id="operationReceiveAsset" class="auth-input" onchange="handleOperationDestinationTokenChange()" disabled style="margin-top:5px; font-size:13px; padding:10px 12px;"><option value="">${t.universalBridgeTokensLoading}</option></select></label>
-                    <label style="color:var(--text-muted); font-size:12px; grid-column:1 / -1;">${t.operationAmount}<input id="operationAmount" inputmode="decimal" placeholder="0.01" oninput="validateOperationAmount()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"><div id="operationAmountUsd" style="color:#c4b5fd; font-size:14px; font-weight:700; margin-top:6px;"></div></label>
+                    <label style="color:var(--text-muted); font-size:12px;">${t.labelChain || 'Sender Chain'}
+                        <select id="operationSourceNetwork" class="auth-input" disabled style="margin-top:5px; font-size:13px; padding:10px 12px;">
+                            <option value="Base">Base</option>
+                        </select>
+                    </label>
+                    <label style="color:var(--text-muted); font-size:12px;">${t.labelProvider || 'Provider'}
+                        <select class="auth-input" disabled style="margin-top:5px; font-size:13px; padding:10px 12px;">
+                            <option value="uniswap">Uniswap</option>
+                        </select>
+                    </label>
+                    <label style="color:var(--text-muted); font-size:12px;">${t.labelTokenIn || 'From Token'}
+                        <select id="operationSourceAsset" class="auth-input" disabled style="margin-top:5px; font-size:13px; padding:10px 12px;">
+                            <option value="${UNIVERSAL_BRIDGE_NATIVE_TOKEN}">ETH</option>
+                        </select>
+                    </label>
+                    <label style="color:var(--text-muted); font-size:12px;">${t.labelTokenOut || 'To Token'}
+                        <select class="auth-input" disabled style="margin-top:5px; font-size:13px; padding:10px 12px;">
+                            <option value="USDC">USDC</option>
+                        </select>
+                    </label>
+                    <label style="color:var(--text-muted); font-size:12px; grid-column:1 / -1;">${t.labelAmount || 'Amount'}
+                        <input id="operationAmount" inputmode="decimal" placeholder="0.01" oninput="validateOperationAmount()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;">
+                    </label>
                 </div>
-                <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:7px;">
-                    <div id="operationAmountAvailability" style="font-size:12px; color:var(--text-muted);">${t.operationAmountBalanceLoading}</div>
-                    <button type="button" onclick="useOperationMaxAmount()" class="btn-dark-sm" style="padding:6px 10px; font-size:11px; white-space:nowrap;">${t.operationAmountMax}</button>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; font-size:12px;">
+                    <span id="operationAmountAvailability" style="color:var(--text-muted);">${t.loading}</span>
+                    <button type="button" class="btn-dark-sm" onclick="useOperationMaxAmount()" style="padding:4px 8px; font-size:11px;">${t.maxShort || 'MAX'}</button>
                 </div>
-                <div id="operationWalletStatus" style="display:none;"></div>
-                <div id="operationRouteSummary" style="display:none;"></div>
-                ${renderInterfaceHint('universal-bridge-catalog', t.universalBridgeTokensLoading, 'success', 'universalBridgeCatalogStatus', 'ⓘ')}
-                ${universalBridgePane}${swapPane}${bridgePane}
+                <div id="operationWalletStatus" style="margin-top:8px; color:var(--text-muted); font-size:12px;">${t.loading}</div>
+                <div style="margin-top:10px;">
+                    <label style="color:var(--text-muted); font-size:12px;">${t.labelSlippage || 'Slippage'}:
+                        <select id="dexSlippage" class="auth-input" style="margin-top:5px; font-size:13px; padding:6px 12px;">
+                            <option value="0.5">0.5%</option>
+                            <option value="1.0">1.0%</option>
+                        </select>
+                    </label>
+                </div>
+                <button type="button" id="baseSwapQuoteButton" onclick="requestBaseSwapQuote()" class="btn-purple-lg" style="margin-top:14px; width:100%; font-size:13px; padding:12px;">${t.dexGetQuote || 'Get Quote'}</button>
+                <div id="baseSwapResult" style="margin-top:12px; padding:12px; background:var(--bg-main); border:1px solid var(--border-color); border-radius:10px; font-size:12px;"></div>
             </div>
         `;
-        const defiPane = `<div class="dashboard-card" style="margin-bottom:16px;"><h3 style="color:#fff; margin:0 0 5px; font-size:16px;">${t.defiSupplyTitle}</h3><p style="color:var(--text-muted); font-size:13px; line-height:1.55; margin:0 0 12px;">${t.defiSupplyDesc}</p>${renderInterfaceHint('defi-supply-safety', t.defiSupplySafety, 'warning', '', '🛡️')}<label style="display:block; color:var(--text-muted); font-size:12px; margin-top:13px;">${t.defiSupplyAmount}<input id="aaveSupplyAmount" inputmode="decimal" placeholder="10" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"></label><button type="button" id="aaveSupplyQuoteButton" onclick="requestAaveUsdcSupplyQuote()" class="btn-purple-lg" style="font-size:13px; padding:10px 14px; width:auto; margin-top:12px;">${t.defiSupplyCheck}</button><div id="aaveSupplyResult" style="font-size:12px; line-height:1.5; margin-top:11px;"></div></div><div class="dashboard-card"><div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px;"><div><h3 style="color:#fff; margin:0 0 5px; font-size:16px;">${t.defiOverviewTitle}</h3><p style="color:var(--text-muted); font-size:13px; line-height:1.55; margin:0;">${t.defiOverviewDesc}</p></div><button type="button" id="defiRefreshButton" onclick="loadDefiOverview(true)" class="btn-dark-sm" style="padding:7px 10px; font-size:12px; white-space:nowrap;">${t.defiRefresh}</button></div>${renderInterfaceHint('defi-read-only', t.defiReadOnlyNote, 'info', '', '🛡️')}<div id="defiOverviewPanel" style="margin-top:12px;"><span style="color:var(--text-muted); font-size:13px;">${t.loading}</span></div><div style="border-top:1px solid var(--border-color); margin-top:16px; padding-top:14px;"><div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px;"><div><div style="color:#fff; font-size:13px; font-weight:700;">${t.defiHistoryTitle}</div><div style="color:var(--text-muted); font-size:12px; line-height:1.45; margin-top:4px;">${t.defiHistoryDesc}</div></div><button type="button" onclick="loadAaveDefiHistory()" class="btn-dark-sm" style="padding:7px 10px; font-size:12px; white-space:nowrap;">${t.defiHistoryRefresh}</button></div><div id="defiHistoryPanel" style="margin-top:10px;"><span style="color:var(--text-muted); font-size:12px;">${t.loading}</span></div></div></div>`;
-        const questsPane = `<div class="dashboard-card"><h3 style="color:#fff; margin-top:0; font-size:16px;">${t.activityQuestsTitle}</h3><p style="color:var(--text-muted); font-size:13px; line-height:1.55;">${t.activityQuestsDesc}</p><button type="button" onclick="switchMenu(null, 'Looter')" class="btn-dark-sm" style="margin-top:8px; padding:10px 14px; border-color:#7c3aed;">${t.activityQuestsOpen}</button></div>`;
+
+        const bridgesPane = `
+            <div class="dashboard-card" style="margin-bottom:16px;">
+                <h3 style="color:#fff; margin:0 0 5px; font-size:16px;">${t.bridgesTitle || 'Bridges Routing'}</h3>
+                <p style="color:var(--text-muted); font-size:13px; line-height:1.5; margin:0 0 14px;">${t.bridgesDesc || 'Live cross-network routes supplied and validated through LI.FI.'}</p>
+                <div style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px;">
+                    <label style="color:var(--text-muted); font-size:12px;">${t.labelFromNetwork || 'From Network'}
+                        <select id="operationSourceNetwork" onchange="handleOperationSourceNetworkChange()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;">
+                            <option value="Base">Base</option>
+                            <option value="Arbitrum">Arbitrum</option>
+                            <option value="Ethereum">Ethereum</option>
+                            <option value="Optimism">Optimism</option>
+                            <option value="Polygon">Polygon</option>
+                            <option value="Linea">Linea</option>
+                            <option value="BNB Chain">BNB Chain</option>
+                        </select>
+                    </label>
+                    <label style="color:var(--text-muted); font-size:12px;">${t.labelToNetwork || 'To Network'}
+                        <select id="operationDestinationNetwork" onchange="handleOperationDestinationNetworkChange()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;">
+                            <option value="Arbitrum">Arbitrum</option>
+                            <option value="Base">Base</option>
+                            <option value="Ethereum">Ethereum</option>
+                            <option value="Optimism">Optimism</option>
+                            <option value="Polygon">Polygon</option>
+                            <option value="Linea">Linea</option>
+                            <option value="BNB Chain">BNB Chain</option>
+                        </select>
+                    </label>
+                    <label style="color:var(--text-muted); font-size:12px;">${t.labelTokenIn || 'From Token'}
+                        <select id="operationSourceAsset" onchange="handleOperationSourceTokenChange()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"><option value="">${t.loading}</option></select>
+                    </label>
+                    <label style="color:var(--text-muted); font-size:12px;">${t.labelTokenOut || 'To Token'}
+                        <select id="operationReceiveAsset" onchange="handleOperationDestinationTokenChange()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"><option value="">${t.loading}</option></select>
+                    </label>
+                    <label style="color:var(--text-muted); font-size:12px; grid-column:1 / -1;">${t.labelAmount || 'Amount'}
+                        <input id="operationAmount" inputmode="decimal" placeholder="0.01" oninput="validateOperationAmount()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;">
+                    </label>
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; font-size:12px;">
+                    <span id="operationAmountAvailability" style="color:var(--text-muted);">${t.loading}</span>
+                    <button type="button" class="btn-dark-sm" onclick="useOperationMaxAmount()" style="padding:4px 8px; font-size:11px;">${t.maxShort || 'MAX'}</button>
+                </div>
+                <div id="operationWalletStatus" style="margin-top:8px; color:var(--text-muted); font-size:12px;">${t.loading}</div>
+                <div id="universalBridgeCatalogStatus" style="margin-top:6px; color:var(--text-muted); font-size:12px;"></div>
+                <button type="button" id="universalBridgeQuoteButton" onclick="requestUniversalBridgeQuote()" class="btn-purple-lg" style="margin-top:14px; width:100%; font-size:13px; padding:12px;">${t.bridgeGetQuote || 'Get Quote'}</button>
+                <button type="button" id="universalBridgeReviewButton" onclick="executeUniversalBridge()" class="btn-dark-sm" style="display:none; margin-top:9px; width:100%; padding:11px; border-color:#7c3aed;">${t.universalBridgeReview}</button>
+                <div id="universalBridgeResult" style="margin-top:12px; padding:12px; background:var(--bg-main); border:1px solid var(--border-color); border-radius:10px; font-size:12px;"></div>
+            </div>
+        `;
+
+        const lendingPane = `
+            <div class="dashboard-card" style="margin-bottom:16px;">
+                <h3 style="color:#fff; margin:0 0 5px; font-size:16px;">${t.lendingTitle || 'Lending Markets'}</h3>
+                <p style="color:var(--text-muted); font-size:13px; line-height:1.5; margin:0 0 14px;">${t.lendingDesc || 'DeFi Lending credit protocols integrations: Aave V3.'}</p>
+                <div style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px;">
+                    <label style="color:var(--text-muted); font-size:12px;">${t.labelChain || 'Network'}
+                        <select id="lendingNetwork" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;">
+                            <option value="Base">Base</option>
+                        </select>
+                    </label>
+                    <label style="color:var(--text-muted); font-size:12px;">${t.labelProtocol || 'Protocol'}
+                        <select id="lendingProtocol" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;">
+                            <option value="aave_v3">Aave V3</option>
+                        </select>
+                    </label>
+                    <label style="color:var(--text-muted); font-size:12px;">${t.labelAsset || 'Asset'}
+                        <select id="lendingAsset" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;">
+                            <option value="USDC">USDC</option>
+                        </select>
+                    </label>
+                    <label style="color:var(--text-muted); font-size:12px;">${t.labelAction || 'Action'}
+                        <select id="lendingActionType" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;">
+                            <option value="supply">${t.actionSupply || 'Supply'}</option>
+                            <option value="withdraw">${t.actionWithdraw || 'Withdraw'}</option>
+                        </select>
+                    </label>
+                    <label style="color:var(--text-muted); font-size:12px; grid-column:1 / -1;">${t.labelAmount || 'Amount'}
+                        <input id="lendingAmount" inputmode="decimal" placeholder="10.0" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;">
+                    </label>
+                </div>
+                <div style="margin-top:10px; font-size:12px; color:var(--text-muted);">${t.lendingLiveRateNote || 'The live variable rate and available balance are checked before wallet confirmation.'}</div>
+                <button type="button" id="lendingBuildButton" onclick="buildVerifiedLendingOperation()" class="btn-purple-lg" style="margin-top:14px; width:100%; font-size:13px; padding:12px;">${t.lendingSubmit || 'Supply / Withdraw'}</button>
+                <div id="lendingResultContainer" style="margin-top:12px; padding:12px; background:var(--bg-main); border:1px solid var(--border-color); border-radius:10px; font-size:12px;"></div>
+            </div>
+            <div class="dashboard-card">
+                <h3 style="color:#fff; margin:0 0 10px; font-size:15px;">${t.lendingPositionsTitle || 'Active Positions'}</h3>
+                <div id="lendingPositionsList" style="font-size:12px; color:var(--text-muted);">${t.loading}</div>
+            </div>
+        `;
+
         const journalFilters = [
             ['all', t.operationsJournalAll], ['pending', t.operationsJournalPending], ['completed', t.operationsJournalCompleted],
         ].map(([key, label]) => `<button type="button" onclick="setOperationsJournalFilter('${key}')" style="background:${operationsJournalFilter === key ? 'rgba(124,58,237,.22)' : 'var(--bg-main)'}; color:${operationsJournalFilter === key ? '#e9d5ff' : 'var(--text-muted)'}; border:1px solid ${operationsJournalFilter === key ? '#7c3aed' : 'var(--border-color)'}; padding:7px 10px; border-radius:8px; cursor:pointer; font-size:12px;">${label}</button>`).join('');
@@ -6002,52 +6228,22 @@ function renderDashboardContent(section) {
             ? `<button type="button" id="operationsJournalCheckButton" onclick="checkPendingOperations(this)" class="btn-dark-sm" style="padding:7px 10px; font-size:12px; white-space:nowrap; border-color:#7c3aed;">${t.operationsJournalCheckPending}</button>`
             : `<button type="button" onclick="loadOperationsJournal()" class="btn-dark-sm" style="padding:7px 10px; font-size:12px; white-space:nowrap;">${t.operationsJournalRefresh}</button>`;
         const journalPane = `<div class="dashboard-card"><div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px;"><div><h3 style="color:#fff; margin:0 0 5px; font-size:16px;">${t.operationsJournalTitle}</h3><p style="color:var(--text-muted); font-size:13px; line-height:1.5; margin:0;">${t.operationsJournalDesc}</p></div>${journalAction}</div><div style="display:flex; flex-wrap:wrap; gap:7px; margin-top:14px;">${journalFilters}</div><div id="operationsJournalList" style="margin-top:12px;"><span style="color:var(--text-muted); font-size:13px;">${t.loading}</span></div></div>`;
-        const activePane = { swap: tradePane, plan: planPane, defi: defiPane, quests: questsPane, journal: journalPane }[activityPane];
-        centerHtml = `<div class="dashboard-card" style="margin-bottom:16px;"><h3 style="color:#fff; margin:0 0 5px; font-size:17px;">${t.activityTitle}</h3><p style="color:var(--text-muted); font-size:13px; line-height:1.5; margin:0 0 14px;">${t.activityDesc}</p><div style="display:flex; flex-wrap:wrap; gap:8px;">${activityTabs}</div></div>${activePane}`;
-        if (activityPane === 'plan') setTimeout(() => { loadTransactionPlan(); loadActionReminder(); }, 50);
-        if (activityPane === 'swap') setTimeout(() => { loadOperationBuilderWalletStatus(); updateOperationBuilder(); loadUniversalBridgeHistory(); }, 50);
-        if (activityPane === 'journal') setTimeout(loadOperationsJournal, 50);
-        if (activityPane === 'defi') setTimeout(() => { loadDefiOverview(); loadAaveDefiHistory(); }, 50);
-    } else if (section === 'Farming' && false) {
-        const plannerNetworkOptions = NETWORKS_CONFIG.map(net => `<option value="${net.key}">${net.name} (${net.symbol})</option>`).join('');
+
+        const activePane = { dex: dexPane, bridges: bridgesPane, lending: lendingPane, journal: journalPane }[activityPane];
+        
         centerHtml = `
-            <div class="dashboard-card">
-                <h3 style="color:#fff; margin-top:0; font-size:16px;">${t.baseSwapTitle}</h3>
-                <p style="color:var(--text-muted); font-size:13px; line-height:1.5;">${t.baseSwapDesc}</p>
-                <div style="background:rgba(59,130,246,.08); border:1px solid rgba(59,130,246,.25); color:#bfdbfe; padding:10px 12px; border-radius:10px; font-size:12px; line-height:1.5; margin:12px 0;">${t.baseSwapSafety}</div>
-                <div style="display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); gap:10px; align-items:end;">
-                    <label style="color:var(--text-muted); font-size:12px;">${t.baseSwapYouPay}<input id="baseSwapAmount" inputmode="decimal" class="auth-input" placeholder="0.01" style="font-size:13px; padding:10px 12px; margin-top:5px;"></label>
-                    <div style="color:#c4b5fd; padding:0 0 11px; font-size:18px;">→</div>
-                    <div style="background:var(--bg-main); border:1px solid var(--border-color); border-radius:10px; padding:10px 12px;"><div style="color:var(--text-muted); font-size:11px;">${t.baseSwapYouReceive}</div><div style="color:#fff; margin-top:4px; font-weight:700;">USDC</div></div>
-                </div>
-                <div style="color:var(--text-muted); font-size:12px; margin-top:10px;">${t.baseSwapSlippage}</div>
-                <button type="button" id="baseSwapQuoteButton" onclick="requestBaseSwapQuote()" class="btn-purple-lg" style="font-size:13px; padding:12px 18px; width:auto; margin-top:12px;">${t.baseSwapGetQuote}</button>
-                <div id="baseSwapResult" style="font-size:12px; line-height:1.5; margin-top:12px;"></div>
+            <div class="dashboard-card" style="margin-bottom:16px;">
+                <h3 style="color:#fff; margin:0 0 5px; font-size:17px;">${t.activityTitle}</h3>
+                <p style="color:var(--text-muted); font-size:13px; line-height:1.5; margin:0 0 14px;">${t.activityDesc}</p>
+                <div style="display:flex; flex-wrap:wrap; gap:8px;">${activityTabs}</div>
             </div>
-            <div class="dashboard-card">
-                <h3 style="color: #fff; margin-top: 0; font-size: 16px;">${t.farmTitle}</h3>
-                <p style="color: var(--text-muted); font-size: 13px; line-height: 1.5; margin-bottom: 12px;">${t.farmDesc}</p>
-                <div style="background:rgba(59,130,246,.08); border:1px solid rgba(59,130,246,.25); color:#bfdbfe; padding:10px 12px; border-radius:10px; font-size:12px; line-height:1.5; margin-bottom:14px;">${t.planSigningNote}</div>
-                <label style="color: var(--text-muted); font-size: 12px; display: block; margin-bottom: 6px;">${t.netSelect}</label>
-                <select class="auth-input" id="planNetwork" style="margin-bottom: 12px; font-size: 13px; padding: 10px 12px;">${plannerNetworkOptions}</select>
-                <div style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px;">
-                    <label style="color:var(--text-muted); font-size:12px;">${t.planOps}<input id="planOperations" type="number" min="1" max="1000" value="1" oninput="updateTransactionPlanEstimate()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"></label>
-                    <label style="color:var(--text-muted); font-size:12px;">${t.planMaxCost}<input id="planMaxCost" type="number" min="0" step="0.01" value="1" oninput="updateTransactionPlanEstimate()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"></label>
-                    <label style="color:var(--text-muted); font-size:12px;">${t.planReserve}<input id="planReserve" type="number" min="0" step="0.01" value="0" oninput="updateTransactionPlanEstimate()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"></label>
-                    <label style="color:var(--text-muted); font-size:12px;">${t.planDailyCap}<input id="planDailyCap" type="number" min="0" step="0.01" value="10" oninput="updateTransactionPlanEstimate()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"></label>
-                    <label style="color:var(--text-muted); font-size:12px; grid-column:1 / -1;">${t.planMonthlyCap}<input id="planMonthlyCap" type="number" min="0" step="0.01" value="50" oninput="updateTransactionPlanEstimate()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"></label>
-                </div>
-                <div style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:14px;">
-                    <div style="background:var(--bg-main); border:1px solid var(--border-color); border-radius:10px; padding:12px;"><div style="font-size:11px; color:var(--text-muted);">${t.planEstimated}</div><div id="planEstimateValue" style="font-size:18px; color:#fff; font-weight:700; margin-top:4px;">$0.00</div></div>
-                    <div style="background:var(--bg-main); border:1px solid var(--border-color); border-radius:10px; padding:12px;"><div style="font-size:11px; color:var(--text-muted);">${t.planRiskCap}</div><div id="planRiskCapValue" style="font-size:18px; color:#fff; font-weight:700; margin-top:4px;">$0.00</div></div>
-                </div>
-                <div id="planBudgetWarning" style="display:none; color:#fca5a5; font-size:12px; margin-top:10px;"></div>
-                <button type="button" onclick="saveTransactionPlan()" class="btn-purple-lg" style="font-size:13px; padding:12px 20px; width:auto; margin-top:14px;">${t.planSave}</button>
-            </div>
+            ${activePane}
         `;
-        setTimeout(() => {
-            loadTransactionPlan();
-        }, 50);
+        
+        if (activityPane === 'dex') setTimeout(loadOperationBuilderWalletStatus, 50);
+        if (activityPane === 'bridges') setTimeout(loadOperationBuilderWalletStatus, 50);
+        if (activityPane === 'lending') setTimeout(loadLendingPositions, 50);
+        if (activityPane === 'journal') setTimeout(loadOperationsJournal, 50);
     } else if (section === 'Wallets') {
         const isTipHidden = localStorage.getItem('hideProxyTip') === 'true' || !areInterfaceHintsEnabled();
         const proxyTipHtml = isTipHidden ? '' : `

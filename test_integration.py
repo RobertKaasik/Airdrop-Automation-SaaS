@@ -9,6 +9,7 @@ Run:
     python test_integration.py
 """
 
+import os
 import asyncio
 import shutil
 import uuid
@@ -24,6 +25,11 @@ import core.browser_profile_manager as profile_module
 from core.browser_profile_manager import BrowserProfileManager, ProfileBusyError
 from core.database import SessionLocal, engine, init_db
 from core.models import FinancialTransferIntent, ProfileRun, UserProfile
+from core.protocols import BRIDGES_ADAPTERS, DEX_ADAPTERS, LENDING_ADAPTERS
+from core.protocols.base import ProtocolAdapterUnavailable
+from core.protocols.bridges.lifi import LifiAdapter
+from core.protocols.dex.uniswap import UniswapAdapter
+from core.protocols.lending.aave_v3 import AaveV3Adapter
 
 
 class IntegrationFailure(AssertionError):
@@ -102,6 +108,7 @@ def create_test_data(prefix: str) -> tuple[int, int, int]:
             user_id=owner.id,
             profile_name=f"{prefix}_profile",
             evm_wallet_address="0x0000000000000000000000000000000000000001",
+            proxy_configuration="socks5://admin:pass@127.0.0.1:1080",
             environment_metadata={
                 "viewport": {"width": 1280, "height": 720},
                 "locale": "ru-RU",
@@ -264,6 +271,126 @@ def cleanup(prefix: str) -> None:
         db.commit()
 
 
+def verify_action_center_mvp_requirements() -> None:
+    # 1. Verification of RU/EN/ZH translations and old tabs exclusion
+    for lang in ["en", "ru", "zh"]:
+        p = Path(__file__).resolve().parent / "locales" / f"{lang}.js"
+        with open(p, "r", encoding="utf-8") as f:
+            content = f.read()
+        assert "activityTabDex" in content, f"activityTabDex missing in {lang}"
+        assert "activityTabBridges" in content, f"activityTabBridges missing in {lang}"
+        assert "activityTabLending" in content, f"activityTabLending missing in {lang}"
+        assert "activityTabJournal" in content, f"activityTabJournal missing in {lang}"
+        
+    # 2. Check that the backend has no transaction signing methods
+    for parent, _, files in os.walk(Path(__file__).resolve().parent):
+        for file in files:
+            if file.endswith(".py") and not file.startswith("test_") and file not in ["collect_code.py"]:
+                with open(os.path.join(parent, file), "r", encoding="utf-8", errors="ignore") as f:
+                    code = f.read()
+                assert "sign_transaction" not in code, f"Unsafe signing method found in {file}"
+                assert "send_raw_transaction" not in code, f"Unsafe signing execution found in {file}"
+
+    # 3. Schedule type migration check
+    from server import migrate_schedules, WalletActionSchedule, Wallet
+    with SessionLocal() as db:
+        test_user = db.query(User).filter(User.username == "qa_user_test").first()
+        if not test_user:
+            test_user = User(username="qa_user_test", email="qa@test.com", password_hash="123")
+            db.add(test_user)
+            db.flush()
+        
+        wallet = Wallet(username="qa_user_test", wallet_address="0x1111111111111111111111111111111111111111")
+        db.add(wallet)
+        db.flush()
+
+        s1 = WalletActionSchedule(username="qa_user_test", wallet_id=wallet.id, action_type="swap", day_of_week="Mon", time_of_day="12:00", created_at=0, updated_at=0)
+        s2 = WalletActionSchedule(username="qa_user_test", wallet_id=wallet.id, action_type="defi", day_of_week="Mon", time_of_day="12:00", created_at=0, updated_at=0)
+        s3 = WalletActionSchedule(username="qa_user_test", wallet_id=wallet.id, action_type="bridge", day_of_week="Mon", time_of_day="12:00", created_at=0, updated_at=0)
+        s4 = WalletActionSchedule(username="qa_user_test", wallet_id=wallet.id, action_type="quests", day_of_week="Mon", time_of_day="12:00", created_at=0, updated_at=0)
+        
+        db.add_all([s1, s2, s3, s4])
+        db.commit()
+
+        # Run migration
+        migrate_schedules()
+
+        # Verify
+        db.refresh(s1)
+        db.refresh(s2)
+        db.refresh(s3)
+        db.refresh(s4)
+
+        assert s1.action_type == "dex", "Migration swap -> dex failed"
+        assert s2.action_type == "lending", "Migration defi -> lending failed"
+        assert s3.action_type == "bridge", "Bridge should stay bridge"
+        assert s4.enabled == False, "Unknown format should be disabled"
+
+        # Cleanup
+        db.query(WalletActionSchedule).filter(
+            WalletActionSchedule.id.in_([s1.id, s2.id, s3.id, s4.id])
+        ).delete(synchronize_session=False)
+        db.delete(wallet)
+        db.delete(test_user)
+        db.commit()
+
+    print("PASS: verify_action_center_mvp_requirements migration, security and localization checks passed.")
+
+
+def verify_protocol_routes_fail_closed() -> None:
+    """Prevent placeholder quotes or transactions from re-entering production paths."""
+    require(DEX_ADAPTERS == {}, "Legacy DEX adapters must not be registered.")
+    require(BRIDGES_ADAPTERS == {}, "Legacy bridge adapters must not be registered.")
+    require(LENDING_ADAPTERS == {}, "Legacy lending adapters must not be registered.")
+
+    checks = [
+        (UniswapAdapter(), "get_quote", {"amount": "1"}),
+        (LifiAdapter(), "build_transaction", {"amount": "1"}),
+        (AaveV3Adapter(), "get_market_data", {"asset": "USDC"}),
+    ]
+    for adapter, method_name, payload in checks:
+        try:
+            getattr(adapter, method_name)(payload)
+        except ProtocolAdapterUnavailable:
+            pass
+        else:
+            raise IntegrationFailure(
+                f"{adapter.provider_name}.{method_name} returned fabricated provider data."
+            )
+
+    root = Path(__file__).resolve().parent
+    server_source = (root / "server.py").read_text(encoding="utf-8")
+    app_source = (root / "app.js").read_text(encoding="utf-8")
+
+    for disabled_route in (
+        "This obsolete DEX endpoint is disabled",
+        "This obsolete bridge endpoint is disabled",
+        "This obsolete lending endpoint is disabled",
+        "Generic transaction submission is disabled",
+    ):
+        require(disabled_route in server_source, f"Missing fail-closed route: {disabled_route}")
+
+    for production_route in (
+        "/api/base-swap/quote",
+        "/api/universal-bridge/quote",
+        "/api/defi/aave-base/usdc-supply-quote",
+        "/api/defi/aave-base/usdc-withdraw-quote",
+    ):
+        require(production_route in app_source, f"Frontend is not wired to {production_route}")
+
+    require(
+        "sourceNetwork === destinationNetwork" in app_source,
+        "Bridge UI must reject equal source and destination networks.",
+    )
+    require(
+        "return requestBaseSwapQuote();" in app_source
+        and "return requestUniversalBridgeQuote();" in app_source
+        and "return buildVerifiedLendingOperation();" in app_source,
+        "Legacy UI handlers are not safely delegated.",
+    )
+    print("PASS: protocol adapters fail closed and the UI uses verified provider routes.")
+
+
 def main() -> None:
     prefix = f"__integration_{uuid.uuid4().hex[:12]}"
 
@@ -272,6 +399,8 @@ def main() -> None:
         owner_id, _another_user_id, profile_id = create_test_data(prefix)
         verify_transfer_intent(owner_id, profile_id)
         asyncio.run(verify_profile_lock(owner_id, profile_id))
+        verify_action_center_mvp_requirements()
+        verify_protocol_routes_fail_closed()
         print("PASS: database ownership, transfer intent, and profile lock checks passed.")
     finally:
         cleanup(prefix)

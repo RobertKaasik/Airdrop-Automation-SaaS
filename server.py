@@ -1,5 +1,6 @@
 import os
 import random
+import json
 import asyncio
 import smtplib
 import time
@@ -632,6 +633,13 @@ class WalletActionSchedule(Base):
     enabled = Column(Boolean, nullable=False, default=True)
     telegram_enabled = Column(Boolean, nullable=False, default=True)
     acknowledgement = Column(Boolean, nullable=False, default=False)
+    schedule_mode = Column(String, nullable=False, default="fixed")
+    weekly_min = Column(Integer, nullable=False, default=3)
+    weekly_max = Column(Integer, nullable=False, default=4)
+    window_start = Column(String, nullable=False, default="10:00")
+    window_end = Column(String, nullable=False, default="21:00")
+    generated_week = Column(String, nullable=True)
+    generated_slots = Column(String, nullable=True)
     last_sent_slot = Column(String, nullable=True)
     created_at = Column(Integer, nullable=False)
     updated_at = Column(Integer, nullable=False)
@@ -696,6 +704,20 @@ def ensure_schema_columns():
         if opportunity_columns and "claim_url" not in opportunity_columns:
             conn.execute(text("ALTER TABLE official_opportunity_sources ADD COLUMN claim_url VARCHAR"))
             conn.commit()
+        wallet_schedule_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(wallet_action_schedules)"))}
+        wallet_schedule_additions = {
+            "schedule_mode": "VARCHAR DEFAULT 'fixed'",
+            "weekly_min": "INTEGER DEFAULT 3",
+            "weekly_max": "INTEGER DEFAULT 4",
+            "window_start": "VARCHAR DEFAULT '10:00'",
+            "window_end": "VARCHAR DEFAULT '21:00'",
+            "generated_week": "VARCHAR",
+            "generated_slots": "VARCHAR",
+        }
+        for column_name, column_type in wallet_schedule_additions.items():
+            if wallet_schedule_columns and column_name not in wallet_schedule_columns:
+                conn.execute(text(f"ALTER TABLE wallet_action_schedules ADD COLUMN {column_name} {column_type}"))
+                conn.commit()
 
 ensure_schema_columns()
 
@@ -718,7 +740,29 @@ def ensure_default_opportunity_sources() -> None:
     finally:
         db.close()
 
+def migrate_schedules() -> None:
+    db = SessionLocal()
+    try:
+        schedules = db.query(WalletActionSchedule).all()
+        for s in schedules:
+            if s.action_type == "swap":
+                s.action_type = "dex"
+            elif s.action_type == "defi":
+                s.action_type = "lending"
+            elif s.action_type == "bridge":
+                pass
+            elif s.action_type not in ("dex", "lending", "bridge"):
+                logging.warning("Unknown action_type '%s' for schedule ID %s, disabling.", s.action_type, s.id)
+                s.enabled = False
+        db.commit()
+    except Exception as e:
+        logging.error("Error migrating action schedules: %s", e)
+        db.rollback()
+    finally:
+        db.close()
+
 ensure_default_opportunity_sources()
+migrate_schedules()
 
 app = FastAPI(title="AIRDROP-X Backend API")
 
@@ -1124,7 +1168,21 @@ async def run_scheduled_action_reminder_job():
             local_day = current_day_map.get(local_now.weekday())
             local_time = local_now.strftime("%H:%M")
             local_slot = f"{local_now.strftime('%Y-%m-%d %H:%M')}|{schedule.timezone}"
-            if schedule.day_of_week != local_day or schedule.time_of_day != local_time:
+            if schedule.schedule_mode == "flexible":
+                try:
+                    generated_slots = ensure_flexible_schedule_week(schedule, local_now)
+                except ValueError:
+                    logging.warning("Invalid flexible schedule id=%s", schedule.id)
+                    schedule.enabled = False
+                    schedule.updated_at = int(time.time())
+                    continue
+                current_date = local_now.date().isoformat()
+                if not any(
+                    item.get("date") == current_date and item.get("time") == local_time
+                    for item in generated_slots
+                ):
+                    continue
+            elif schedule.day_of_week != local_day or schedule.time_of_day != local_time:
                 continue
             if schedule.last_sent_slot == local_slot:
                 continue
@@ -1278,6 +1336,93 @@ async def run_defi_status_notification_job():
     finally:
         db.close()
 
+SCHEDULE_DAY_CODES = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+
+def parse_schedule_minutes(value: str) -> int:
+    if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", value or ""):
+        raise ValueError("Invalid schedule time")
+    hours, minutes = (int(part) for part in value.split(":"))
+    return hours * 60 + minutes
+
+def ensure_flexible_schedule_week(
+    schedule: WalletActionSchedule,
+    local_now: datetime.datetime,
+    force: bool = False,
+) -> list[dict]:
+    """Create a fresh reminder plan for the current ISO week.
+
+    Only reminder timestamps are generated. No transaction parameters,
+    signatures, approvals, or wallet credentials are created or stored.
+    """
+    iso = local_now.isocalendar()
+    current_week_key = f"{iso.year}-W{iso.week:02d}"
+    if not force and schedule.generated_slots:
+        try:
+            slots = json.loads(schedule.generated_slots)
+            # A rule created near the end of a week may already contain the
+            # first complete plan for the following week. Keep that plan until
+            # its week starts instead of replacing it on every scheduler tick.
+            if (
+                isinstance(slots, list)
+                and schedule.generated_week
+                and schedule.generated_week >= current_week_key
+            ):
+                return slots
+        except (TypeError, ValueError, json.JSONDecodeError):
+            pass
+
+    start_minutes = parse_schedule_minutes(schedule.window_start or "10:00")
+    end_minutes = parse_schedule_minutes(schedule.window_end or "21:00")
+    if start_minutes >= end_minutes:
+        raise ValueError("Invalid flexible schedule window")
+
+    week_start = local_now.date() - datetime.timedelta(days=iso.weekday - 1)
+    remaining_days = sum(
+        1
+        for day_index in range(7)
+        if datetime.datetime.combine(
+            week_start + datetime.timedelta(days=day_index),
+            datetime.time(hour=end_minutes // 60, minute=end_minutes % 60),
+            tzinfo=local_now.tzinfo,
+        ) > local_now
+    )
+    # A 3–4 day plan must not silently become a one-day plan on a weekend.
+    # In that situation schedule the first complete set for next week.
+    if remaining_days < schedule.weekly_min:
+        week_start += datetime.timedelta(days=7)
+
+    target_iso = week_start.isocalendar()
+    target_week_key = f"{target_iso.year}-W{target_iso.week:02d}"
+    rng = secrets.SystemRandom()
+    candidate_slots = []
+    for day_index, day_code in enumerate(SCHEDULE_DAY_CODES):
+        minute_of_day = rng.randint(start_minutes, end_minutes)
+        slot_date = week_start + datetime.timedelta(days=day_index)
+        slot_time = datetime.time(hour=minute_of_day // 60, minute=minute_of_day % 60)
+        slot_datetime = datetime.datetime.combine(slot_date, slot_time, tzinfo=local_now.tzinfo)
+        if slot_datetime <= local_now:
+            continue
+        candidate_slots.append({
+            "date": slot_date.isoformat(),
+            "day": day_code,
+            "time": slot_time.strftime("%H:%M"),
+        })
+
+    if candidate_slots:
+        requested_count = rng.randint(schedule.weekly_min, schedule.weekly_max)
+        selected_count = min(requested_count, len(candidate_slots))
+        slots = sorted(
+            rng.sample(candidate_slots, selected_count),
+            key=lambda item: (item["date"], item["time"]),
+        )
+    else:
+        slots = []
+
+    schedule.generated_week = target_week_key
+    schedule.generated_slots = json.dumps(slots, ensure_ascii=False, separators=(",", ":"))
+    schedule.updated_at = int(time.time())
+    return slots
+
 @app.on_event("startup")
 async def startup_event():
     scheduler.add_job(run_scheduled_action_reminder_job, 'interval', minutes=1)
@@ -1407,6 +1552,12 @@ class WalletActionScheduleRequest(BaseModel):
     enabled: bool = True
     telegram_enabled: bool = True
     acknowledgement: bool = False
+    schedule_mode: str = "fixed"
+    weekly_min: int = 3
+    weekly_max: int = 4
+    window_start: str = "10:00"
+    window_end: str = "21:00"
+    reroll: bool = False
 
 class BridgePlanRequest(BaseModel):
     wallet_address: str
@@ -4242,6 +4393,10 @@ async def get_action_reminder(db: Session = Depends(get_db), current_user: User 
     }
 
 def serialize_wallet_action_schedule(schedule: WalletActionSchedule) -> dict:
+    try:
+        generated_slots = json.loads(schedule.generated_slots or "[]")
+    except (TypeError, ValueError, json.JSONDecodeError):
+        generated_slots = []
     return {
         "id": schedule.id,
         "wallet_id": schedule.wallet_id,
@@ -4252,15 +4407,26 @@ def serialize_wallet_action_schedule(schedule: WalletActionSchedule) -> dict:
         "enabled": bool(schedule.enabled),
         "telegram_enabled": bool(schedule.telegram_enabled),
         "acknowledgement": bool(schedule.acknowledgement),
+        "schedule_mode": schedule.schedule_mode or "fixed",
+        "weekly_min": schedule.weekly_min or 3,
+        "weekly_max": schedule.weekly_max or 4,
+        "window_start": schedule.window_start or "10:00",
+        "window_end": schedule.window_end or "21:00",
+        "generated_week": schedule.generated_week,
+        "generated_slots": generated_slots if isinstance(generated_slots, list) else [],
         "last_sent_slot": schedule.last_sent_slot,
     }
 
 def validate_wallet_schedule_payload(payload: WalletActionScheduleRequest) -> None:
-    if payload.action_type not in {"swap", "bridge", "defi"}:
+    if payload.action_type not in {"dex", "bridge", "lending"}:
         raise HTTPException(status_code=422, detail="Unsupported scheduled action")
-    if payload.day_of_week not in {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"}:
+    if payload.schedule_mode not in {"fixed", "flexible"}:
+        raise HTTPException(status_code=422, detail="Unsupported schedule mode")
+    if payload.day_of_week not in set(SCHEDULE_DAY_CODES):
         raise HTTPException(status_code=422, detail="Unsupported schedule day")
-    if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", payload.time_of_day):
+    try:
+        parse_schedule_minutes(payload.time_of_day)
+    except ValueError:
         raise HTTPException(status_code=422, detail="Invalid schedule time")
     if not payload.timezone or len(payload.timezone) > 64:
         raise HTTPException(status_code=422, detail="Invalid schedule timezone")
@@ -4268,6 +4434,15 @@ def validate_wallet_schedule_payload(payload: WalletActionScheduleRequest) -> No
         ZoneInfo(payload.timezone)
     except (ZoneInfoNotFoundError, ValueError):
         raise HTTPException(status_code=422, detail="Invalid schedule timezone")
+    if not 1 <= payload.weekly_min <= payload.weekly_max <= 7:
+        raise HTTPException(status_code=422, detail="Invalid weekly schedule frequency")
+    try:
+        window_start = parse_schedule_minutes(payload.window_start)
+        window_end = parse_schedule_minutes(payload.window_end)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Invalid flexible schedule window")
+    if window_start >= window_end:
+        raise HTTPException(status_code=422, detail="Invalid flexible schedule window")
     if payload.enabled and not payload.acknowledgement:
         raise HTTPException(status_code=422, detail="Schedule acknowledgement is required")
 
@@ -4291,6 +4466,20 @@ async def get_wallet_action_schedules(
         WalletActionSchedule.wallet_id == wallet.id,
         WalletActionSchedule.username == current_user.username,
     ).order_by(WalletActionSchedule.created_at.asc()).all()
+    changed = False
+    for schedule in schedules:
+        if schedule.schedule_mode != "flexible":
+            continue
+        try:
+            local_now = datetime.datetime.now(ZoneInfo(schedule.timezone))
+            previous_week = schedule.generated_week
+            previous_slots = schedule.generated_slots
+            ensure_flexible_schedule_week(schedule, local_now)
+            changed = changed or previous_week != schedule.generated_week or previous_slots != schedule.generated_slots
+        except (ZoneInfoNotFoundError, ValueError):
+            continue
+    if changed:
+        db.commit()
     return {
         "status": "success",
         "wallet": {
@@ -4325,9 +4514,20 @@ async def create_wallet_action_schedule(
         enabled=payload.enabled,
         telegram_enabled=payload.telegram_enabled,
         acknowledgement=payload.acknowledgement,
+        schedule_mode=payload.schedule_mode,
+        weekly_min=payload.weekly_min,
+        weekly_max=payload.weekly_max,
+        window_start=payload.window_start,
+        window_end=payload.window_end,
         created_at=now_ts,
         updated_at=now_ts,
     )
+    if payload.schedule_mode == "flexible":
+        ensure_flexible_schedule_week(
+            schedule,
+            datetime.datetime.now(ZoneInfo(payload.timezone)),
+            force=True,
+        )
     db.add(schedule)
     db.commit()
     db.refresh(schedule)
@@ -4359,6 +4559,50 @@ async def update_wallet_action_schedule(
     schedule.enabled = payload.enabled
     schedule.telegram_enabled = payload.telegram_enabled
     schedule.acknowledgement = payload.acknowledgement
+    schedule.schedule_mode = payload.schedule_mode
+    schedule.weekly_min = payload.weekly_min
+    schedule.weekly_max = payload.weekly_max
+    schedule.window_start = payload.window_start
+    schedule.window_end = payload.window_end
+    if payload.schedule_mode == "flexible":
+        ensure_flexible_schedule_week(
+            schedule,
+            datetime.datetime.now(ZoneInfo(payload.timezone)),
+            force=True,
+        )
+    else:
+        schedule.generated_week = None
+        schedule.generated_slots = None
+    schedule.last_sent_slot = None
+    schedule.updated_at = int(time.time())
+    db.commit()
+    db.refresh(schedule)
+    return {"status": "success", "schedule": serialize_wallet_action_schedule(schedule)}
+
+@app.post("/api/wallets/{wallet_id}/schedules/{schedule_id}/reroll")
+async def reroll_wallet_action_schedule(
+    wallet_id: int,
+    schedule_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    wallet = get_owned_wallet_or_404(db, wallet_id, current_user)
+    if not wallet.proxy:
+        raise HTTPException(status_code=422, detail="A proxy is required before enabling a wallet schedule")
+    schedule = db.query(WalletActionSchedule).filter(
+        WalletActionSchedule.id == schedule_id,
+        WalletActionSchedule.wallet_id == wallet.id,
+        WalletActionSchedule.username == current_user.username,
+    ).first()
+    if not schedule:
+        raise HTTPException(status_code=404, detail="Wallet schedule not found")
+    if schedule.schedule_mode != "flexible":
+        raise HTTPException(status_code=422, detail="Only flexible schedules can be randomized")
+    ensure_flexible_schedule_week(
+        schedule,
+        datetime.datetime.now(ZoneInfo(schedule.timezone)),
+        force=True,
+    )
     schedule.last_sent_slot = None
     schedule.updated_at = int(time.time())
     db.commit()
@@ -5131,6 +5375,218 @@ def get_service_health():
     if not ready:
         raise HTTPException(status_code=503, detail=payload)
     return payload
+
+
+# --- Action Center Unified Endpoints ---
+
+dex_quote_sessions = {}
+bridge_quote_sessions = {}
+
+class DexQuoteRequest(BaseModel):
+    wallet_address: str
+    from_token: str
+    to_token: str
+    amount: str
+    slippage: float = 0.5
+    provider: str
+
+class DexBuildRequest(BaseModel):
+    quote_id: str
+
+class BridgeQuoteRequest(BaseModel):
+    wallet_address: str
+    from_network: str
+    to_network: str
+    token_address: str
+    amount: str
+    provider: str
+
+class BridgeBuildRequest(BaseModel):
+    quote_id: str
+
+class LendingSupplyBuildRequest(BaseModel):
+    wallet_address: str
+    amount: str
+    network: str = "Base"
+    provider: str = "aave_v3"
+
+class LendingWithdrawBuildRequest(BaseModel):
+    wallet_address: str
+    amount: str
+    network: str = "Base"
+    provider: str = "aave_v3"
+
+class OperationSubmitRequest(BaseModel):
+    operation_id: int
+    tx_hash: str
+
+
+@app.get("/api/protocols")
+async def get_protocols(current_user: User = Depends(get_current_user)):
+    return {
+        "status": "success",
+        "protocols": [
+            {
+                "id": "uniswap",
+                "name": "Uniswap",
+                "category": "dex",
+                "networks": ["Base"],
+                "configured": bool(UNISWAP_API_KEY),
+                "execution_api": "/api/base-swap",
+            },
+            {
+                "id": "lifi",
+                "name": "LI.FI",
+                "category": "bridge",
+                "networks": list(LIFI_EVM_NETWORKS.keys()),
+                "configured": True,
+                "execution_api": "/api/universal-bridge",
+            },
+            {
+                "id": "aave_v3",
+                "name": "Aave V3",
+                "category": "lending",
+                "networks": ["Base"],
+                "configured": True,
+                "execution_api": "/api/defi/aave-base",
+            },
+        ]
+    }
+
+@app.get("/api/protocols/{category}/tokens")
+async def get_protocol_tokens(
+    category: str,
+    network: str = "Base",
+    current_user: User = Depends(get_current_user),
+):
+    normalized = category.strip().lower()
+    if normalized == "dex":
+        if network != "Base":
+            raise HTTPException(status_code=422, detail="The verified DEX route currently supports Base only")
+        tokens = [token for token in get_lifi_tokens("Base") if token.get("is_core")]
+    elif normalized == "bridge":
+        tokens = [token for token in get_lifi_tokens(network) if token.get("is_core")]
+    elif normalized == "lending":
+        if network != "Base":
+            raise HTTPException(status_code=422, detail="Aave V3 lending currently supports Base only")
+        tokens = [{
+            "symbol": "USDC",
+            "address": BASE_USDC_ADDRESS,
+            "decimals": BASE_USDC_DECIMALS,
+            "name": "USD Coin",
+            "is_core": True,
+        }]
+    else:
+        raise HTTPException(status_code=400, detail="Invalid protocol category")
+    return {"status": "success", "network": network, "tokens": tokens}
+
+@app.post("/api/dex/quote")
+async def get_dex_quote(
+    payload: DexQuoteRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    raise HTTPException(
+        status_code=410,
+        detail="This obsolete DEX endpoint is disabled. Use the verified /api/base-swap API.",
+    )
+@app.post("/api/dex/build")
+async def build_dex_transaction(
+    payload: DexBuildRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    raise HTTPException(
+        status_code=410,
+        detail="This obsolete DEX endpoint is disabled. Use the verified /api/base-swap API.",
+    )
+@app.post("/api/bridge/quote")
+async def get_bridge_quote(
+    payload: BridgeQuoteRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    raise HTTPException(
+        status_code=410,
+        detail="This obsolete bridge endpoint is disabled. Use the verified /api/universal-bridge API.",
+    )
+@app.post("/api/bridge/build")
+async def build_bridge_transaction(
+    payload: BridgeBuildRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    raise HTTPException(
+        status_code=410,
+        detail="This obsolete bridge endpoint is disabled. Use the verified /api/universal-bridge API.",
+    )
+@app.get("/api/lending/markets")
+async def get_lending_markets(current_user: User = Depends(get_current_user)):
+    return {
+        "status": "success",
+        "markets": [
+            {
+                "protocol": "Aave V3",
+                "network": "Base",
+                "asset": "USDC",
+                "decimals": BASE_USDC_DECIMALS,
+                "apy": None,
+                "annual_supply_rate_percent": None,
+                "warning": "The current variable rate is loaded only with a live Aave quote.",
+            }
+        ]
+    }
+
+@app.get("/api/lending/positions")
+async def get_lending_positions(
+    wallet_address: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    raise HTTPException(
+        status_code=410,
+        detail="This obsolete lending endpoint is disabled. Use /api/defi/aave-base-positions/{wallet_id}.",
+    )
+@app.post("/api/lending/supply/build")
+async def build_lending_supply_transaction(
+    payload: LendingSupplyBuildRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    raise HTTPException(
+        status_code=410,
+        detail="This obsolete lending endpoint is disabled. Use /api/defi/aave-base/usdc-supply-quote.",
+    )
+@app.post("/api/lending/withdraw/build")
+async def build_lending_withdraw_transaction(
+    payload: LendingWithdrawBuildRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    raise HTTPException(
+        status_code=410,
+        detail="This obsolete lending endpoint is disabled. Use /api/defi/aave-base/usdc-withdraw-quote.",
+    )
+@app.post("/api/operations/submit")
+async def submit_operation_tx(
+    payload: OperationSubmitRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    raise HTTPException(
+        status_code=410,
+        detail="Generic transaction submission is disabled. Use the provider-specific verified submission endpoint.",
+    )
+@app.get("/api/operations/{operation_id}/status")
+async def get_operation_status(
+    operation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    raise HTTPException(
+        status_code=410,
+        detail="Generic operation status is disabled. Use the provider-specific receipt or status endpoint.",
+    )
 
 app.mount("/", RestrictedStaticFiles(directory=".", html=True), name="static")
 

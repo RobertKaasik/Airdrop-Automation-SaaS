@@ -17,13 +17,13 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
-    <script src="locales/ru.js?v=20260821-modal-restore-1"></script>
-    <script src="locales/en.js?v=20260821-modal-restore-1"></script>
-    <script src="locales/zh.js?v=20260821-modal-restore-1"></script>
+    <script src="locales/ru.js?v=20260822-flex-schedule-2"></script>
+    <script src="locales/en.js?v=20260822-flex-schedule-2"></script>
+    <script src="locales/zh.js?v=20260822-flex-schedule-2"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=20260821-wallet-schedule-1">
+    <link rel="stylesheet" href="style.css?v=20260822-flex-schedule-2">
 </head>
 <body>
 
@@ -229,6 +229,7 @@
             </div>
             <div id="walletScheduleSafety" class="wallet-schedule-notice"></div>
             <div id="walletScheduleProxyNotice" class="wallet-schedule-proxy"></div>
+            <button type="button" id="walletScheduleFlexibleToggle" class="wallet-schedule-flex-toggle" onclick="toggleWalletScheduleFlexible()"></button>
 
             <div class="wallet-schedule-form">
                 <label><span id="walletScheduleActionLabel"></span>
@@ -238,15 +239,25 @@
                         <option value="defi" id="walletScheduleActionDefi"></option>
                     </select>
                 </label>
-                <label><span id="walletScheduleDayLabel"></span>
+                <label class="wallet-schedule-fixed-field"><span id="walletScheduleDayLabel"></span>
                     <select id="walletScheduleDay" class="auth-input"></select>
                 </label>
-                <label><span id="walletScheduleTimeLabel"></span>
+                <label class="wallet-schedule-fixed-field"><span id="walletScheduleTimeLabel"></span>
                     <input id="walletScheduleTime" type="text" value="18:00" placeholder="15:32" maxlength="5" inputmode="numeric" pattern="[0-2][0-9]:[0-5][0-9]" oninput="format24HourTimeInput(this)" onblur="normalize24HourTimeInput(this)" class="auth-input">
                 </label>
                 <label><span id="walletScheduleTimezoneLabel"></span>
                     <input id="walletScheduleTimezone" type="text" value="UTC" readonly class="auth-input">
                 </label>
+            </div>
+            <div id="walletScheduleFlexiblePanel" class="wallet-schedule-flex-panel" hidden>
+                <div id="walletScheduleFlexibleDescription" class="wallet-schedule-flex-description"></div>
+                <div class="wallet-schedule-flex-grid">
+                    <label><span id="walletScheduleWeeklyMinLabel"></span><input id="walletScheduleWeeklyMin" type="number" min="1" max="7" value="3" class="auth-input"></label>
+                    <label><span id="walletScheduleWeeklyMaxLabel"></span><input id="walletScheduleWeeklyMax" type="number" min="1" max="7" value="4" class="auth-input"></label>
+                    <label><span id="walletScheduleWindowStartLabel"></span><input id="walletScheduleWindowStart" type="text" value="10:00" placeholder="10:00" maxlength="5" inputmode="numeric" oninput="format24HourTimeInput(this)" onblur="normalize24HourTimeInput(this)" class="auth-input"></label>
+                    <label><span id="walletScheduleWindowEndLabel"></span><input id="walletScheduleWindowEnd" type="text" value="21:00" placeholder="21:00" maxlength="5" inputmode="numeric" oninput="format24HourTimeInput(this)" onblur="normalize24HourTimeInput(this)" class="auth-input"></label>
+                </div>
+                <div id="walletScheduleGeneratedPreview" class="wallet-schedule-generated-preview"></div>
             </div>
             <label class="wallet-schedule-check"><input id="walletScheduleTelegram" type="checkbox" checked> <span id="walletScheduleTelegramLabel"></span></label>
             <label class="wallet-schedule-check wallet-schedule-consent"><input id="walletScheduleAcknowledgement" type="checkbox"> <span id="walletScheduleAcknowledgementLabel"></span></label>
@@ -685,6 +696,6 @@
     }
 </script>
 <script type="module" src="ui-dist/react-ui.js"></script>
-<script src="app.js?v=20260821-wallet-schedule-1"></script>
+    <script src="app.js?v=20260822-flex-schedule-2"></script>
 </body>
 </html>
