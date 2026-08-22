@@ -25,6 +25,7 @@ function setLanguage(lang) {
     const normalizedLang = lang === 'cn' ? 'zh' : lang;
     currentLang = translations[normalizedLang] ? normalizedLang : 'ru';
     localStorage.setItem('ax_lang', currentLang);
+    document.documentElement.setAttribute('lang', currentLang);
     document.documentElement.setAttribute('data-lang', currentLang);
     document.body.setAttribute('data-lang', currentLang);
     return currentLang;
@@ -34,7 +35,10 @@ function setFormError(containerId, message, type = 'error', fieldId = '') {
     const container = document.getElementById(containerId);
     if (!container) return;
     const cls = type === 'success' ? 'form-feedback success' : 'form-feedback error';
-    container.innerHTML = `<div class="${cls}">${message}</div>`;
+    const feedback = document.createElement('div');
+    feedback.className = cls;
+    feedback.textContent = String(message || '');
+    container.replaceChildren(feedback);
     if (fieldId) {
         setFieldValidationState(fieldId, false, message);
     }
@@ -77,25 +81,29 @@ function clearFieldValidationState(fieldId) {
 function setButtonLoading(button, isLoading, text = '') {
     if (!button) return;
     if (isLoading) {
+        if (!button.dataset.defaultText) button.dataset.defaultText = button.innerText;
         button.classList.add('btn-loading');
         button.disabled = true;
-        if (text) button.dataset.defaultText = button.innerText;
         button.innerText = text || t('loading');
     } else {
         button.classList.remove('btn-loading');
         button.disabled = false;
-        const defaultText = button.dataset.defaultText || text || '';
+        const defaultText = text || button.dataset.defaultText || '';
         if (defaultText) button.innerText = defaultText;
+        delete button.dataset.defaultText;
     }
 }
 let userPlan = 'Standard';
 let deviceFingerprint = generateDeviceFingerprint();
 let subscriptionDaysLeft = 29;
 let showWelcomeGuide = true;
+let activeSafeStartStep = 0;
 
 let codeCooldownTimer = null;
 let codeCooldownSeconds = 0;
-let confirmedRegistrationEmail = "";
+let confirmedRegistrationEmail = sessionStorage.getItem('ax_registration_email') || '';
+let passwordResetCooldownTimer = null;
+let passwordResetCooldownSeconds = 0;
 let currentEditingWallet = null;
 let activeOperationWalletId = null;
 let activeOperationBalanceData = null;
@@ -114,7 +122,6 @@ let lastRandomizeTimestamp = 0;
 let cachedStatsData = { current_slots: 1, max_slots: 300, is_sold_out: false };
 
 const PLAN_PRICES = { Standard: 29, Pro: 49, Premium: 89 };
-const ONBOARDING_PRICE = 49;
 const clientSessionId = getOrCreateClientSessionId();
 let paymentAccessToken = sessionStorage.getItem('ax_payment_token') || '';
 let paymentUnlocked = sessionStorage.getItem('ax_paid_session_id') === clientSessionId && !!paymentAccessToken;
@@ -208,10 +215,11 @@ const NETWORKS_CONFIG = [
 // --- Инициализация при загрузке ---
 document.getElementById('main-logo-btn').addEventListener('click', function(e) {
     e.preventDefault();
-    returnToMainSite();
+    logoutUser();
 });
 
 window.addEventListener('DOMContentLoaded', () => {
+    initializeInterfaceHintsPreference();
     updateStaticText(currentLang);
     loadPlatformStats();
     const line = document.getElementById('preloader-line');
@@ -225,6 +233,7 @@ window.addEventListener('DOMContentLoaded', () => {
     const savedAccessToken = sessionStorage.getItem('ax_access_token');
     if (savedUsername && savedAccessToken) {
         isLoggedIn = true;
+        document.documentElement.classList.add('ax-dashboard-active');
         userPlan = localStorage.getItem('selected_plan') || 'Standard';
         
         const loginBtn = document.getElementById('login-btn');
@@ -238,14 +247,35 @@ window.addEventListener('DOMContentLoaded', () => {
         currentSection = localStorage.getItem('airdrop_current_section') || 'Account';
         renderDashboardContent(currentSection);
     }
+    syncEmailCodeCooldown();
+    updateRegistrationContinueAction();
+    if (!isLoggedIn && !paymentUnlocked && !isPendingRegistrationDismissed()) void restorePaidRegistrationAccess();
+    
+    // --- Инициализация продвинутых интерактивных анимаций ---
+    initButtonGlowEffect();
+    initFeatureCardsInteraction();
+    initRouteLab();
+    initSafeStart();
+    initAirdropXVisualSystem();
 });
 
 // --- Вспомогательные функции ---
 function getOrCreateClientSessionId() {
-    let existing = sessionStorage.getItem('ax_client_session_id');
-    if (existing) return existing;
-    existing = `sess_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+    let existing = sessionStorage.getItem('ax_client_session_id') || localStorage.getItem('ax_client_session_id');
+    if (existing) {
+        sessionStorage.setItem('ax_client_session_id', existing);
+        localStorage.setItem('ax_client_session_id', existing);
+        return existing;
+    }
+    if (window.crypto?.randomUUID) {
+        existing = `sess_${window.crypto.randomUUID()}`;
+    } else {
+        const bytes = new Uint8Array(16);
+        window.crypto.getRandomValues(bytes);
+        existing = `sess_${Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('')}`;
+    }
     sessionStorage.setItem('ax_client_session_id', existing);
+    localStorage.setItem('ax_client_session_id', existing);
     return existing;
 }
 
@@ -255,18 +285,46 @@ function clearPaymentAccess() {
     sessionStorage.removeItem('ax_payment_token');
     sessionStorage.removeItem('ax_paid_session_id');
     sessionStorage.removeItem('ax_paid_plan');
+    sessionStorage.removeItem('ax_subscription_payment_pending');
+    updateRegistrationContinueAction();
+}
+
+function getPendingRegistrationDismissKey() {
+    return `ax_registration_dismissed_${clientSessionId}`;
+}
+
+function isPendingRegistrationDismissed() {
+    return localStorage.getItem(getPendingRegistrationDismissKey()) === '1';
+}
+
+function dismissPendingRegistration() {
+    localStorage.setItem(getPendingRegistrationDismissKey(), '1');
+    clearPaymentAccess();
+    closeAuthModal();
+    showNotification(t('auth.registrationDismissed'));
+}
+
+function updateRegistrationContinueAction() {
+    const loginBtn = document.getElementById('login-btn');
+    if (!loginBtn || isLoggedIn) return;
+    const canContinue = paymentUnlocked && !!paymentAccessToken;
+    loginBtn.textContent = canContinue ? t('resumeRegistration') : t('login');
+    loginBtn.onclick = () => openModal(canContinue ? 'register' : 'login');
+    loginBtn.classList.toggle('pending-registration-button', canContinue);
+    loginBtn.title = canContinue ? t('resumeRegistrationHint') : '';
 }
 
 function generateDeviceFingerprint() {
     try {
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        ctx.textBaseline = 'top';
-        ctx.font = '14px Arial';
-        ctx.fillText('AIRDROP-X-fp-' + navigator.userAgent, 2, 2);
-        return 'fp_' + Math.abs([...canvas.toDataURL()].reduce((acc, char) => ((acc << 5) - acc) + char.charCodeAt(0), 0)).toString(16);
+        const stored = localStorage.getItem('ax_device_id');
+        if (stored && /^device_[a-zA-Z0-9_-]{20,}$/.test(stored)) return stored;
+        const value = window.crypto?.randomUUID
+            ? `device_${window.crypto.randomUUID()}`
+            : `device_${Array.from(window.crypto.getRandomValues(new Uint8Array(24)), byte => byte.toString(16).padStart(2, '0')).join('')}`;
+        localStorage.setItem('ax_device_id', value);
+        return value;
     } catch (e) {
-        return 'fp_unknown';
+        return `device_fallback_${navigator.userAgent.length}_${Date.now().toString(36)}`;
     }
 }
 
@@ -287,7 +345,11 @@ function showNotification(text, type = 'success') {
     const borderColor = type === 'success' ? '#22c55e' : '#ef4444';
     const icon = type === 'success' ? '✅' : '⚠️';
     toast.style.cssText = `background: #121212; border: 1px solid ${borderColor}; color: #fff; padding: 12px 16px; border-radius: 12px; font-size: 13px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); display: flex; align-items: center; gap: 10px; animation: fadeIn 0.3s ease;`;
-    toast.innerHTML = `<span>${icon}</span> <span>${text}</span>`;
+    const iconEl = document.createElement('span');
+    iconEl.textContent = icon;
+    const textEl = document.createElement('span');
+    textEl.innerHTML = String(text || '');
+    toast.replaceChildren(iconEl, textEl);
     container.appendChild(toast);
 
     setTimeout(() => {
@@ -297,10 +359,76 @@ function showNotification(text, type = 'success') {
     }, 3500);
 }
 
+function openAntiSybilModal() {
+    const modal = document.getElementById('antiSybilModal');
+    if (!modal) return;
+    showAppModal('antiSybilModal');
+}
+
+function closeAntiSybilModal() {
+    const modal = document.getElementById('antiSybilModal');
+    if (!modal) return;
+    hideAppModal('antiSybilModal');
+}
+
+function injectWalletSecurityBanner() {
+    const existingBanner = document.getElementById('walletSecurityBanner');
+    if (existingBanner) existingBanner.remove();
+
+    if (!areInterfaceHintsEnabled()) return;
+
+    const container = document.getElementById('walletsListContainer');
+    if (!container || !container.parentElement) return;
+
+    const banner = document.createElement('div');
+    banner.id = 'walletSecurityBanner';
+    banner.className = 'security-banner';
+    banner.innerHTML = `
+        <div class="security-banner__content">
+            <div class="security-banner__icon">🛡️</div>
+            <div class="security-banner__body">
+                <div class="security-banner__title">Anti-Sybil защита активна</div>
+                <div class="security-banner__text">Проверяем схемы активности и связанные адреса</div>
+            </div>
+        </div>
+        <div class="security-banner__actions">
+            <button type="button" class="security-banner__link" onclick="openAntiSybilModal();">Подробнее</button>
+            <button type="button" class="security-banner__close" aria-label="Закрыть" onclick="this.closest('.security-banner').remove();">✕</button>
+        </div>
+    `;
+
+    container.parentElement.insertBefore(banner, container);
+}
+
+function getRandomDelay(min, max) {
+    const skew = Math.random();
+    const range = max - min;
+    const delay = min + (skew * skew * range);
+    return Math.floor(delay);
+}
+
+function getAntiSybilJitter(baseValue, jitterPercent = 15) {
+    const jitter = baseValue * (jitterPercent / 100);
+    return baseValue + (Math.random() * jitter * 2 - jitter);
+}
+
+function rotateProxyIndex() {
+    const currentIndex = parseInt(sessionStorage.getItem('ax_proxy_rotation_index') || '0', 10);
+    const nextIndex = (currentIndex + 1) % 100;
+    sessionStorage.setItem('ax_proxy_rotation_index', String(nextIndex));
+    sessionStorage.setItem('ax_last_proxy_rotation', String(Date.now()));
+    return nextIndex;
+}
+
+function shouldRotateProxy() {
+    const lastRotation = parseInt(sessionStorage.getItem('ax_last_proxy_rotation') || '0', 10);
+    const minInterval = 300000 + Math.random() * 300000;
+    return (Date.now() - lastRotation) > minInterval;
+}
+
 function renderLanguageAwareText() {
     const lang = setLanguage(currentLang);
-    const loginBtn = document.getElementById('login-btn');
-    if (loginBtn) loginBtn.innerText = t('login');
+    updateRegistrationContinueAction();
 
     const badge = document.getElementById('current-lang-badge');
     const text = document.getElementById('current-lang-text');
@@ -329,8 +457,16 @@ function checkInputLimit(input, maxLimit) {
 // 🌍 Обновление всего статического текста
 const STATIC_TEXT_BINDINGS = [
     ['login-btn', 'login'], ['hero-title', 'heroTitle', true], ['hero-desc', 'heroDesc'], ['farm-btn', 'farmBtn'], ['settings-btn', 'settingsBtn'],
-    ['core-status-label', 'coreStatusLabel'], ['core-status-val', 'coreStatus'], ['features-heading', 'featuresHeading'], ['instr-title', 'instructionHeading'], ['faq-heading', 'faqHeading'],
+    ['nav-features', 'navFeatures'], ['nav-safe-start', 'navSafeStart'], ['nav-how', 'navHow'], ['nav-pricing', 'navPricing'], ['hero-signing', 'heroSigning'],
+    ['core-status-label', 'coreStatusLabel'], ['core-status-val', 'coreStatus'], ['features-heading', 'featuresHeading', true], ['features-desc', 'featuresDesc'], ['instr-title', 'instructionHeading'], ['faq-heading', 'faqHeading'],
     ['c1-t', 'c1t'], ['c1-d', 'c1d'], ['c2-t', 'c2t'], ['c2-d', 'c2d'], ['c3-t', 'c3t'], ['c3-d', 'c3d'],
+    ['c4-t', 'c4t'], ['c4-d', 'c4d'], ['c6-t', 'c6t'], ['c6-d', 'c6d'], ['c7-tg-t', 'c7tgT'], ['c7-tg-d', 'c7tgD'], ['telegram-preview-title', 'telegramPreviewTitle'], ['telegram-preview-meta', 'telegramPreviewMeta'],
+    ['c8-t', 'routeLabTitle'], ['c8-d', 'routeLabDesc'], ['route-tab-swap', 'routeLabSwap'], ['route-tab-bridge', 'routeLabBridge'], ['route-tab-defi', 'routeLabDefi'],
+    ['c7-t', 'environmentCardTitle'], ['c7-d', 'environmentCardDesc'],
+    ['preview-title', 'previewTitle', true], ['preview-desc', 'previewDesc'], ['preview-networks', 'previewNetworks'], ['preview-statuses', 'previewStatuses'], ['preview-no-keys', 'previewNoKeys'], ['preview-private-keys', 'previewPrivateKeys'],
+    ['safe-start-eyebrow', 'safeStartEyebrow'], ['safe-start-title', 'safeStartTitle'], ['safe-start-desc', 'safeStartDesc'],
+    ['safe-step-label-1', 'safeStartLabels.account'], ['safe-step-label-2', 'safeStartLabels.wallet'], ['safe-step-label-3', 'safeStartLabels.review'], ['safe-step-label-4', 'safeStartLabels.alerts'],
+    ['summary-card-1-title', 'safeStartSummary.connectTitle'], ['summary-card-1-desc', 'safeStartSummary.connectDesc'], ['summary-card-2-title', 'safeStartSummary.reviewTitle'], ['summary-card-2-desc', 'safeStartSummary.reviewDesc'], ['summary-card-3-title', 'safeStartSummary.signTitle'], ['summary-card-3-desc', 'safeStartSummary.signDesc'],
     ['sc1-t', 'sc1t'], ['sc1-b1', 'sc1b1'], ['sc1-d1', 'sc1d1'], ['sc1-d2', 'sc1d2'], ['sc1-l1', 'sc1l1'], ['sc1-l2', 'sc1l2'], ['sc1-l3', 'sc1l3'],
     ['sc2-t', 'sc2t'], ['sc2-b1', 'sc2b1'], ['sc2-d1', 'sc2d1'], ['sc2-d2', 'sc2d2'], ['sc2-l1', 'sc2l1'], ['sc2-l2', 'sc2l2'], ['sc2-l3', 'sc2l3'],
     ['sc3-t', 'sc3t'], ['sc3-b1', 'sc3b1'], ['sc3-d1', 'sc3d1'], ['sc3-d2', 'sc3d2'], ['sc3-l1', 'sc3l1'], ['sc3-l2', 'sc3l2'], ['sc3-l3', 'sc3l3'],
@@ -340,7 +476,6 @@ const STATIC_TEXT_BINDINGS = [
     ['p-title-modal', 'pTitleModal'], ['p-desc-modal', 'pDescModal'], ['p-std-top', 'subTop'], ['p-std-name', 'stdName'], ['p-std-per', 'stdPer'], ['p-std-f1', 'stdF1'], ['p-std-f2', 'stdF2'], ['p-std-f3', 'stdF3'], ['p-std-btn', 'stdBtn'],
     ['p-pro-badge', 'proBadge'], ['p-pro-top', 'subTop'], ['p-pro-name', 'proName'], ['p-pro-per', 'proPer'], ['p-pro-f1', 'proF1'], ['p-pro-f2', 'proF2'], ['p-pro-f3', 'proF3'], ['p-pro-f4', 'proF4'], ['p-pro-btn', 'proBtn'],
     ['p-prem-top', 'subTop'], ['p-prem-name', 'premName'], ['p-prem-per', 'premPer'], ['p-prem-f1', 'premF1'], ['p-prem-f2', 'premF2'], ['p-prem-f3', 'premF3'], ['p-prem-f4', 'premF4'], ['p-prem-btn', 'premBtn'],
-    ['onboarding-title', 'onboardingTitle'], ['onboarding-desc', 'onboardingDesc'],
     ['footer-rights', 'footerRights'], ['footer-privacy', 'footerPrivacy'], ['footer-terms', 'footerTerms'], ['page-title', 'pageTitle']
 ];
 
@@ -358,6 +493,37 @@ function updateStaticText(lang) {
     if (counterEl && window.cachedStatsData) {
         counterEl.innerHTML = `${t('privateSoftware')}. <b style="color:#fff; margin-left:8px;">${window.cachedStatsData.current_slots} / ${window.cachedStatsData.max_slots} ${t('slotsShort')}</b>`;
     }
+    updateLocalizedDemoMedia();
+    updateRouteLab();
+    renderSafeStart(activeSafeStartStep);
+    updateRegistrationContinueAction();
+    syncEmailCodeCooldown();
+}
+
+const LOCALIZED_DEMO_MEDIA = [
+    { id: 'demo-gas-media', name: 'gas', altKey: 'demoGasAlt' },
+    { id: 'demo-wallets-media', name: 'wallets', altKey: 'demoWalletsAlt' },
+    { id: 'demo-checks-media', name: 'checks', altKey: 'demoChecksAlt' },
+    { id: 'demo-telegram-media', name: 'telegram', altKey: 'demoTelegramAlt' },
+];
+
+function updateLocalizedDemoMedia() {
+    const language = getActiveLang();
+    LOCALIZED_DEMO_MEDIA.forEach(({ id, name, altKey }) => {
+        const image = document.getElementById(id);
+        if (!image) return;
+        const nextSource = `demo-${name}-${language}.gif?v=20260820`;
+        if (image.getAttribute('src') !== nextSource) image.setAttribute('src', nextSource);
+        image.setAttribute('alt', t(altKey));
+    });
+    const mainNav = document.getElementById('header-nav');
+    if (mainNav) mainNav.setAttribute('aria-label', t('mainNavAria'));
+    const heroProof = document.getElementById('hero-proof');
+    if (heroProof) heroProof.setAttribute('aria-label', t('heroProofAria'));
+    const routeLab = document.getElementById('route-lab');
+    if (routeLab) routeLab.setAttribute('aria-label', t('routeLabAria'));
+    const interfacePreview = document.getElementById('interface-preview');
+    if (interfacePreview) interfacePreview.setAttribute('aria-label', t('previewAria'));
 }
 
 window.translateBackendMessage = function(msg) {
@@ -367,6 +533,9 @@ window.translateBackendMessage = function(msg) {
     const locale = translations[activeLang] || {};
     const exactMessages = locale.backend || {};
     if (exactMessages[msg]) return exactMessages[msg];
+    if (msg === 'Subscription payments are temporarily unavailable while exact USDC settlement is configured.') {
+        return locale.errors?.subscriptionPaymentsUnavailable || locale.errors?.paymentFailed || msg;
+    }
 
     const dynamicPatterns = [
         ['invalidCodeAttempts', /^Invalid code! Attempts left:\s*(.*)$/],
@@ -374,7 +543,8 @@ window.translateBackendMessage = function(msg) {
         ['slotPurchased', /^Slot purchased! Total slots:\s*(.*)$/],
         ['proxyWorking', /^Proxy is working! Ping:\s*(.*)$/],
         ['connectionError', /^Connection error:\s*(.*)$/],
-        ['delayLimitExceeded', /^Delay limit exceeded for day\s*(.*)$/]
+        ['delayLimitExceeded', /^Delay limit exceeded for day\s*(.*)$/],
+        ['deviceChangeLimit', /^Device change limit reached\. Try again in\s*(.*)$/]
     ];
 
     for (const [key, pattern] of dynamicPatterns) {
@@ -407,6 +577,7 @@ function translateBackendDetail(detail, fallbackKey = 'errors.genericRequestFail
 
 function returnToMainSite() {
     isLoggedIn = false;
+    document.documentElement.classList.remove('ax-dashboard-active');
     localStorage.removeItem('airdrop_username');
     localStorage.removeItem('airdrop_current_section');
     sessionStorage.removeItem('ax_access_token');
@@ -415,12 +586,25 @@ function returnToMainSite() {
     
     const loginBtn = document.getElementById('login-btn');
     if (loginBtn) loginBtn.style.display = '';
+    updateRegistrationContinueAction();
 
     document.getElementById('dashboard-content').style.display = 'none';
     const mobileNav = document.getElementById('mobileNavBar');
     if(mobileNav) mobileNav.style.display = 'none'; 
     document.getElementById('main-content').style.display = 'block';
     window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+async function logoutUser() {
+    const accessToken = sessionStorage.getItem('ax_access_token');
+    if (accessToken) {
+        try {
+            await fetch('/api/logout', { method: 'POST' });
+        } catch (_) {
+            // Local cleanup still protects the current browser if the server is offline.
+        }
+    }
+    returnToMainSite();
 }
 
 function toggleLangMenu(event) {
@@ -445,33 +629,90 @@ function changeLanguage(lang) {
 }
 
 // --- Модальные окна и авторизация ---
-function openPricingModal() { 
-    closeAuthModal(); 
-    document.getElementById('pricingModal').classList.add('show'); 
+const APP_MODAL_IDS = [
+    'pricingModal', 'authModal', 'antiSybilModal', 'walletConfigModal',
+    'walletConnectModal', 'baseSwapConfirmModal', 'appConfirmModal', 'walletScheduleModal', 'legalModal'
+];
+
+function syncModalScrollLock() {
+    const isAnyModalOpen = APP_MODAL_IDS.some(id => document.getElementById(id)?.classList.contains('show'));
+    document.body.classList.toggle('modal-open', isAnyModalOpen);
 }
 
-function closePricingModal() { 
-    document.getElementById('pricingModal').classList.remove('show'); 
+function showAppModal(modalId) {
+    APP_MODAL_IDS.forEach(id => {
+        if (id !== modalId) document.getElementById(id)?.classList.remove('show');
+    });
+    const modal = document.getElementById(modalId);
+    if (!modal) return null;
+    modal.classList.add('show');
+    syncModalScrollLock();
+    return modal;
+}
+
+function hideAppModal(modalId) {
+    document.getElementById(modalId)?.classList.remove('show');
+    syncModalScrollLock();
+}
+
+function hideAllAppModals() {
+    APP_MODAL_IDS.forEach(id => document.getElementById(id)?.classList.remove('show'));
+    syncModalScrollLock();
+}
+
+function openPricingModal() {
+    if (isLoggedIn) return;
+    showAppModal('pricingModal');
+}
+
+function closePricingModal() {
+    hideAppModal('pricingModal');
 }
 
 let mousedownOverlayTarget = null;
 window.addEventListener('mousedown', (e) => { mousedownOverlayTarget = e.target; });
 
-function handleOverlayClick(event) { if (event.target.id === 'authModal' && mousedownOverlayTarget.id === 'authModal') closeAuthModal(); }
-function handlePricingOverlayClick(event) { if (event.target.id === 'pricingModal' && mousedownOverlayTarget.id === 'pricingModal') closePricingModal(); }
+function handleOverlayClick(event) { if (event.target.id === 'authModal' && mousedownOverlayTarget?.id === 'authModal') closeAuthModal(); }
+function handlePricingOverlayClick(event) { if (event.target.id === 'pricingModal' && mousedownOverlayTarget?.id === 'pricingModal') closePricingModal(); }
 
 function selectPlanAndRegister(planName, price) {
     closePricingModal();
-    const onboarding = document.getElementById('onboardingOption')?.checked ?? false;
     userPlan = planName;
     localStorage.setItem('selected_plan', planName);
     localStorage.setItem('selected_price', String(price));
-    localStorage.setItem('selected_onboarding', onboarding);
+    localStorage.removeItem('selected_onboarding');
     clearPaymentAccess();
     openModal('payment');
 }
 
-function closeAuthModal() { document.getElementById('authModal').classList.remove('show'); }
+function closeAuthModal() { hideAppModal('authModal'); }
+
+let appConfirmResolver = null;
+
+function openAppConfirm({ title, message, confirmText }) {
+    const modal = document.getElementById('appConfirmModal');
+    if (!modal) return Promise.resolve(false);
+    const locale = translations[getActiveLang()] || translations.ru;
+    document.getElementById('appConfirmTitle').textContent = title || '';
+    document.getElementById('appConfirmMessage').textContent = message || '';
+    document.getElementById('appConfirmCancel').textContent = locale.confirmCancel;
+    document.getElementById('appConfirmProceed').textContent = confirmText || locale.walletRemoveAction;
+    showAppModal('appConfirmModal');
+    return new Promise((resolve) => { appConfirmResolver = resolve; });
+}
+
+function finishAppConfirm(confirmed) {
+    hideAppModal('appConfirmModal');
+    const resolve = appConfirmResolver;
+    appConfirmResolver = null;
+    if (resolve) resolve(Boolean(confirmed));
+}
+
+function handleAppConfirmOverlayClick(event) {
+    if (event.target.id === 'appConfirmModal' && mousedownOverlayTarget?.id === 'appConfirmModal') {
+        finishAppConfirm(false);
+    }
+}
 
 function togglePasswordVisibility(fieldId, iconEl) {
     const input = document.getElementById(fieldId);
@@ -495,7 +736,7 @@ function openModal(type) {
         return;
     }
 
-    modal.classList.add('show');
+    showAppModal('authModal');
 
     if (type === 'login') {
         container.innerHTML = `
@@ -507,6 +748,7 @@ function openModal(type) {
                 <div class="input-group" style="margin-bottom:12px;">
                     <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">${t('auth.usernameLabel')}</label>
                     <input type="text" class="auth-input" placeholder="${t('auth.usernamePlaceholder')}" id="loginUsername" oninput="clearFormError('loginErrorContainer', 'loginUsername'); clearFieldValidationState('loginUsername')">
+                    <div style="font-size:11px; color:#a3a3a3; margin-top:6px;">${t('auth.loginWithEmail')}</div>
                 </div>
                 <div class="input-group" style="margin-bottom:16px;">
                     <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">${t('auth.password')}</label>
@@ -516,15 +758,51 @@ function openModal(type) {
                     </div>
                 </div>
                 <button type="submit" class="btn-modal-primary" style="width:100%; padding:12px;">${t('login')}</button>
+                <button type="button" onclick="openModal('reset')" style="width:100%; margin-top:10px; padding:6px; border:0; background:transparent; color:#c4b5fd; cursor:pointer; font-size:12px;">${t('auth.forgotPassword')}</button>
                 <div id="loginErrorContainer" style="margin-top:10px;"></div>
+            </form>
+        `;
+    } else if (type === 'reset') {
+        syncPasswordResetCooldown();
+        const resetButtonDisabled = passwordResetCooldownSeconds > 0 ? 'disabled' : '';
+        const resetButtonText = passwordResetCooldownSeconds > 0
+            ? formatCodeCooldownLabel(passwordResetCooldownSeconds)
+            : t('auth.sendResetCode');
+        container.innerHTML = `
+            <form onsubmit="event.preventDefault(); confirmPasswordReset();">
+                <div class="modal-logo" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                    <span style="font-weight:bold; font-size:16px;">${t('auth.resetPassword')}</span>
+                    <span onclick="closeAuthModal()" style="cursor:pointer; color:#a3a3a3; font-size:18px;">✕</span>
+                </div>
+                <p style="margin:0 0 14px; color:#a3a3a3; font-size:12px; line-height:1.5;">${t('auth.resetInstructions')}</p>
+                <div class="input-group" style="margin-bottom:10px;">
+                    <label style="font-size:11px; color:#a3a3a3; display:block; margin-bottom:4px;">${t('auth.email')}</label>
+                    <input type="email" class="auth-input" placeholder="${t('auth.emailPlaceholder')}" id="resetEmail" oninput="clearFormError('resetErrorContainer', 'resetEmail'); clearFieldValidationState('resetEmail')">
+                </div>
+                <div class="input-group" style="margin-bottom:10px;">
+                    <label style="font-size:11px; color:#a3a3a3; display:block; margin-bottom:4px;">${t('auth.code')}</label>
+                    <div style="display:flex; gap:8px;">
+                        <input type="text" class="auth-input" placeholder="${t('auth.codePlaceholder')}" id="resetCode" style="flex:1; margin:0;" oninput="clearFormError('resetErrorContainer', 'resetCode'); clearFieldValidationState('resetCode')">
+                        <button type="button" id="sendResetCodeBtn" onclick="requestPasswordResetCode()" ${resetButtonDisabled} class="auth-input ${passwordResetCooldownSeconds > 0 ? 'btn-cooldown' : ''}" style="width:auto; background:#1f1f1f; color:#fff; cursor:pointer; font-weight:600;">${resetButtonText}</button>
+                    </div>
+                </div>
+                <div class="input-group" style="margin-bottom:14px;">
+                    <label style="font-size:11px; color:#a3a3a3; display:block; margin-bottom:4px;">${t('auth.newPassword')}</label>
+                    <div class="password-wrapper" style="position:relative;">
+                        <input type="password" class="auth-input" placeholder="${t('auth.passwordPlaceholder')}" id="resetPass" style="padding-right:35px;" oninput="clearFormError('resetErrorContainer', 'resetPass'); clearFieldValidationState('resetPass')">
+                        <span class="password-toggle-icon" onclick="togglePasswordVisibility('resetPass', this)" style="position:absolute; right:12px; top:50%; transform:translateY(-50%); cursor:pointer; font-size:14px;">👁️</span>
+                    </div>
+                </div>
+                <button type="submit" class="btn-modal-primary" style="width:100%; padding:10px;">${t('auth.resetSubmit')}</button>
+                <button type="button" onclick="openModal('login')" style="width:100%; margin-top:8px; padding:5px; border:0; background:transparent; color:#a3a3a3; cursor:pointer; font-size:12px;">${t('auth.backToLogin')}</button>
+                <div id="resetErrorContainer" style="margin-top:10px;"></div>
             </form>
         `;
     } else if (type === 'payment') {
         const chosenPlan = localStorage.getItem('selected_plan') || 'Standard';
         const basePrice = Number(localStorage.getItem('selected_price') || PLAN_PRICES[chosenPlan] || PLAN_PRICES.Standard);
-        const withOnboarding = localStorage.getItem('selected_onboarding') === 'true';
-        const displayAmount = (basePrice + (withOnboarding ? ONBOARDING_PRICE : 0) + 0.47).toFixed(2);
-        const planDisplayLabel = chosenPlan === 'Standard' ? t.stdName : chosenPlan === 'Pro' ? t.proName : t.premName;
+        const displayAmount = basePrice.toFixed(2);
+        const planDisplayLabel = chosenPlan === 'Standard' ? t('stdName') : chosenPlan === 'Pro' ? t('proName') : t('premName');
 
         container.innerHTML = `
             <div class="modal-logo" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
@@ -532,41 +810,27 @@ function openModal(type) {
                 <span onclick="closeAuthModal()" style="cursor: pointer; color: #a3a3a3; font-size: 18px;">✕</span>
             </div>
             
-            <div style="margin-bottom: 12px;">
-                <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">${t('payNetwork')}</label>
-                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;">
-                    <button type="button" class="btn-dark-sm auth-input" id="net-base" onclick="setPayNetwork('Base', '${MASTER_WALLET}', '${displayAmount}')" style="background:#1f1f1f; border-color:#fff; cursor:pointer;">Base L2</button>
-                    <button type="button" class="btn-dark-sm auth-input" id="net-arb" onclick="setPayNetwork('Arbitrum', '${MASTER_WALLET}', '${displayAmount}')" style="cursor:pointer;">Arbitrum</button>
-                    <button type="button" class="btn-dark-sm auth-input" id="net-eth" onclick="setPayNetwork('Ethereum', '${MASTER_WALLET}', '${displayAmount}')" style="cursor:pointer;">Ethereum</button>
-                </div>
+            <div style="margin-bottom:12px; padding:10px 12px; border:1px solid rgba(96,165,250,.35); background:rgba(30,58,138,.13); border-radius:10px; color:#dbeafe; font-size:12px; line-height:1.5;">
+                ${t('payWalletInstruction')}
             </div>
 
             <div style="background:#0a0a0a; border:1px solid var(--border-color); border-radius:12px; padding:12px; margin-bottom:12px; text-align:center;">
                 <div style="font-size:11px; color:#a3a3a3; margin-bottom:2px;">${t('payAmount')}</div>
-                <div style="font-size:20px; color:#fff; font-weight:700; margin-bottom:8px;">$${displayAmount}</div>
-                ${withOnboarding ? `<div style="font-size:11px; color:#b19cd9; margin-bottom:8px;">${t('onboardingSelected')}</div>` : ''}
-                
-                <div style="font-size:11px; color:#a3a3a3; margin-bottom:2px;">${t('payWallet')} (<span id="activePayNet">Base L2</span>):</div>
-                <div style="background:#181818; padding:6px 8px; border-radius:8px; font-family:monospace; font-size:11px; color:#fff; word-break:break-all; margin-bottom:6px;">${MASTER_WALLET}</div>
-                
-                <button type="button" id="copyWalletBtn" class="auth-input" style="margin: 0 auto; font-size: 11px; padding: 6px 12px; width:auto; cursor:pointer;" onclick="copyWalletAddress('${MASTER_WALLET}', this)">${t('payCopy')}</button>
-                <div id="qrcodeContainer" style="display:flex; justify-content:center; align-items:center; margin:10px auto 0 auto; background:#fff; padding:8px; border-radius:8px; width:110px; height:110px; box-sizing:border-box; overflow:hidden;"></div>
+                <div id="paymentAmountValue" style="font-size:20px; color:#fff; font-weight:700; margin-bottom:8px;">${displayAmount} USDC</div>
+                <div id="paymentTestModeNotice" style="display:none; font-size:11px; color:#86efac; margin-bottom:8px;"></div>
+                <div style="font-size:11px; color:#a3a3a3;">${t('payAssetNotice')}</div>
             </div>
 
-            <div class="input-group" style="margin-bottom:12px;">
-                <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">${t('payTxid')}</label>
-                <input type="text" class="auth-input" placeholder="0x..." id="txidInput">
-            </div>
-
-            <button type="button" id="paymentActionBtn" class="btn-modal-primary" onclick="startPlanPayment()" style="width:100%; padding:10px;">${t('payConfirm')} ($${displayAmount})</button>
+            <button type="button" id="paymentActionBtn" class="btn-modal-primary" onclick="startPlanPayment()" style="width:100%; padding:10px;">${t('payWithWallet')} · ${displayAmount} USDC</button>
             <div id="paymentStatusContainer"></div>
         `;
-        setTimeout(() => renderPaymentQR(MASTER_WALLET, displayAmount), 100);
+        restorePendingSubscriptionPayment();
     } else if (type === 'register') {
+        syncEmailCodeCooldown();
         const chosenPlan = localStorage.getItem('selected_plan') || 'Standard';
         const chosenPrice = Number(localStorage.getItem('selected_price') || PLAN_PRICES[chosenPlan] || PLAN_PRICES.Standard);
-        const planDisplayLabel = chosenPlan === 'Standard' ? t.stdName : chosenPlan === 'Pro' ? t.proName : t.premName;
-        const btnText = codeCooldownSeconds > 0 ? `${codeCooldownSeconds}s` : t('auth.sendCode');
+        const planDisplayLabel = chosenPlan === 'Standard' ? t('stdName') : chosenPlan === 'Pro' ? t('proName') : t('premName');
+        const btnText = codeCooldownSeconds > 0 ? formatCodeCooldownLabel(codeCooldownSeconds) : t('auth.sendCode');
         const btnDisabled = codeCooldownSeconds > 0 ? 'disabled' : '';
         const emailState = codeCooldownSeconds > 0 ? `readonly style="opacity: 0.7;" value="${confirmedRegistrationEmail}"` : '';
 
@@ -599,22 +863,138 @@ function openModal(type) {
                     <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">${t('auth.code')}</label>
                     <div style="display: flex; gap: 8px;">
                         <input type="text" class="auth-input" placeholder="${t('auth.codePlaceholder')}" id="regCode" style="flex: 1; margin: 0;" oninput="clearFormError('errorContainer', 'regCode'); clearFieldValidationState('regCode')">
-                        <button type="button" id="sendCodeBtn" onclick="sendVerificationEmailCode()" ${btnDisabled} class="auth-input" style="width: auto; background:#1f1f1f; color:#fff; cursor:pointer; font-weight:600;">${btnText}</button>
+                        <button type="button" id="sendCodeBtn" onclick="sendVerificationEmailCode()" ${btnDisabled} class="auth-input ${codeCooldownSeconds > 0 ? 'btn-cooldown' : ''}" style="width: auto; background:#1f1f1f; color:#fff; cursor:pointer; font-weight:600;">${btnText}</button>
                     </div>
                 </div>
                 
                 <button type="submit" class="btn-modal-primary" style="width:100%; padding:10px;">${t('auth.register')}</button>
+                <button type="button" onclick="dismissPendingRegistration()" style="width:100%; margin-top:8px; padding:5px; border:0; background:transparent; color:#a3a3a3; cursor:pointer; font-size:12px;">${t('auth.alreadyRegistered')}</button>
                 <div id="errorContainer" style="margin-top:10px;"></div>
             </form>
         `;
     }
 }
 
+function getEmailCodeCooldownRemaining() {
+    const until = Number(sessionStorage.getItem('ax_email_code_cooldown_until') || 0);
+    return until > Date.now() ? Math.ceil((until - Date.now()) / 1000) : 0;
+}
+
+function formatCodeCooldownLabel(seconds) {
+    return t('auth.resendInSeconds').replace('{seconds}', String(Math.max(0, seconds)));
+}
+
+function applyEmailCodeCooldownUi() {
+    const button = document.getElementById('sendCodeBtn');
+    const emailInput = document.getElementById('regEmail');
+    if (codeCooldownSeconds <= 0) {
+        if (button) {
+            button.disabled = false;
+            button.classList.remove('btn-loading', 'btn-cooldown');
+            button.textContent = t('auth.sendCode');
+        }
+        if (emailInput) {
+            emailInput.readOnly = false;
+            emailInput.style.opacity = '1';
+        }
+        return;
+    }
+    if (button) {
+        button.disabled = true;
+        button.classList.remove('btn-loading');
+        button.classList.add('btn-cooldown');
+        button.textContent = formatCodeCooldownLabel(codeCooldownSeconds);
+    }
+    if (emailInput) {
+        emailInput.readOnly = true;
+        emailInput.style.opacity = '0.7';
+    }
+}
+
+function syncEmailCodeCooldown() {
+    codeCooldownSeconds = getEmailCodeCooldownRemaining();
+    if (codeCooldownSeconds <= 0) {
+        sessionStorage.removeItem('ax_email_code_cooldown_until');
+        if (codeCooldownTimer) clearInterval(codeCooldownTimer);
+        codeCooldownTimer = null;
+        applyEmailCodeCooldownUi();
+        return;
+    }
+    applyEmailCodeCooldownUi();
+    if (codeCooldownTimer) return;
+    codeCooldownTimer = setInterval(() => {
+        codeCooldownSeconds = getEmailCodeCooldownRemaining();
+        if (codeCooldownSeconds <= 0) {
+            sessionStorage.removeItem('ax_email_code_cooldown_until');
+            clearInterval(codeCooldownTimer);
+            codeCooldownTimer = null;
+        }
+        applyEmailCodeCooldownUi();
+    }, 1000);
+}
+
+function startEmailCodeCooldown(email) {
+    confirmedRegistrationEmail = email;
+    sessionStorage.setItem('ax_registration_email', email);
+    sessionStorage.setItem('ax_email_code_cooldown_until', String(Date.now() + 60_000));
+    if (codeCooldownTimer) clearInterval(codeCooldownTimer);
+    codeCooldownTimer = null;
+    syncEmailCodeCooldown();
+}
+
+function getPasswordResetCooldownRemaining() {
+    const until = Number(sessionStorage.getItem('ax_password_reset_cooldown_until') || 0);
+    return until > Date.now() ? Math.ceil((until - Date.now()) / 1000) : 0;
+}
+
+function applyPasswordResetCooldownUi() {
+    const button = document.getElementById('sendResetCodeBtn');
+    if (!button) return;
+    if (passwordResetCooldownSeconds <= 0) {
+        button.disabled = false;
+        button.classList.remove('btn-loading', 'btn-cooldown');
+        button.textContent = t('auth.sendResetCode');
+        return;
+    }
+    button.disabled = true;
+    button.classList.remove('btn-loading');
+    button.classList.add('btn-cooldown');
+    button.textContent = formatCodeCooldownLabel(passwordResetCooldownSeconds);
+}
+
+function syncPasswordResetCooldown() {
+    passwordResetCooldownSeconds = getPasswordResetCooldownRemaining();
+    if (passwordResetCooldownSeconds <= 0) {
+        sessionStorage.removeItem('ax_password_reset_cooldown_until');
+        if (passwordResetCooldownTimer) clearInterval(passwordResetCooldownTimer);
+        passwordResetCooldownTimer = null;
+        applyPasswordResetCooldownUi();
+        return;
+    }
+    applyPasswordResetCooldownUi();
+    if (passwordResetCooldownTimer) return;
+    passwordResetCooldownTimer = setInterval(() => {
+        passwordResetCooldownSeconds = getPasswordResetCooldownRemaining();
+        if (passwordResetCooldownSeconds <= 0) {
+            sessionStorage.removeItem('ax_password_reset_cooldown_until');
+            clearInterval(passwordResetCooldownTimer);
+            passwordResetCooldownTimer = null;
+        }
+        applyPasswordResetCooldownUi();
+    }, 1000);
+}
+
+function startPasswordResetCooldown() {
+    sessionStorage.setItem('ax_password_reset_cooldown_until', String(Date.now() + 60_000));
+    if (passwordResetCooldownTimer) clearInterval(passwordResetCooldownTimer);
+    passwordResetCooldownTimer = null;
+    syncPasswordResetCooldown();
+}
+
 async function sendVerificationEmailCode() {
-    if (codeCooldownSeconds > 0) return;
+    if (getEmailCodeCooldownRemaining() > 0) return;
     const emailInput = document.getElementById('regEmail');
     const email = emailInput.value.trim();
-    const err = document.getElementById('errorContainer');
     const btn = document.getElementById('sendCodeBtn');
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -625,8 +1005,7 @@ async function sendVerificationEmailCode() {
 
     emailInput.readOnly = true;
     emailInput.style.opacity = '0.7';
-    confirmedRegistrationEmail = email;
-    setButtonLoading(btn, true, t('auth.sendCode'));
+    setButtonLoading(btn, true, t('auth.codeSending'));
 
     try {
         const response = await fetch('/api/send-code', {
@@ -639,38 +1018,79 @@ async function sendVerificationEmailCode() {
         }
         setFormError('errorContainer', t('auth.codeSent'), 'success');
         showNotification(t('auth.codeSent'));
+        setButtonLoading(btn, false, t('auth.sendCode'));
+        startEmailCodeCooldown(email);
     } catch (e) {
         setFormError('errorContainer', t('errors.networkError'));
         showNotification(t('errors.networkError'), 'error');
+        setButtonLoading(btn, false, t('auth.sendCode'));
+        emailInput.readOnly = false;
+        emailInput.style.opacity = '1';
     }
-
-    codeCooldownSeconds = 60;
-    btn.innerText = `${codeCooldownSeconds}s`;
-
-    codeCooldownTimer = setInterval(() => {
-        codeCooldownSeconds--;
-        const currentBtn = document.getElementById('sendCodeBtn');
-        if (codeCooldownSeconds <= 0) {
-            clearInterval(codeCooldownTimer);
-            if (currentBtn) {
-                currentBtn.innerText = t('auth.sendCode');
-                currentBtn.disabled = false;
-                currentBtn.classList.remove('btn-loading');
-            }
-            const currentEmailInput = document.getElementById('regEmail');
-            if (currentEmailInput) {
-                currentEmailInput.readOnly = false;
-                currentEmailInput.style.opacity = '1';
-            }
-        } else if (currentBtn) {
-            currentBtn.innerText = `${codeCooldownSeconds}s`;
-        }
-    }, 1000);
 }
 
-function setPayNetwork(netName, address, amount) {
-    document.getElementById('activePayNet').innerText = netName;
-    renderPaymentQR(address, amount);
+async function requestPasswordResetCode() {
+    if (getPasswordResetCooldownRemaining() > 0) return;
+    const email = document.getElementById('resetEmail')?.value.trim() || '';
+    const button = document.getElementById('sendResetCodeBtn');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        setFormError('resetErrorContainer', t('errors.invalidEmail'), 'error', 'resetEmail');
+        return;
+    }
+    setButtonLoading(button, true, t('auth.codeSending'));
+    try {
+        const response = await fetch('/api/password-reset/request', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email }),
+        });
+        if (!response.ok) throw new Error('reset_code_request_failed');
+        setFormError('resetErrorContainer', t('auth.resetCodeSent'), 'success');
+        startPasswordResetCooldown();
+    } catch (_) {
+        setFormError('resetErrorContainer', t('errors.networkError'));
+        setButtonLoading(button, false, t('auth.sendResetCode'));
+    }
+}
+
+async function confirmPasswordReset() {
+    const email = document.getElementById('resetEmail')?.value.trim() || '';
+    const code = document.getElementById('resetCode')?.value.trim() || '';
+    const password = document.getElementById('resetPass')?.value.trim() || '';
+    const button = document.querySelector('#modalContainer .btn-modal-primary');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        setFormError('resetErrorContainer', t('errors.invalidEmail'), 'error', 'resetEmail');
+        return;
+    }
+    if (!/^\d{6}$/.test(code)) {
+        setFormError('resetErrorContainer', t('auth.invalidResetCode'), 'error', 'resetCode');
+        return;
+    }
+    if (password.length < 12) {
+        setFormError('resetErrorContainer', t('errors.registrationPasswordTooShort'), 'error', 'resetPass');
+        return;
+    }
+    setButtonLoading(button, true, t('auth.resetSubmit'));
+    try {
+        const response = await fetch('/api/password-reset/confirm', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, code, password }),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            setFormError('resetErrorContainer', translateBackendDetail(data.detail, 'auth.invalidResetCode'));
+            return;
+        }
+        sessionStorage.removeItem('ax_password_reset_cooldown_until');
+        setFormError('resetErrorContainer', t('auth.passwordResetSuccess'), 'success');
+        showNotification(t('auth.passwordResetSuccess'));
+        setTimeout(() => openModal('login'), 1100);
+    } catch (_) {
+        setFormError('resetErrorContainer', t('errors.networkError'));
+    } finally {
+        setButtonLoading(button, false, t('auth.resetSubmit'));
+    }
 }
 
 function scrollToFeatures() {
@@ -680,19 +1100,384 @@ function scrollToFeatures() {
     }
 }
 
-function renderPaymentQR(walletAddress, displayAmount) {
-    const qrEl = document.getElementById('qrcodeContainer');
-    if (qrEl && window.qrcode) {
-        try {
-            qrEl.innerHTML = '';
-            const qr = qrcode(0, 'M');
-            qr.addData(`ethereum:${walletAddress}?value=${displayAmount}`);
-            qr.make();
-            qrEl.innerHTML = qr.createSvgTag({cellSize: 4, margin: 1});
-            const svg = qrEl.querySelector('svg');
-            if (svg) { svg.style.width = '100%'; svg.style.height = '100%'; svg.style.display = 'block'; }
-        } catch(e) {}
+// --- Продвинутые интерактивные анимации в стиле Huly.io ---
+
+/**
+ * Инициализация эффекта свечения кнопок за курсором
+ * Оптимизированный обработчик без утечек памяти
+ */
+function initButtonGlowEffect() {
+    const glowButtons = document.querySelectorAll('.glow-button-target');
+    
+    glowButtons.forEach(button => {
+        const handleMouseMove = (e) => {
+            const rect = button.getBoundingClientRect();
+            const x = ((e.clientX - rect.left) / rect.width) * 100;
+            const y = ((e.clientY - rect.top) / rect.height) * 100;
+            
+            button.style.setProperty('--mouse-x', `${x}%`);
+            button.style.setProperty('--mouse-y', `${y}%`);
+        };
+        
+        const handleMouseLeave = () => {
+            button.style.removeProperty('--mouse-x');
+            button.style.removeProperty('--mouse-y');
+        };
+        
+        // Используем passive listeners для лучшей производительности
+        button.addEventListener('mousemove', handleMouseMove, { passive: true });
+        button.addEventListener('mouseleave', handleMouseLeave, { passive: true });
+    });
+}
+
+/**
+ * Инициализация интерактивных карточек с эффектами 3D-tilt и Bento Box Border Glow
+ */
+function initFeatureCardsInteraction() {
+    const cards = document.querySelectorAll('.feature-card-placeholder');
+    const grid = document.querySelector('.features-placeholder-grid');
+    
+    if (!grid || cards.length === 0) return;
+    
+    // Глобальный обработчик для Border Glow эффекта
+    const handleGridMouseMove = (e) => {
+        const gridRect = grid.getBoundingClientRect();
+        
+        cards.forEach(card => {
+            const cardRect = card.getBoundingClientRect();
+            const cardCenterX = cardRect.left + cardRect.width / 2;
+            const cardCenterY = cardRect.top + cardRect.height / 2;
+            
+            const deltaX = e.clientX - cardCenterX;
+            const deltaY = e.clientY - cardCenterY;
+            const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+            
+            // Определяем, с какой стороны подсвечивать границу
+            const angle = Math.atan2(deltaY, deltaX);
+            const glowOpacity = Math.max(0, 1 - distance / 400);
+            
+            // Применяем градиент на границу
+            if (glowOpacity > 0.05) {
+                card.style.borderImage = `linear-gradient(${angle}rad, rgba(139, 92, 246, ${glowOpacity * 0.8}), rgba(168, 85, 247, ${glowOpacity * 0.4}), transparent 50%) 1`;
+            } else {
+                card.style.borderImage = '';
+            }
+        });
+    };
+    
+    const handleGridMouseLeave = () => {
+        cards.forEach(card => {
+            card.style.borderImage = '';
+        });
+    };
+    
+    // 3D tilt эффект для каждой карточки
+    cards.forEach(card => {
+        const handleCardMouseMove = (e) => {
+            const rect = card.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            const centerX = rect.width / 2;
+            const centerY = rect.height / 2;
+            
+            // Вычисляем углы поворота (ограничиваем для плавности)
+            const rotateX = ((y - centerY) / centerY) * -8;
+            const rotateY = ((x - centerX) / centerX) * 8;
+            
+            card.style.transform = `perspective(1000px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) translateY(-2px)`;
+        };
+        
+        const handleCardMouseLeave = () => {
+            card.style.transform = '';
+        };
+        
+        card.addEventListener('mousemove', handleCardMouseMove, { passive: true });
+        card.addEventListener('mouseleave', handleCardMouseLeave, { passive: true });
+    });
+    
+    // Привязываем Border Glow к сетке
+    grid.addEventListener('mousemove', handleGridMouseMove, { passive: true });
+    grid.addEventListener('mouseleave', handleGridMouseLeave, { passive: true });
+}
+
+const ROUTE_LAB_ROUTES = {
+    swap: { from: 'ETH', to: 'USDC', statusKey: 'routeLabSwapFlow' },
+    bridge: { from: 'Base', to: 'Arbitrum', statusKey: 'routeLabBridgeFlow' },
+    defi: { from: 'USDC', to: 'Aave', statusKey: 'routeLabDefiFlow' }
+};
+
+function updateRouteLab(mode) {
+    const card = document.getElementById('route-lab-card');
+    if (!card) return;
+    const activeButton = card.querySelector('.route-lab__tabs button.active');
+    const selectedMode = mode || activeButton?.dataset.routeMode || 'swap';
+    const route = ROUTE_LAB_ROUTES[selectedMode] || ROUTE_LAB_ROUTES.swap;
+    const from = document.getElementById('route-lab-from');
+    const to = document.getElementById('route-lab-to');
+    const status = document.getElementById('route-lab-status');
+    if (from) from.textContent = route.from;
+    if (to) to.textContent = route.to;
+    if (status) status.textContent = t(route.statusKey);
+    card.dataset.routeMode = selectedMode;
+}
+
+function initRouteLab() {
+    const card = document.getElementById('route-lab-card');
+    if (!card || card.dataset.routeReady === 'true') return;
+    card.dataset.routeReady = 'true';
+    card.querySelectorAll('.route-lab__tabs button').forEach(button => {
+        button.addEventListener('click', () => {
+            card.querySelectorAll('.route-lab__tabs button').forEach(item => {
+                const selected = item === button;
+                item.classList.toggle('active', selected);
+                item.setAttribute('aria-pressed', selected ? 'true' : 'false');
+            });
+            card.classList.remove('route-changing');
+            void card.offsetWidth;
+            card.classList.add('route-changing');
+            updateRouteLab(button.dataset.routeMode);
+            window.setTimeout(() => card.classList.remove('route-changing'), 320);
+        });
+    });
+    updateRouteLab();
+}
+
+function getSafeStartSteps() {
+    const steps = translations[getActiveLang()]?.safeStartSteps;
+    return Array.isArray(steps) ? steps : [];
+}
+
+function renderSafeStart(nextStep = activeSafeStartStep) {
+    const panel = document.getElementById('safe-start-panel');
+    const steps = getSafeStartSteps();
+    if (!panel || !steps.length) return;
+
+    document.getElementById('safe-stepper')?.setAttribute('aria-label', t('safeStartAria'));
+
+    activeSafeStartStep = Math.max(0, Math.min(Number(nextStep) || 0, steps.length - 1));
+    const step = steps[activeSafeStartStep];
+    const byId = (id) => document.getElementById(id);
+    const setText = (id, value) => {
+        const element = byId(id);
+        if (element) element.textContent = value || '';
+    };
+
+    setText('safe-start-current', String(activeSafeStartStep + 1).padStart(2, '0'));
+    setText('safe-shot-number', String(activeSafeStartStep + 1).padStart(2, '0'));
+    setText('safe-shot-title', step.title);
+    setText('safe-shot-desc', step.description);
+    setText('safe-shot-brow', step.screenEyebrow);
+    setText('safe-shot-screen-title', step.screenTitle);
+    setText('safe-shot-screen-desc', step.screenDescription);
+    setText('safe-shot-row-1', step.rows?.[0]);
+    setText('safe-shot-row-2', step.rows?.[1]);
+    setText('safe-shot-row-3', step.rows?.[2]);
+    setText('safe-shot-status', step.status);
+
+    const list = byId('safe-shot-list');
+    if (list) {
+        list.replaceChildren(...(step.points || []).map(point => {
+            const item = document.createElement('li');
+            const marker = document.createElement('i');
+            const content = document.createElement('span');
+            content.textContent = point;
+            item.append(marker, content);
+            return item;
+        }));
     }
+
+    document.querySelectorAll('.safe-step').forEach((button, index) => {
+        const selected = index === activeSafeStartStep;
+        button.classList.toggle('active', selected);
+        button.setAttribute('aria-selected', selected ? 'true' : 'false');
+        button.tabIndex = selected ? 0 : -1;
+    });
+
+    const previous = byId('safe-step-prev');
+    const following = byId('safe-step-next');
+    if (previous) {
+        previous.disabled = activeSafeStartStep === 0;
+        previous.textContent = t('safeStartPrevious');
+    }
+    if (following) {
+        following.textContent = activeSafeStartStep === steps.length - 1 ? t('safeStartFinish') : t('safeStartNext');
+    }
+
+    panel.classList.remove('is-switching');
+    void panel.offsetWidth;
+    panel.classList.add('is-switching');
+}
+
+function initSafeStart() {
+    const stepper = document.getElementById('safe-stepper');
+    if (!stepper || stepper.dataset.ready === 'true') return;
+    stepper.dataset.ready = 'true';
+    stepper.querySelectorAll('.safe-step').forEach(button => {
+        button.addEventListener('click', () => renderSafeStart(Number(button.dataset.safeStep)));
+    });
+    document.getElementById('safe-step-prev')?.addEventListener('click', () => renderSafeStart(activeSafeStartStep - 1));
+    document.getElementById('safe-step-next')?.addEventListener('click', () => {
+        const steps = getSafeStartSteps();
+        renderSafeStart(activeSafeStartStep === steps.length - 1 ? 0 : activeSafeStartStep + 1);
+    });
+    stepper.setAttribute('aria-label', t('safeStartAria'));
+    renderSafeStart(activeSafeStartStep);
+}
+
+/**
+ * React Bits-inspired progressive effects for the new AIRDROP-X surface.
+ * The content remains fully usable when motion is disabled or unsupported.
+ */
+function initAirdropXVisualSystem() {
+    initPixelSnowBackdrop();
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const supportsHover = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+    const cards = document.querySelectorAll('.border-glow-card');
+    cards.forEach(card => {
+        card.addEventListener('pointermove', event => {
+            const rect = card.getBoundingClientRect();
+            card.style.setProperty('--card-x', `${event.clientX - rect.left}px`);
+            card.style.setProperty('--card-y', `${event.clientY - rect.top}px`);
+        }, { passive: true });
+    });
+
+    if (supportsHover && !reducedMotion) {
+        document.querySelectorAll('.feature-card, .showcase-card, .pricing-card').forEach(card => {
+            card.classList.add('ax-motion-card');
+            card.addEventListener('pointermove', event => {
+                const rect = card.getBoundingClientRect();
+                const horizontal = (event.clientX - rect.left) / rect.width - 0.5;
+                const vertical = (event.clientY - rect.top) / rect.height - 0.5;
+                card.style.setProperty('--tilt-x', `${(-vertical * 4.5).toFixed(2)}deg`);
+                card.style.setProperty('--tilt-y', `${(horizontal * 5.5).toFixed(2)}deg`);
+            }, { passive: true });
+            card.addEventListener('pointerleave', () => {
+                card.style.setProperty('--tilt-x', '0deg');
+                card.style.setProperty('--tilt-y', '0deg');
+            }, { passive: true });
+        });
+    }
+
+    if (!('IntersectionObserver' in window) || reducedMotion) {
+        document.documentElement.classList.add('ax-reveal-ready');
+        return;
+    }
+
+    const targets = document.querySelectorAll('.feature-card, .showcase-card, .interface-preview, .status-wrap');
+    targets.forEach(target => target.classList.add('ax-reveal'));
+
+    const observer = new IntersectionObserver(entries => {
+        entries.forEach(entry => {
+            if (!entry.isIntersecting) return;
+            entry.target.classList.add('ax-reveal--visible');
+            observer.unobserve(entry.target);
+        });
+    }, { threshold: 0.12, rootMargin: '0px 0px -40px' });
+
+    targets.forEach(target => observer.observe(target));
+    document.documentElement.classList.add('ax-reveal-ready');
+}
+
+/**
+ * Lightweight, original ambient particle backdrop. It stays decorative only:
+ * no network requests, no pointer handling and a static fallback for reduced motion.
+ */
+function initPixelSnowBackdrop() {
+    const root = document.getElementById('pixel-snow-root');
+    if (!root || root.dataset.pixelSnowReady === 'true') return;
+    root.dataset.pixelSnowReady = 'true';
+
+    const canvas = document.createElement('canvas');
+    canvas.className = 'pixel-snow-canvas';
+    canvas.setAttribute('aria-hidden', 'true');
+    root.replaceChildren(canvas);
+
+    const context = canvas.getContext('2d', { alpha: true });
+    if (!context) return;
+
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const density = 0.65;
+    const brightness = 0.4;
+    const direction = 145 * (Math.PI / 180);
+    const driftX = Math.cos(direction) * 0.23;
+    const driftY = Math.sin(direction) * 0.23;
+    let particles = [];
+    let width = 0;
+    let height = 0;
+    let previousTime = performance.now();
+    let frameId = null;
+
+    const createParticle = (randomY = true) => {
+        const depth = 0.22 + Math.random() * 0.78;
+        return {
+            x: Math.random() * width,
+            y: randomY ? Math.random() * height : -12,
+            depth,
+            radius: 0.45 + depth * 1.55,
+            speed: (0.18 + depth * 0.52) * 0.7,
+            phase: Math.random() * Math.PI * 2
+        };
+    };
+
+    const resize = () => {
+        const ratio = Math.min(window.devicePixelRatio || 1, 1.5);
+        width = Math.max(window.innerWidth, 1);
+        height = Math.max(window.innerHeight, 1);
+        canvas.width = Math.round(width * ratio);
+        canvas.height = Math.round(height * ratio);
+        canvas.style.width = `${width}px`;
+        canvas.style.height = `${height}px`;
+        context.setTransform(ratio, 0, 0, ratio, 0, 0);
+        const count = Math.min(190, Math.max(50, Math.round((width * height / 13000) * density)));
+        particles = Array.from({ length: count }, () => createParticle());
+    };
+
+    const paint = (now) => {
+        const delta = Math.min(32, now - previousTime);
+        previousTime = now;
+        context.clearRect(0, 0, width, height);
+
+        particles.forEach(particle => {
+            if (!reducedMotion) {
+                particle.x += driftX * particle.speed * delta;
+                particle.y += driftY * particle.speed * delta;
+                particle.phase += delta * 0.0007;
+                if (particle.y > height + 12 || particle.x < -12 || particle.x > width + 12) {
+                    Object.assign(particle, createParticle(false), { x: Math.random() * width });
+                }
+            }
+
+            const twinkle = 0.78 + Math.sin(particle.phase) * 0.22;
+            const alpha = (0.06 + particle.depth * 0.20) * brightness * twinkle;
+            context.beginPath();
+            context.arc(particle.x, particle.y, particle.radius, 0, Math.PI * 2);
+            context.fillStyle = `rgba(214, 198, 255, ${alpha.toFixed(3)})`;
+            context.fill();
+        });
+
+        if (!reducedMotion && !document.hidden) frameId = window.requestAnimationFrame(paint);
+    };
+
+    const resume = () => {
+        if (reducedMotion || !document.hidden || frameId !== null) return;
+        previousTime = performance.now();
+        frameId = window.requestAnimationFrame(paint);
+    };
+
+    const pause = () => {
+        if (!document.hidden || frameId === null) return;
+        window.cancelAnimationFrame(frameId);
+        frameId = null;
+    };
+
+    resize();
+    paint(previousTime);
+    window.addEventListener('resize', resize, { passive: true });
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden) pause();
+        else resume();
+    });
 }
 
 function copyWalletAddress(address, btn) {
@@ -702,51 +1487,266 @@ function copyWalletAddress(address, btn) {
     setTimeout(() => { btn.innerHTML = originalText; }, 2000);
 }
 
-async function startPlanPayment() {
-    const chosenPlan = localStorage.getItem('selected_plan') || 'Standard';
-    const basePrice = PLAN_PRICES[chosenPlan] || PLAN_PRICES.Standard;
-    const onboarding = localStorage.getItem('selected_onboarding') === 'true';
+function setPaymentStatus(message, type = 'info') {
     const status = document.getElementById('paymentStatusContainer');
-    const txid = document.getElementById('txidInput').value.trim();
+    if (!status) return;
+    const color = type === 'error' ? '#fca5a5' : type === 'success' ? '#86efac' : '#c4b5fd';
+    const line = document.createElement('div');
+    line.style.cssText = `color:${color}; font-size:12px; line-height:1.5; margin-top:10px;`;
+    line.textContent = String(message || '');
+    status.replaceChildren(line);
+}
 
-    if (!txid) {
-        status.innerHTML = `<div style="color:#ef4444; font-size:12px; margin-top:8px;">${t('errors.txidRequired')}</div>`;
+function getPendingSubscriptionPayment() {
+    try {
+        const pending = JSON.parse(sessionStorage.getItem('ax_subscription_payment_pending') || 'null');
+        if (pending?.client_session_id === clientSessionId && pending.payment_session_id && /^0x[0-9a-fA-F]{64}$/.test(pending.txid || '')) {
+            return pending;
+        }
+    } catch (_) {}
+    return null;
+}
+
+function setPendingSubscriptionPayment(pending) {
+    sessionStorage.setItem('ax_subscription_payment_pending', JSON.stringify(pending));
+}
+
+function clearPendingSubscriptionPayment() {
+    sessionStorage.removeItem('ax_subscription_payment_pending');
+}
+
+function parseUsdcAtomic(value) {
+    const normalized = String(value || '').trim();
+    if (!/^\d+(?:\.\d{1,6})?$/.test(normalized)) return null;
+    const [whole, fraction = ''] = normalized.split('.');
+    const atomic = BigInt(whole) * 1000000n + BigInt((fraction + '000000').slice(0, 6));
+    return atomic > 0n ? atomic : null;
+}
+
+function buildErc20TransferData(receiver, amountAtomic) {
+    if (!/^0x[0-9a-fA-F]{40}$/.test(receiver || '') || !amountAtomic || amountAtomic <= 0n) return null;
+    const receiverWord = receiver.slice(2).toLowerCase().padStart(64, '0');
+    const amountWord = amountAtomic.toString(16).padStart(64, '0');
+    return `0xa9059cbb${receiverWord}${amountWord}`;
+}
+
+function restorePendingSubscriptionPayment() {
+    const pending = getPendingSubscriptionPayment();
+    if (!pending) return;
+    setPaymentStatus(t('paySubmitted'), 'info');
+    const button = document.getElementById('paymentActionBtn');
+    restorePaymentActionButton(button, t('payCheckStatus'));
+}
+
+function restorePaymentActionButton(button, label) {
+    if (!button) return;
+    button.classList.remove('btn-loading');
+    button.disabled = false;
+    button.dataset.defaultText = label;
+    button.textContent = label;
+}
+
+async function confirmSubscriptionPayment() {
+    const pending = getPendingSubscriptionPayment();
+    if (!pending) return false;
+    const button = document.getElementById('paymentActionBtn');
+    try {
+        setButtonLoading(button, true, t('payConfirming'));
+        setPaymentStatus(t('payConfirming'), 'info');
+        const response = await fetch('/api/payment/confirm', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(pending),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            if (data.detail === 'Payment session not found') {
+                return await recoverTestnetSubscriptionPayment(pending);
+            }
+            const isWaitingForConfirmation = data.detail === 'USDC payment is waiting for Base confirmation';
+            setPaymentStatus(
+                isWaitingForConfirmation ? t('payWaitingConfirmation') : translateBackendDetail(data.detail, 'errors.paymentFailed'),
+                isWaitingForConfirmation ? 'info' : 'error',
+            );
+            return false;
+        }
+        completeSubscriptionPayment(data);
+        return true;
+    } catch (_) {
+        setPaymentStatus(t('errors.networkError'), 'error');
+        return false;
+    } finally {
+        if (!paymentUnlocked) restorePaymentActionButton(button, t('payCheckStatus'));
+    }
+}
+
+function completeSubscriptionPayment(data) {
+    storePaymentAccess(data);
+    clearPendingSubscriptionPayment();
+    setPaymentStatus(t('payConfirmed'), 'success');
+    showNotification(t('payConfirmed'));
+    setTimeout(() => openModal('register'), 800);
+}
+
+function storePaymentAccess(data) {
+    if (!data?.payment_token) return false;
+    localStorage.removeItem(getPendingRegistrationDismissKey());
+    paymentUnlocked = true;
+    paymentAccessToken = data.payment_token;
+    sessionStorage.setItem('ax_payment_token', paymentAccessToken);
+    sessionStorage.setItem('ax_paid_session_id', clientSessionId);
+    updateRegistrationContinueAction();
+    return true;
+}
+
+async function restorePaidRegistrationAccess() {
+    try {
+        const response = await fetch('/api/payment/resume-registration', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ client_session_id: clientSessionId }),
+        });
+        if (!response.ok) return false;
+        const data = await response.json();
+        return storePaymentAccess(data);
+    } catch (_) {
+        return false;
+    }
+}
+
+async function recoverTestnetSubscriptionPayment(pending) {
+    try {
+        setPaymentStatus(t('payConfirming'), 'info');
+        const response = await fetch('/api/payment/recover', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                txid: pending.txid,
+                client_session_id: clientSessionId,
+                plan: localStorage.getItem('selected_plan') || 'Standard',
+                onboarding: false,
+            }),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            const isWaitingForConfirmation = data.detail === 'USDC payment is waiting for Base confirmation';
+            setPaymentStatus(
+                isWaitingForConfirmation ? t('payWaitingConfirmation') : translateBackendDetail(data.detail, 'errors.paymentFailed'),
+                isWaitingForConfirmation ? 'info' : 'error',
+            );
+            return false;
+        }
+        completeSubscriptionPayment(data);
+        return true;
+    } catch (_) {
+        setPaymentStatus(t('errors.networkError'), 'error');
+        return false;
+    }
+}
+
+async function startPlanPayment() {
+    if (getPendingSubscriptionPayment()) {
+        await confirmSubscriptionPayment();
         return;
     }
+    const locale = translations[getActiveLang()];
+    const chosenPlan = localStorage.getItem('selected_plan') || 'Standard';
+    const basePrice = PLAN_PRICES[chosenPlan] || PLAN_PRICES.Standard;
+    const button = document.getElementById('paymentActionBtn');
 
     try {
+        setButtonLoading(button, true, locale.payPreparing);
         const createRes = await fetch('/api/payment/create-session', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ plan: chosenPlan, amount: basePrice, onboarding, client_session_id: clientSessionId })
+            body: JSON.stringify({ plan: chosenPlan, amount: basePrice, onboarding: false, client_session_id: clientSessionId }),
         });
         const createData = await createRes.json();
         if (!createRes.ok) {
-            status.innerHTML = `<div style="color:#ef4444; font-size:12px; margin-top:8px;">${translateBackendDetail(createData.detail, 'errors.paymentFailed')}</div>`;
+            setPaymentStatus(translateBackendDetail(createData.detail, 'errors.paymentFailed'), 'error');
             return;
         }
-        
-        const confirmRes = await fetch('/api/payment/confirm', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ payment_session_id: createData.payment_session_id, client_session_id: clientSessionId, txid: txid })
+
+        const payment = createData.payment;
+        updateSubscriptionPaymentSummary(payment, Boolean(createData.is_testnet));
+        const provider = window.ethereum;
+        if (!provider?.request || !payment) throw new Error('payment_wallet_unavailable');
+        let accounts = await provider.request({ method: 'eth_accounts' });
+        if (!Array.isArray(accounts) || !accounts[0]) accounts = await provider.request({ method: 'eth_requestAccounts' });
+        const from = accounts?.[0];
+        if (!/^0x[0-9a-fA-F]{40}$/.test(from || '')) throw new Error('payment_wallet_unavailable');
+        if (Number(payment.chain_id) === 84532) {
+            await switchToBaseSepolia(provider);
+        } else if (Number(payment.chain_id) === 8453) {
+            await switchToBaseMainnet(provider);
+        } else {
+            throw new Error('payment_network_unavailable');
+        }
+        await requestPaymentAssetVisibility(provider, payment);
+
+        const amountAtomic = parseUsdcAtomic(payment.amount);
+        const data = buildErc20TransferData(payment.receiver, amountAtomic);
+        if (!data || !/^0x[0-9a-fA-F]{40}$/.test(payment.contract || '')) throw new Error('payment_details_invalid');
+        setButtonLoading(button, true, locale.payWalletSigning);
+        setPaymentStatus(locale.payWalletSigning, 'info');
+        const txid = await provider.request({
+            method: 'eth_sendTransaction',
+            params: [{ from, to: payment.contract, data, value: '0x0' }],
         });
-        const confirmData = await confirmRes.json();
-
-        if (!confirmRes.ok) {
-            status.innerHTML = `<div style="color:#ef4444; font-size:12px; margin-top:8px;">${translateBackendDetail(confirmData.detail, 'errors.paymentFailed')}</div>`;
-            return;
+        setPendingSubscriptionPayment({
+            payment_session_id: createData.payment_session_id,
+            client_session_id: clientSessionId,
+            txid,
+        });
+        setPaymentStatus(locale.paySubmitted, 'info');
+        await confirmSubscriptionPayment();
+    } catch (error) {
+        const rejected = error?.code === 4001 || error?.code === 'ACTION_REJECTED';
+        const message = rejected
+            ? locale.payWalletRejected
+            : (String(error?.message || '').includes('payment_wallet_unavailable') ? locale.payWalletUnavailable : locale.errors.networkError);
+        setPaymentStatus(message, 'error');
+    } finally {
+        if (!paymentUnlocked) {
+            restorePaymentActionButton(
+                button,
+                getPendingSubscriptionPayment() ? locale.payCheckStatus : locale.payWithWallet,
+            );
         }
+    }
+}
 
-        paymentUnlocked = true;
-        paymentAccessToken = confirmData.payment_token;
-        sessionStorage.setItem('ax_payment_token', paymentAccessToken);
-        sessionStorage.setItem('ax_paid_session_id', clientSessionId);
+async function requestPaymentAssetVisibility(provider, payment) {
+    // This only asks the wallet to display the verified USDC token. It cannot
+    // move funds and a wallet may safely decline or ignore the request.
+    try {
+        await provider.request({
+            method: 'wallet_watchAsset',
+            params: {
+                type: 'ERC20',
+                options: {
+                    address: payment.contract,
+                    symbol: payment.asset || 'USDC',
+                    decimals: Number(payment.decimals) || 6,
+                },
+            },
+        });
+    } catch (_) {
+        // Asset visibility is optional and must never block a signed payment.
+    }
+}
 
-        showNotification("OK!");
-        setTimeout(() => openModal('register'), 800);
-    } catch (e) {
-        status.innerHTML = `<div style="color:#ef4444; font-size:12px; margin-top:8px;">${t('errors.networkError')}</div>`;
+function updateSubscriptionPaymentSummary(payment, isTestnet) {
+    const locale = translations[getActiveLang()];
+    const amount = `${payment.amount} ${payment.asset || 'USDC'}`;
+    const amountElement = document.getElementById('paymentAmountValue');
+    const button = document.getElementById('paymentActionBtn');
+    const testModeNotice = document.getElementById('paymentTestModeNotice');
+    if (amountElement) amountElement.textContent = amount;
+    if (button) button.textContent = `${locale.payWithWallet} · ${amount}`;
+    if (testModeNotice) {
+        testModeNotice.textContent = isTestnet ? locale.payTestMode : '';
+        testModeNotice.style.display = isTestnet ? 'block' : 'none';
     }
 }
 
@@ -791,18 +1791,24 @@ async function validateRegister() {
 
     setButtonLoading(submitBtn, true, t('auth.register'));
 
-    const requestData = {
-        username,
-        email,
-        password: pass,
-        code,
-        plan: chosenPlan,
-        payment_token: localStorage.getItem('payment_token') || '',
-        client_session_id: localStorage.getItem('client_session_id') || '',
-        fingerprint: localStorage.getItem('fingerprint') || 'web_client'
-    };
-
     try {
+        // The server owns the payment state. Refresh the one-use token here so
+        // a harmless page/server restart can never make a confirmed payment disappear.
+        const paymentRestored = await restorePaidRegistrationAccess();
+        if (!paymentRestored) {
+            setFormError('errorContainer', t('errors.paymentRegistrationUnavailable'));
+            return;
+        }
+        const requestData = {
+            username,
+            email,
+            password: pass,
+            code,
+            plan: chosenPlan,
+            payment_token: paymentAccessToken,
+            client_session_id: clientSessionId,
+            fingerprint: deviceFingerprint
+        };
         const response = await fetch('/api/register', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -823,6 +1829,8 @@ async function validateRegister() {
         if (typeof clearPaymentAccess === 'function') {
             clearPaymentAccess();
         }
+        sessionStorage.removeItem('ax_registration_email');
+        sessionStorage.removeItem('ax_email_code_cooldown_until');
         setFormError('errorContainer', t('auth.registerSuccess'), 'success');
         showNotification(t('auth.registerSuccess'));
         setTimeout(() => openModal('login'), 1200);
@@ -885,9 +1893,10 @@ async function validateLogin() {
 
 function handleLoginSuccess() {
     isLoggedIn = true;
+    document.documentElement.classList.add('ax-dashboard-active');
     const loginBtn = document.getElementById('login-btn');
     if (loginBtn) loginBtn.style.display = 'none';
-    document.getElementById('authModal').classList.remove('show');
+    hideAllAppModals();
     document.getElementById('main-content').style.display = 'none';
     document.getElementById('dashboard-content').style.display = 'flex';
     const mobileNav = document.getElementById('mobileNavBar');
@@ -907,7 +1916,7 @@ function handleExpiredAuthSession() {
 }
 
 function closeWalletConnectModal() {
-    document.getElementById('walletConnectModal')?.classList.remove('show');
+    hideAppModal('walletConnectModal');
 }
 
 function handleWalletConnectOverlayClick(event) {
@@ -996,7 +2005,7 @@ function openBaseSwapConfirmation(amount, output) {
     document.getElementById('baseSwapConfirmNotice').textContent = locale.baseSwapModalNotice;
     document.getElementById('baseSwapConfirmCancel').textContent = locale.baseSwapModalCancel;
     document.getElementById('baseSwapConfirmProceed').textContent = locale.baseSwapModalProceed;
-    modal.classList.add('show');
+    showAppModal('baseSwapConfirmModal');
     return new Promise((resolve) => {
         baseSwapConfirmationResolver = resolve;
     });
@@ -1022,7 +2031,7 @@ function openBaseTransferConfirmation(amount, recipientAddress, recipientName) {
     document.getElementById('baseSwapConfirmNotice').textContent = locale.directTransferModalNotice;
     document.getElementById('baseSwapConfirmCancel').textContent = locale.baseSwapModalCancel;
     document.getElementById('baseSwapConfirmProceed').textContent = locale.directTransferModalProceed;
-    modal.classList.add('show');
+    showAppModal('baseSwapConfirmModal');
     return new Promise((resolve) => {
         baseSwapConfirmationResolver = resolve;
     });
@@ -1072,7 +2081,7 @@ function openUniversalBridgeConfirmation(quote, approval = false) {
     document.getElementById('baseSwapConfirmProceed').textContent = approval
         ? locale.universalBridgeApprovalProceed
         : locale.universalBridgeModalProceed;
-    modal.classList.add('show');
+    showAppModal('baseSwapConfirmModal');
     return new Promise((resolve) => {
         baseSwapConfirmationResolver = resolve;
     });
@@ -1115,14 +2124,42 @@ function openAaveSupplyConfirmation(quote, approval = false) {
     document.getElementById('baseSwapConfirmProceed').textContent = approval
         ? locale.defiSupplyApprovalProceed
         : locale.defiSupplyProceed;
-    modal.classList.add('show');
+    showAppModal('baseSwapConfirmModal');
+    return new Promise((resolve) => {
+        baseSwapConfirmationResolver = resolve;
+    });
+}
+
+function openAaveWithdrawConfirmation(quote) {
+    const locale = translations[getActiveLang()];
+    const modal = document.getElementById('baseSwapConfirmModal');
+    if (!modal) return Promise.resolve(false);
+    if (baseSwapConfirmationResolver) baseSwapConfirmationResolver(false);
+    const asset = quote?.asset || { symbol: 'USDC' };
+    const pool = String(quote?.pool_address || '');
+    document.getElementById('baseSwapConfirmTitle').textContent = locale.defiWithdrawModalTitle;
+    document.getElementById('baseSwapConfirmNetwork').textContent = locale.defiWithdrawModalNetwork;
+    document.getElementById('baseSwapConfirmPayLabel').textContent = locale.defiWithdrawPay;
+    document.getElementById('baseSwapConfirmPayValue').textContent = `${quote?.amount || ''} a${asset.symbol || 'USDC'}`;
+    document.getElementById('baseSwapConfirmReceiveLabel').textContent = locale.defiWithdrawReceive;
+    document.getElementById('baseSwapConfirmReceiveValue').textContent = `${quote?.amount || ''} ${asset.symbol || 'USDC'}`;
+    setBaseSwapConfirmationDetails([
+        { label: locale.confirmationRouteContract, value: pool },
+        { label: locale.confirmationNetworkFee, value: locale.confirmationNetworkFeeWallet },
+        { label: locale.confirmationWalletCheck, value: locale.confirmationWalletCheckValue },
+    ]);
+    setBaseSwapConfirmationWarning('');
+    document.getElementById('baseSwapConfirmNotice').textContent = locale.defiWithdrawModalNotice;
+    document.getElementById('baseSwapConfirmCancel').textContent = locale.baseSwapModalCancel;
+    document.getElementById('baseSwapConfirmProceed').textContent = locale.defiWithdrawProceed;
+    showAppModal('baseSwapConfirmModal');
     return new Promise((resolve) => {
         baseSwapConfirmationResolver = resolve;
     });
 }
 
 function finishBaseSwapConfirmation(confirmed) {
-    document.getElementById('baseSwapConfirmModal')?.classList.remove('show');
+    hideAppModal('baseSwapConfirmModal');
     const resolve = baseSwapConfirmationResolver;
     baseSwapConfirmationResolver = null;
     if (resolve) resolve(Boolean(confirmed));
@@ -1153,7 +2190,7 @@ function openWalletConnectQr(uri) {
     qr.addData(uri);
     qr.make();
     qrContainer.innerHTML = qr.createSvgTag({ cellSize: 5, margin: 1 });
-    modal.classList.add('show');
+    showAppModal('walletConnectModal');
 }
 
 function switchMenu(element, sectionName) {
@@ -1163,8 +2200,8 @@ function switchMenu(element, sectionName) {
 }
 
 function switchActivityPane(pane) {
-    const allowedPanes = new Set(['swap', 'transfer', 'plan', 'defi', 'quests', 'journal']);
-    localStorage.setItem('ax_activity_pane', allowedPanes.has(pane) ? pane : 'swap');
+    const allowedPanes = new Set(['dex', 'bridges', 'lending', 'journal']);
+    localStorage.setItem('ax_activity_pane', allowedPanes.has(pane) ? pane : 'dex');
     renderDashboardContent('Farming');
 }
 
@@ -1190,22 +2227,96 @@ function selectedEvmWalletAddresses(accounts) {
     });
 }
 
+let walletConfigResolve = null;
+let currentConfiguringAddress = '';
+
+function openWalletConfigModal(address, resolve) {
+    currentConfiguringAddress = address;
+    walletConfigResolve = resolve;
+    
+    const modal = document.getElementById('walletConfigModal');
+    const display = document.getElementById('walletConfigAddressDisplay');
+    const labelInput = document.getElementById('walletConfigLabelInput');
+    const proxyInput = document.getElementById('walletConfigProxyInput');
+    const saveBtn = document.getElementById('walletConfigSaveBtn');
+    
+    if (display) display.textContent = address;
+    if (labelInput) labelInput.value = '';
+    if (proxyInput) proxyInput.value = '';
+    if (saveBtn) saveBtn.disabled = true;
+    
+    if (modal) showAppModal('walletConfigModal');
+}
+
+function validateWalletConfigInputs() {
+    const label = document.getElementById('walletConfigLabelInput')?.value.trim() || '';
+    const proxy = document.getElementById('walletConfigProxyInput')?.value.trim() || '';
+    const saveBtn = document.getElementById('walletConfigSaveBtn');
+    if (saveBtn) {
+        const isValid = label.length > 0 && proxy.length > 0;
+        saveBtn.disabled = !isValid;
+    }
+}
+
+function cancelWalletConfigModal() {
+    const modal = document.getElementById('walletConfigModal');
+    if (modal) hideAppModal('walletConfigModal');
+    
+    const resolve = walletConfigResolve;
+    walletConfigResolve = null;
+    currentConfiguringAddress = '';
+    if (resolve) resolve();
+}
+
+async function saveWalletConfigModal() {
+    const label = document.getElementById('walletConfigLabelInput')?.value.trim() || '';
+    const proxy = document.getElementById('walletConfigProxyInput')?.value.trim() || '';
+    const address = currentConfiguringAddress;
+    const saveBtn = document.getElementById('walletConfigSaveBtn');
+
+    if (!label || !proxy || !address) return;
+    
+    if (saveBtn) setButtonLoading(saveBtn, true, 'Сохранение...');
+
+    try {
+        const username = localStorage.getItem('airdrop_username') || "Robert";
+        const res = await fetch('/api/wallets/add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, wallet_address: address, label, proxy })
+        });
+        const data = await res.json();
+        
+        if (res.ok) {
+            showNotification(translations[currentLang]?.walletAddSuccess || 'Кошелек успешно добавлен');
+            const modal = document.getElementById('walletConfigModal');
+            if (modal) hideAppModal('walletConfigModal');
+            
+            const resolve = walletConfigResolve;
+            walletConfigResolve = null;
+            currentConfiguringAddress = '';
+            if (resolve) resolve();
+        } else {
+            const errText = translateBackendDetail(data.detail);
+            showNotification(errText || 'Ошибка подключения кошелька', 'error');
+        }
+    } catch (e) {
+        showNotification('Ошибка подключения кошелька', 'error');
+    } finally {
+        if (saveBtn) setButtonLoading(saveBtn, false, 'Сохранить');
+    }
+}
+
 async function saveSelectedWalletAccounts(accounts) {
-    const locale = translations[getActiveLang()];
     const addresses = selectedEvmWalletAddresses(accounts);
     if (!addresses.length) return;
-    try {
-        const response = await fetch('/api/wallets/add-batch', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ wallet_addresses: addresses }),
+    
+    for (const address of addresses) {
+        await new Promise((resolve) => {
+            openWalletConfigModal(address, resolve);
         });
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.detail || 'wallet_batch_add_failed');
-        if (data.added > 0) showNotification(locale.walletBatchSaved.replace('{count}', data.added), 'success');
-        if (document.getElementById('walletsListContainer')) await loadWalletsFromDB();
-    } catch (error) {
-        showNotification(translateBackendDetail(error.message) || locale.walletBatchFailed, 'error');
     }
+    if (document.getElementById('walletsListContainer')) await loadWalletsFromDB();
 }
 
 function updateBaseWalletConnectionState(address = sessionStorage.getItem('ax_base_wallet_address') || '') {
@@ -1667,6 +2778,7 @@ async function sendDirectBaseTransfer() {
 
 let activeBaseSwapQuote = null;
 let activeAaveSupplyQuote = null;
+let activeAaveWithdrawQuote = null;
 
 function formatUsdcAmount(rawAmount) {
     try {
@@ -1705,6 +2817,10 @@ async function loadBaseSwapHistory() {
 async function requestBaseSwapQuote() {
     const locale = translations[getActiveLang()];
     const amount = normalizeEthInput(document.getElementById('operationAmount')?.value || document.getElementById('baseSwapAmount')?.value);
+    const requestedSlippage = Number(document.getElementById('dexSlippage')?.value || 0.5);
+    const slippage = Number.isFinite(requestedSlippage) && requestedSlippage >= 0.1 && requestedSlippage <= 1
+        ? requestedSlippage
+        : 0.5;
     const connectedAddress = getActiveBaseWalletAddress();
     const result = document.getElementById('baseSwapResult');
     const button = document.getElementById('baseSwapQuoteButton');
@@ -1732,7 +2848,7 @@ async function requestBaseSwapQuote() {
         setButtonLoading(button, true, locale.baseSwapQuoting);
         const response = await fetch('/api/base-swap/quote', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ wallet_address: connectedAddress, amount, slippage: 0.5 }),
+            body: JSON.stringify({ wallet_address: connectedAddress, amount, slippage }),
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.detail || 'base_swap_quote_failed');
@@ -1941,7 +3057,9 @@ async function loadWalletsFromDB() {
             const isConnectedForActions = isActive && connectedAddress === w.wallet_address.toLowerCase();
             const walletName = escapeHtml(w.label || `${t.walletDefaultName} ${w.id}`);
             const address = escapeHtml(w.wallet_address);
-            const proxyStatus = w.proxy ? t.walletProxyConfigured : t.walletNoProxy;
+            const proxyStatus = w.has_proxy ? t.walletProxyConfigured : t.walletNoProxy;
+            const profileReady = Boolean(w.profile_id && w.profile_status === 'active');
+            const profileStatus = profileReady ? t.walletProfileReady : t.walletProfilePending;
             return `
                 <div style="background: var(--bg-main); border: 1px solid var(--border-color); padding: 14px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; gap:12px;">
                     <div>
@@ -1949,14 +3067,24 @@ async function loadWalletsFromDB() {
                         <div style="color: #d1d5db; font-size: 12px; margin-top:4px; font-family:monospace;">${address}</div>
                         <div style="color: ${isActive ? '#86efac' : 'var(--text-muted)'}; font-size: 12px; margin-top:5px;">${isActive ? (isConnectedForActions ? t.walletSessionActive : t.walletActiveNeedsConnection) : t.walletBaseMonitoring}</div>
                         <div style="color: var(--text-muted); font-size: 12px; margin-top:3px;">${proxyStatus}</div>
+                        <div style="color:${profileReady ? '#86efac' : '#fbbf24'}; font-size:12px; margin-top:3px;">${profileReady ? '✓' : '◌'} ${profileStatus}</div>
                         <div id="walletHealthResult-${w.id}" style="font-size:12px; line-height:1.45; margin-top:7px;"></div>
-                        <div id="walletEditPanel-${w.id}" style="display:none; margin-top:9px; max-width:360px;"><input id="walletEditLabel-${w.id}" value="${walletName}" maxlength="40" class="auth-input" style="font-size:12px; padding:8px 10px;" aria-label="${t.walletEditLabel}"><button type="button" onclick="saveWalletLabel(${w.id})" class="btn-dark-sm" style="margin-top:6px; padding:7px 10px; border-color:#7c3aed;">${t.walletEditSave}</button></div>
+                        <div id="walletEditPanel-${w.id}" style="display:none; margin-top:9px; max-width:390px;">
+                            <label for="walletEditLabel-${w.id}" style="display:block; margin-bottom:4px; color:var(--text-muted); font-size:11px;">${t.walletEditLabel}</label>
+                            <input id="walletEditLabel-${w.id}" value="${walletName}" maxlength="40" class="auth-input" style="font-size:12px; padding:8px 10px;" aria-label="${t.walletEditLabel}">
+                            <label for="walletEditProxy-${w.id}" style="display:block; margin:8px 0 4px; color:var(--text-muted); font-size:11px;">${t.walletEditProxy}</label>
+                            <input id="walletEditProxy-${w.id}" maxlength="512" class="auth-input" style="font-size:12px; padding:8px 10px;" placeholder="${t.walletEditProxyPlaceholder}" aria-describedby="walletEditProxyNote-${w.id}">
+                            <div id="walletEditProxyNote-${w.id}" style="margin-top:4px; color:var(--text-muted); font-size:10px; line-height:1.35;">${t.walletEditProxyNote}</div>
+                            <button type="button" onclick="saveWalletDetails(${w.id})" class="btn-dark-sm" style="margin-top:8px; padding:7px 10px; border-color:#7c3aed;">${t.walletEditSave}</button>
+                        </div>
                     </div>
                     <div style="display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end;">
                         <button type="button" onclick="activateSavedWallet(${w.id}, '${w.wallet_address}')" ${isActive ? 'disabled' : ''} style="background:${isActive ? 'rgba(34,197,94,0.12)' : 'rgba(124,58,237,0.12)'}; color:${isActive ? '#86efac' : '#c4b5fd'}; border:1px solid ${isActive ? 'rgba(34,197,94,0.28)' : 'rgba(124,58,237,0.32)'}; padding:6px 10px; border-radius:8px; font-size:12px; cursor:${isActive ? 'default' : 'pointer'};">${isActive ? t.walletActive : t.walletActivate}</button>
                         <button type="button" onclick="toggleWalletEditor(${w.id})" style="background:rgba(255,255,255,.06); color:#e5e7eb; border:1px solid var(--border-color); padding:6px 10px; border-radius:8px; font-size:12px; cursor:pointer;">${t.walletEdit}</button>
+                        <button type="button" onclick="openWalletScheduleModal(${w.id})" style="background:rgba(124,58,237,.12); color:#ddd6fe; border:1px solid rgba(139,92,246,.38); padding:6px 10px; border-radius:8px; font-size:12px; cursor:pointer;">${t.walletScheduleButton}</button>
                         <button type="button" onclick="checkWalletHealth(${w.id}, this)" style="background:rgba(59,130,246,0.1); color:#93c5fd; border:1px solid rgba(59,130,246,0.28); padding:6px 10px; border-radius:8px; font-size:12px; cursor:pointer;">${t.walletHealthCheck}</button>
-                        ${w.proxy ? `<button type="button" onclick="testWalletProxy(${w.id}, this)" style="background: rgba(34,197,94,0.1); color: #22c55e; border: 1px solid rgba(34,197,94,0.2); padding: 6px 10px; border-radius: 8px; font-size: 12px; cursor:pointer;">${t.walletProxyTest}</button>` : ''}
+                        ${w.has_proxy ? `<button type="button" onclick="testWalletProxy(${w.id}, this)" style="background: rgba(34,197,94,0.1); color: #22c55e; border: 1px solid rgba(34,197,94,0.2); padding: 6px 10px; border-radius: 8px; font-size: 12px; cursor:pointer;">${t.walletProxyTest}</button>` : ''}
+                        ${!profileReady ? `<button type="button" onclick="createWalletProfile(${w.id}, this)" style="background:rgba(124,58,237,.12); color:#d8b4fe; border:1px solid rgba(124,58,237,.35); padding:6px 10px; border-radius:8px; font-size:12px; cursor:pointer;">${t.walletProfileCreate}</button>` : ''}
                         <button type="button" onclick="deleteWallet(${w.id})" style="background: rgba(239,68,68,0.1); color: #ef4444; border: 1px solid rgba(239,68,68,0.2); padding: 6px 10px; border-radius: 8px; font-size: 12px; cursor:pointer;">${t.walletRemove}</button>
                     </div>
                 </div>
@@ -1983,16 +3111,18 @@ function toggleWalletEditor(walletId) {
     if (panel) panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
 }
 
-async function saveWalletLabel(walletId) {
+async function saveWalletDetails(walletId) {
     const locale = translations[getActiveLang()];
     const label = document.getElementById(`walletEditLabel-${walletId}`)?.value.trim() || '';
+    const proxyInput = document.getElementById(`walletEditProxy-${walletId}`);
+    const proxy = proxyInput?.value.trim() || null;
     if (!label) {
         showNotification(locale.walletEditInvalid, 'error');
         return;
     }
     try {
-        const response = await fetch(`/api/wallets/${walletId}/label`, {
-            method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ label }),
+        const response = await fetch(`/api/wallets/${walletId}`, {
+            method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ label, proxy }),
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.detail || 'wallet_label_update_failed');
@@ -2000,6 +3130,29 @@ async function saveWalletLabel(walletId) {
         await loadWalletsFromDB();
     } catch (error) {
         showNotification(translateBackendDetail(error.message) || locale.walletEditInvalid, 'error');
+    }
+}
+
+async function createWalletProfile(walletId, button) {
+    const locale = translations[getActiveLang()];
+    const originalText = button?.innerText || locale.walletProfileCreate;
+    try {
+        if (button) {
+            button.disabled = true;
+            button.innerText = locale.walletHealthChecking;
+        }
+        const response = await fetch(`/api/wallets/${walletId}/profile`, { method: 'POST' });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'wallet_profile_create_failed');
+        showNotification(locale.walletProfileCreated, 'success');
+        await loadWalletsFromDB();
+    } catch (error) {
+        showNotification(translateBackendDetail(error.message) || locale.walletLoadError, 'error');
+    } finally {
+        if (button) {
+            button.disabled = false;
+            button.innerText = originalText;
+        }
     }
 }
 
@@ -2073,9 +3226,22 @@ async function testWalletProxy(walletId, btn) {
 }
 
 async function deleteWallet(id) {
-    if (!window.confirm(translations[currentLang].walletRemoveConfirm)) return;
-    await fetch(`/api/wallets/delete/${id}`, { method: 'DELETE' });
-    loadWalletsFromDB();
+    const locale = translations[getActiveLang()] || translations.ru;
+    const approved = await openAppConfirm({
+        title: locale.walletRemoveTitle,
+        message: locale.walletRemoveConfirm,
+        confirmText: locale.walletRemoveAction,
+    });
+    if (!approved) return;
+    try {
+        const response = await fetch(`/api/wallets/delete/${id}`, { method: 'DELETE' });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'wallet_delete_failed');
+        showNotification(locale.walletRemoved, 'success');
+        await loadWalletsFromDB();
+    } catch (error) {
+        showNotification(translateBackendDetail(error.message) || locale.walletLoadError, 'error');
+    }
 }
 
 async function buyExtraSlot() {
@@ -2169,6 +3335,11 @@ function randomizeGlobalSettings() {
     const now = Date.now();
     if (now - lastRandomizeTimestamp < 2500) return;
     lastRandomizeTimestamp = now;
+    
+    if (shouldRotateProxy()) {
+        const newIndex = rotateProxyIndex();
+        console.log('[Anti-Sybil] Proxy rotation triggered:', newIndex);
+    }
 
     const allDays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
     const targetCount = Math.floor(Math.random() * 4) + 1;
@@ -2187,8 +3358,8 @@ function randomizeGlobalSettings() {
         const randMin = String(Math.floor(Math.random() * 60)).padStart(2, '0');
         row.querySelector('.day-time-val').value = `${randHour}:${randMin}`;
         
-        const minDelay = Math.floor(Math.random() * 60) + 15; 
-        const maxDelay = minDelay + Math.floor(Math.random() * 240) + 60; 
+const minDelay = Math.floor(getRandomDelay(15, 90));
+        const maxDelay = minDelay + Math.floor(getRandomDelay(60, 300));
         
         row.querySelector('.day-min-delay-val').value = minDelay;
         const maxField = row.querySelector('.day-max-delay-val');
@@ -2237,6 +3408,10 @@ async function saveGlobalProfileSettings() {
     const notifyTransactionFinal = document.getElementById('notifTransactionFinalToggle')?.checked ?? true;
     const notifyReminders = document.getElementById('notifRemindersToggle')?.checked ?? true;
     const notifyErrors = document.getElementById('notifErrorsToggle')?.checked ?? true;
+    const notifyDefiSupplySubmitted = document.getElementById('notifDefiSupplySubmittedToggle')?.checked ?? false;
+    const notifyDefiWithdrawSubmitted = document.getElementById('notifDefiWithdrawSubmittedToggle')?.checked ?? false;
+    const notifyDefiFinal = document.getElementById('notifDefiFinalToggle')?.checked ?? false;
+    const notifyDefiErrors = document.getElementById('notifDefiErrorsToggle')?.checked ?? false;
     const notifySettings = true;
     const notifyStart = notifyTransactionSubmitted;
     const notifySuccess = notifyTransactionFinal;
@@ -2247,6 +3422,10 @@ async function saveGlobalProfileSettings() {
     localStorage.setItem('ax_notify_transactions_final', notifyTransactionFinal);
     localStorage.setItem('ax_notify_reminders', notifyReminders);
     localStorage.setItem('ax_notify_errors', notifyErrors);
+    localStorage.setItem('ax_notify_defi_supply_submitted', notifyDefiSupplySubmitted);
+    localStorage.setItem('ax_notify_defi_withdraw_submitted', notifyDefiWithdrawSubmitted);
+    localStorage.setItem('ax_notify_defi_final', notifyDefiFinal);
+    localStorage.setItem('ax_notify_defi_errors', notifyDefiErrors);
 
     document.querySelectorAll('#dailyTimeConfigsContainer > div[data-day]').forEach(row => {
         const day = row.getAttribute('data-day');
@@ -2271,6 +3450,10 @@ async function saveGlobalProfileSettings() {
         notifyTransactionFinal,
         notifyReminders,
         notifyErrors,
+        notifyDefiSupplySubmitted,
+        notifyDefiWithdrawSubmitted,
+        notifyDefiFinal,
+        notifyDefiErrors,
         interfaceHints,
         language: currentLang
     };
@@ -2292,9 +3475,296 @@ async function saveGlobalProfileSettings() {
     }
 }
 
+// A new visitor should see the contextual explanations at least once.  We only
+// create the preference when no current or legacy choice exists, so a user's
+// later decision is never overwritten on subsequent visits.
+function initializeInterfaceHintsPreference() {
+    const hasCurrentChoice = localStorage.getItem('ax_interface_hints_enabled') !== null;
+    const hasLegacyChoice = localStorage.getItem('hide_security_banner') !== null
+        || localStorage.getItem('hide_all_banners') !== null;
+
+    if (!hasCurrentChoice && !hasLegacyChoice) {
+        localStorage.setItem('ax_interface_hints_enabled', 'true');
+    }
+}
+
+let activeWalletScheduleId = null;
+let activeWalletScheduleHasProxy = false;
+let activeWalletScheduleFlexible = false;
+
+function walletScheduleDayOptions(locale) {
+    return [
+        ['Mon', locale.planReminderMonday], ['Tue', locale.planReminderTuesday],
+        ['Wed', locale.planReminderWednesday], ['Thu', locale.planReminderThursday],
+        ['Fri', locale.planReminderFriday], ['Sat', locale.planReminderSaturday],
+        ['Sun', locale.planReminderSunday],
+    ];
+}
+
+function populateWalletScheduleText() {
+    const locale = translations[getActiveLang()];
+    const textMap = {
+        walletScheduleTitle: locale.walletScheduleTitle,
+        walletScheduleSafety: locale.walletScheduleSafety,
+        walletScheduleActionLabel: locale.walletScheduleActionLabel,
+        walletScheduleActionSwap: locale.walletScheduleActionSwap,
+        walletScheduleActionBridge: locale.walletScheduleActionBridge,
+        walletScheduleActionDefi: locale.walletScheduleActionDefi,
+        walletScheduleDayLabel: locale.walletScheduleDayLabel,
+        walletScheduleTimeLabel: locale.walletScheduleTimeLabel,
+        walletScheduleTimezoneLabel: locale.walletScheduleTimezoneLabel,
+        walletScheduleTelegramLabel: locale.walletScheduleTelegramLabel,
+        walletScheduleAcknowledgementLabel: locale.walletScheduleAcknowledgementLabel,
+        walletScheduleSave: locale.walletScheduleSave,
+        walletScheduleListTitle: locale.walletScheduleListTitle,
+        walletScheduleFlexibleDescription: locale.walletScheduleFlexibleDescription,
+        walletScheduleWeeklyMinLabel: locale.walletScheduleWeeklyMinLabel,
+        walletScheduleWeeklyMaxLabel: locale.walletScheduleWeeklyMaxLabel,
+        walletScheduleWindowStartLabel: locale.walletScheduleWindowStartLabel,
+        walletScheduleWindowEndLabel: locale.walletScheduleWindowEndLabel,
+    };
+    Object.entries(textMap).forEach(([id, value]) => {
+        const element = document.getElementById(id);
+        if (element) element.textContent = value;
+    });
+    const daySelect = document.getElementById('walletScheduleDay');
+    if (daySelect) {
+        const selected = daySelect.value || 'Mon';
+        daySelect.innerHTML = walletScheduleDayOptions(locale)
+            .map(([value, label]) => `<option value="${value}">${escapeHtml(label)}</option>`).join('');
+        daySelect.value = selected;
+    }
+    updateWalletScheduleFlexibleUi();
+}
+
+function updateWalletScheduleFlexibleUi() {
+    const locale = translations[getActiveLang()];
+    const toggle = document.getElementById('walletScheduleFlexibleToggle');
+    const panel = document.getElementById('walletScheduleFlexiblePanel');
+    document.querySelectorAll('.wallet-schedule-fixed-field').forEach(element => {
+        element.style.display = activeWalletScheduleFlexible ? 'none' : '';
+    });
+    if (panel) panel.hidden = !activeWalletScheduleFlexible;
+    if (toggle) {
+        toggle.classList.toggle('active', activeWalletScheduleFlexible);
+        toggle.textContent = activeWalletScheduleFlexible
+            ? locale.walletScheduleFlexibleEnabled
+            : locale.walletScheduleFlexibleButton;
+    }
+}
+
+function toggleWalletScheduleFlexible() {
+    activeWalletScheduleFlexible = !activeWalletScheduleFlexible;
+    updateWalletScheduleFlexibleUi();
+}
+
+async function openWalletScheduleModal(walletId) {
+    activeWalletScheduleId = Number(walletId);
+    activeWalletScheduleFlexible = false;
+    populateWalletScheduleText();
+    const timezoneInput = document.getElementById('walletScheduleTimezone');
+    if (timezoneInput) timezoneInput.value = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+    const acknowledgement = document.getElementById('walletScheduleAcknowledgement');
+    if (acknowledgement) acknowledgement.checked = false;
+    const status = document.getElementById('walletScheduleStatus');
+    if (status) status.textContent = '';
+    showAppModal('walletScheduleModal');
+    await loadWalletSchedules();
+}
+
+function closeWalletScheduleModal() {
+    activeWalletScheduleId = null;
+    hideAppModal('walletScheduleModal');
+}
+
+function handleWalletScheduleOverlayClick(event) {
+    if (event.target.id === 'walletScheduleModal' && mousedownOverlayTarget?.id === 'walletScheduleModal') {
+        closeWalletScheduleModal();
+    }
+}
+
+async function loadWalletSchedules() {
+    if (!activeWalletScheduleId) return;
+    const locale = translations[getActiveLang()];
+    const list = document.getElementById('walletScheduleList');
+    const status = document.getElementById('walletScheduleStatus');
+    if (list) list.textContent = locale.loading;
+    try {
+        const response = await fetch(`/api/wallets/${activeWalletScheduleId}/schedules`);
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'wallet_schedule_load_failed');
+        activeWalletScheduleHasProxy = Boolean(data.wallet?.has_proxy);
+        const walletDisplay = document.getElementById('walletScheduleWallet');
+        if (walletDisplay) {
+            const label = data.wallet?.label || `${locale.walletDefaultName} ${activeWalletScheduleId}`;
+            const address = data.wallet?.wallet_address || '';
+            walletDisplay.textContent = `${label} · ${address.slice(0, 8)}…${address.slice(-6)}`;
+        }
+        const proxyNotice = document.getElementById('walletScheduleProxyNotice');
+        if (proxyNotice) {
+            proxyNotice.textContent = activeWalletScheduleHasProxy
+                ? locale.walletScheduleProxyReady
+                : locale.walletScheduleProxyRequired;
+            proxyNotice.classList.toggle('missing', !activeWalletScheduleHasProxy);
+        }
+        const saveButton = document.getElementById('walletScheduleSave');
+        if (saveButton) saveButton.disabled = !activeWalletScheduleHasProxy;
+        renderWalletSchedules(data.schedules || []);
+        if (status && !data.telegram_linked) status.textContent = locale.walletScheduleTelegramMissing;
+    } catch (error) {
+        if (list) list.textContent = locale.walletScheduleLoadError;
+        if (status) status.textContent = translateBackendDetail(error.message) || locale.walletScheduleLoadError;
+    }
+}
+
+function renderWalletSchedules(schedules) {
+    const locale = translations[getActiveLang()];
+    const list = document.getElementById('walletScheduleList');
+    if (!list) return;
+    if (!schedules.length) {
+        list.innerHTML = `<div style="color:var(--text-muted);font-size:12px;">${escapeHtml(locale.walletScheduleEmpty)}</div>`;
+        return;
+    }
+    const actionNames = {
+        swap: locale.walletScheduleActionSwap,
+        bridge: locale.walletScheduleActionBridge,
+        defi: locale.walletScheduleActionDefi,
+    };
+    const dayNames = Object.fromEntries(walletScheduleDayOptions(locale));
+    list.innerHTML = schedules.map(item => {
+        const generatedSlots = Array.isArray(item.generated_slots) ? item.generated_slots : [];
+        const flexibleSummary = item.schedule_mode === 'flexible'
+            ? `${escapeHtml(locale.walletScheduleFlexibleShort
+                .replace('{min}', item.weekly_min)
+                .replace('{max}', item.weekly_max))} · ${escapeHtml(item.window_start)}–${escapeHtml(item.window_end)}`
+            : `${escapeHtml(dayNames[item.day_of_week] || item.day_of_week)} · ${escapeHtml(item.time_of_day)}`;
+        const preview = generatedSlots.length
+            ? `<small>${escapeHtml(locale.walletScheduleGeneratedLabel)}: ${generatedSlots.map(slot => `${escapeHtml(dayNames[slot.day] || slot.day)} ${escapeHtml(slot.time)}`).join(' · ')}</small>`
+            : '';
+        const rerollButton = item.schedule_mode === 'flexible'
+            ? `<button type="button" class="wallet-schedule-reroll" onclick="rerollWalletSchedule(${Number(item.id)})">${escapeHtml(locale.walletScheduleReroll)}</button>`
+            : '';
+        return `
+        <div class="wallet-schedule-item">
+            <div>
+                <b>${escapeHtml(actionNames[item.action_type] || item.action_type)}</b>
+                <small>${flexibleSummary} · ${escapeHtml(item.timezone)}${item.enabled ? '' : ` · ${escapeHtml(locale.walletScheduleDisabled)}`}</small>
+                ${preview}
+            </div>
+            <div class="wallet-schedule-actions">
+                ${rerollButton}
+                <button type="button" class="wallet-schedule-delete" onclick="deleteWalletSchedule(${Number(item.id)})">${escapeHtml(locale.walletScheduleDelete)}</button>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+async function rerollWalletSchedule(scheduleId) {
+    if (!activeWalletScheduleId) return;
+    const locale = translations[getActiveLang()];
+    const status = document.getElementById('walletScheduleStatus');
+    try {
+        if (status) status.textContent = locale.walletScheduleRerolling;
+        const response = await fetch(`/api/wallets/${activeWalletScheduleId}/schedules/${scheduleId}/reroll`, {
+            method: 'POST',
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'wallet_schedule_reroll_failed');
+        if (status) status.textContent = locale.walletScheduleRerolled;
+        await loadWalletSchedules();
+    } catch (error) {
+        if (status) status.textContent = translateBackendDetail(error.message) || locale.walletScheduleSaveError;
+    }
+}
+
+async function saveWalletSchedule() {
+    if (!activeWalletScheduleId) return;
+    const locale = translations[getActiveLang()];
+    const status = document.getElementById('walletScheduleStatus');
+    const button = document.getElementById('walletScheduleSave');
+    const timeInput = document.getElementById('walletScheduleTime');
+    const timeValue = normalize24HourTime(timeInput?.value);
+    if (!activeWalletScheduleHasProxy) {
+        if (status) status.textContent = locale.walletScheduleProxyRequired;
+        return;
+    }
+    if (!activeWalletScheduleFlexible && !timeValue) {
+        if (status) status.textContent = locale.planReminderTimeInvalid;
+        return;
+    }
+    const windowStartInput = document.getElementById('walletScheduleWindowStart');
+    const windowEndInput = document.getElementById('walletScheduleWindowEnd');
+    const windowStart = normalize24HourTime(windowStartInput?.value);
+    const windowEnd = normalize24HourTime(windowEndInput?.value);
+    const weeklyMin = Number(document.getElementById('walletScheduleWeeklyMin')?.value || 3);
+    const weeklyMax = Number(document.getElementById('walletScheduleWeeklyMax')?.value || 4);
+    if (activeWalletScheduleFlexible && (
+        !windowStart || !windowEnd || windowStart >= windowEnd
+        || !Number.isInteger(weeklyMin) || !Number.isInteger(weeklyMax)
+        || weeklyMin < 1 || weeklyMax > 7 || weeklyMin > weeklyMax
+    )) {
+        if (status) status.textContent = locale.walletScheduleFlexibleInvalid;
+        return;
+    }
+    const acknowledgement = Boolean(document.getElementById('walletScheduleAcknowledgement')?.checked);
+    if (!acknowledgement) {
+        if (status) status.textContent = locale.walletScheduleAcknowledgementRequired;
+        return;
+    }
+    const payload = {
+        action_type: document.getElementById('walletScheduleAction')?.value || 'swap',
+        day_of_week: document.getElementById('walletScheduleDay')?.value || 'Mon',
+        time_of_day: timeValue || '18:00',
+        timezone: document.getElementById('walletScheduleTimezone')?.value || 'UTC',
+        enabled: true,
+        telegram_enabled: Boolean(document.getElementById('walletScheduleTelegram')?.checked),
+        acknowledgement,
+        schedule_mode: activeWalletScheduleFlexible ? 'flexible' : 'fixed',
+        weekly_min: weeklyMin,
+        weekly_max: weeklyMax,
+        window_start: windowStart || '10:00',
+        window_end: windowEnd || '21:00',
+        reroll: activeWalletScheduleFlexible,
+    };
+    try {
+        if (button) { button.disabled = true; button.textContent = locale.loading; }
+        const response = await fetch(`/api/wallets/${activeWalletScheduleId}/schedules`, {
+            method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'wallet_schedule_save_failed');
+        if (status) status.textContent = locale.walletScheduleSaved;
+        const consent = document.getElementById('walletScheduleAcknowledgement');
+        if (consent) consent.checked = false;
+        await loadWalletSchedules();
+    } catch (error) {
+        if (status) status.textContent = translateBackendDetail(error.message) || locale.walletScheduleSaveError;
+    } finally {
+        if (button) { button.disabled = !activeWalletScheduleHasProxy; button.textContent = locale.walletScheduleSave; }
+    }
+}
+
+async function deleteWalletSchedule(scheduleId) {
+    if (!activeWalletScheduleId) return;
+    const locale = translations[getActiveLang()];
+    const status = document.getElementById('walletScheduleStatus');
+    try {
+        const response = await fetch(`/api/wallets/${activeWalletScheduleId}/schedules/${scheduleId}`, {method: 'DELETE'});
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'wallet_schedule_delete_failed');
+        if (status) status.textContent = locale.walletScheduleDeleted;
+        await loadWalletSchedules();
+    } catch (error) {
+        if (status) status.textContent = translateBackendDetail(error.message) || locale.walletScheduleSaveError;
+    }
+}
+
 function areInterfaceHintsEnabled() {
     const value = localStorage.getItem('ax_interface_hints_enabled');
     if (value !== null) return value !== 'false';
+
+    const securityBannerSetting = localStorage.getItem('hide_security_banner');
+    if (securityBannerSetting !== null) return securityBannerSetting !== 'true';
 
     // Migrate the previous inverse setting without changing the user's choice.
     return localStorage.getItem('hide_all_banners') !== 'true';
@@ -2343,6 +3813,7 @@ function renderInterfaceHint(hintId, message, tone = 'info', contentId = '', ico
 function toggleInterfaceHints(checkbox) {
     const enabled = Boolean(checkbox.checked);
     localStorage.setItem('ax_interface_hints_enabled', String(enabled));
+    localStorage.setItem('hide_security_banner', String(!enabled));
     localStorage.removeItem('hide_all_banners');
     if (enabled) localStorage.removeItem('ax_dismissed_interface_hints');
 
@@ -2373,9 +3844,100 @@ async function refreshTelegramConnectionState() {
         statusEl.textContent = data.linked ? t('tgLinked') : t('tgNotLinked');
         statusEl.style.color = data.linked ? '#22c55e' : 'var(--text-muted)';
         if (testButton) testButton.style.display = data.linked ? 'inline-flex' : 'none';
+        if (data.linked && data.filters) applyTelegramNotificationFilters(data.filters);
     } catch (error) {
         statusEl.textContent = t('tgUnavailable');
         statusEl.style.color = '#eab308';
+    }
+}
+
+function applyTelegramNotificationFilters(filters) {
+    const controls = {
+        transactionSubmitted: ['notifTransactionSubmittedToggle', 'ax_notify_transactions_submitted'],
+        transactionFinal: ['notifTransactionFinalToggle', 'ax_notify_transactions_final'],
+        reminders: ['notifRemindersToggle', 'ax_notify_reminders'],
+        errors: ['notifErrorsToggle', 'ax_notify_errors'],
+        defiSupplySubmitted: ['notifDefiSupplySubmittedToggle', 'ax_notify_defi_supply_submitted'],
+        defiWithdrawSubmitted: ['notifDefiWithdrawSubmittedToggle', 'ax_notify_defi_withdraw_submitted'],
+        defiFinal: ['notifDefiFinalToggle', 'ax_notify_defi_final'],
+        defiErrors: ['notifDefiErrorsToggle', 'ax_notify_defi_errors'],
+    };
+    Object.entries(controls).forEach(([key, [elementId, storageKey]]) => {
+        if (typeof filters[key] !== 'boolean') return;
+        const enabled = filters[key];
+        localStorage.setItem(storageKey, String(enabled));
+        const control = document.getElementById(elementId);
+        if (control) control.checked = enabled;
+    });
+}
+
+function applyTelegramNotificationPreset(preset) {
+    const presets = {
+        important: {
+            transactionSubmitted: false, transactionFinal: true, reminders: true, errors: true,
+            defiSupplySubmitted: false, defiWithdrawSubmitted: false, defiFinal: false, defiErrors: false,
+        },
+        all: {
+            transactionSubmitted: true, transactionFinal: true, reminders: true, errors: true,
+            defiSupplySubmitted: true, defiWithdrawSubmitted: true, defiFinal: true, defiErrors: true,
+        },
+        errors: {
+            transactionSubmitted: false, transactionFinal: false, reminders: false, errors: true,
+            defiSupplySubmitted: false, defiWithdrawSubmitted: false, defiFinal: false, defiErrors: true,
+        },
+    };
+    const selected = presets[preset];
+    if (!selected) return;
+    applyTelegramNotificationFilters(selected);
+    showNotification(t('notifPresetApplied'));
+}
+
+async function getWalletSecurityNetwork() {
+    if (!window.ethereum?.request) return { tone: 'muted', text: t('securityNetworkUnknown') };
+    try {
+        const chainId = (await window.ethereum.request({ method: 'eth_chainId' }) || '').toLowerCase();
+        if (chainId === '0x2105') return { tone: 'success', text: t('securityNetworkMain') };
+        if (['0x14a34', '0xaa36a7'].includes(chainId)) return { tone: 'warning', text: t('securityNetworkTest') };
+        return { tone: 'warning', text: t('securityNetworkOther') };
+    } catch (error) {
+        return { tone: 'muted', text: t('securityNetworkUnknown') };
+    }
+}
+
+async function loadSecurityOverview() {
+    const container = document.getElementById('securityOverviewContent');
+    if (!container) return;
+    container.textContent = t('loading');
+    try {
+        const [response, network] = await Promise.all([
+            fetch('/api/security/overview'),
+            getWalletSecurityNetwork(),
+        ]);
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'security_overview_unavailable');
+        const selectedWallet = getActiveBaseWalletAddress();
+        const walletText = selectedWallet
+            ? `${t('securityWalletChosen')}: ${escapeHtml(getShortOperationAddress(selectedWallet))}`
+            : data.wallet_count > 0
+                ? `${t('securityWalletSaved')}: ${data.wallet_count}`
+                : t('securityWalletNone');
+        const telegramText = data.telegram_linked ? t('securityTelegramLinked') : t('securityTelegramNone');
+        const rows = [
+            ['🛡️', t('securitySession'), data.session_active ? t('securitySessionActive') : t('securityUnavailable'), data.session_active ? '#86efac' : '#fca5a5'],
+            ['👛', t('securityWallet'), walletText, selectedWallet || data.wallet_count > 0 ? '#86efac' : '#facc15'],
+            ['✈️', t('securityTelegram'), telegramText, data.telegram_linked ? '#86efac' : 'var(--text-muted)'],
+            ['🌐', t('securityNetwork'), network.text, network.tone === 'success' ? '#86efac' : network.tone === 'warning' ? '#facc15' : 'var(--text-muted)'],
+        ];
+        container.innerHTML = rows.map(([icon, title, value, color]) => `
+            <div style="display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--border-color);">
+                <span style="width:22px; text-align:center;">${icon}</span>
+                <span style="color:#fff; font-size:13px; flex:1;">${title}</span>
+                <span style="color:${color}; font-size:12px; text-align:right;">${value}</span>
+            </div>
+        `).join('');
+    } catch (error) {
+        container.textContent = t('securityUnavailable');
+        container.style.color = '#facc15';
     }
 }
 
@@ -2758,6 +4320,26 @@ async function loadUniversalBridgeTokenSelectors() {
         catalogStatus.style.color = 'var(--text-muted)';
     }
     try {
+        const isBaseSwapPane = localStorage.getItem('ax_activity_pane') === 'dex'
+            && sourceNetwork === 'Base'
+            && !document.getElementById('operationReceiveAsset');
+        if (isBaseSwapPane) {
+            await loadUniversalBridgeTokens('Base');
+            const nativeToken = (universalBridgeTokensByNetwork.Base || []).find(
+                token => token.address?.toLowerCase() === UNIVERSAL_BRIDGE_NATIVE_TOKEN
+            );
+            const sourceSelect = document.getElementById('operationSourceAsset');
+            if (!nativeToken || !sourceSelect) throw new Error('base_native_token_unavailable');
+            sourceSelect.replaceChildren();
+            const option = document.createElement('option');
+            option.value = nativeToken.address;
+            option.textContent = `${nativeToken.symbol} · ${nativeToken.name}`;
+            sourceSelect.append(option);
+            sourceSelect.value = nativeToken.address;
+            sourceSelect.disabled = true;
+            await loadSelectedUniversalBridgeSourceBalance();
+            return;
+        }
         await Promise.all([loadUniversalBridgeTokens(sourceNetwork), loadUniversalBridgeTokens(destinationNetwork)]);
         populateUniversalBridgeTokenSelect('operationSourceAsset', sourceNetwork);
         populateUniversalBridgeTokenSelect('operationReceiveAsset', destinationNetwork);
@@ -3046,6 +4628,10 @@ async function requestUniversalBridgeQuote() {
     const amount = normalizeUniversalBridgeAmount(document.getElementById('operationAmount')?.value, sourceToken?.decimals);
     activeUniversalBridgeQuote = null;
     setUniversalBridgeReviewVisible(false);
+    if (sourceNetwork === destinationNetwork) {
+        setUniversalBridgeResult(locale.universalBridgeNetworksMustDiffer, '#fca5a5');
+        return;
+    }
     if (!sourceToken || !destinationToken || !amount || !validateOperationAmount() || !/^0x[0-9a-fA-F]{40}$/.test(activeAddress)) {
         setUniversalBridgeResult(locale.universalBridgeInvalid, '#fca5a5');
         return;
@@ -3375,7 +4961,10 @@ async function loadDefiOverview(refresh = false) {
             const collateral = position.has_supply && position.collateral_enabled
                 ? `<span style="color:#c4b5fd; font-size:11px; border:1px solid rgba(196,181,253,.38); border-radius:999px; padding:3px 7px;">${escapeHtml(locale.defiCollateral)}</span>`
                 : '';
-            return `<div style="background:var(--bg-main); border:1px solid var(--border-color); border-radius:10px; padding:11px 12px; margin-top:8px;"><div style="display:flex; justify-content:space-between; gap:10px; align-items:center;"><div style="color:#fff; font-size:13px; font-weight:700;">${escapeHtml(position.asset)}</div>${collateral}</div><div style="display:flex; flex-wrap:wrap; gap:20px; margin-top:10px;">${supply}${borrow}</div></div>`;
+            const withdraw = position.has_supply && String(position.asset || '').toUpperCase() === 'USDC'
+                ? `<div id="aaveWithdrawPanel" style="margin-top:12px;"><button type="button" onclick="showAaveUsdcWithdrawForm('${escapeHtml(position.supplied)}')" class="btn-dark-sm" style="padding:7px 10px; font-size:12px; border-color:#7c3aed;">${escapeHtml(locale.defiWithdrawOpen)}</button></div>`
+                : '';
+            return `<div style="background:var(--bg-main); border:1px solid var(--border-color); border-radius:10px; padding:11px 12px; margin-top:8px;"><div style="display:flex; justify-content:space-between; gap:10px; align-items:center;"><div style="color:#fff; font-size:13px; font-weight:700;">${escapeHtml(position.asset)}</div>${collateral}</div><div style="display:flex; flex-wrap:wrap; gap:20px; margin-top:10px;">${supply}${borrow}</div>${withdraw}</div>`;
         }).join('');
     } catch (error) {
         const message = error.message === 'wallet_required' ? locale.defiWalletRequired : locale.defiLoadError;
@@ -3386,6 +4975,32 @@ async function loadDefiOverview(refresh = false) {
             button.style.opacity = '';
             button.style.cursor = '';
         }
+    }
+}
+
+async function loadAaveDefiHistory() {
+    const locale = translations[getActiveLang()];
+    const panel = document.getElementById('defiHistoryPanel');
+    if (!panel) return;
+    try {
+        const response = await fetch('/api/defi/aave-base/history');
+        const data = await response.json();
+        if (!response.ok || !Array.isArray(data.records)) throw new Error('defi_history_unavailable');
+        if (!data.records.length) {
+            panel.innerHTML = `<div style="color:var(--text-muted); font-size:12px; line-height:1.45;">${escapeHtml(locale.defiHistoryEmpty)}</div>`;
+            return;
+        }
+        panel.innerHTML = data.records.map((record) => {
+            const status = getOperationsJournalStatus(record);
+            const action = String(record.operation_type) === 'withdraw'
+                ? locale.defiHistoryWithdraw
+                : locale.defiHistorySupply;
+            const date = new Date(Number(record.created_at) * 1000).toLocaleString();
+            const txUrl = `${BASE_MAINNET_CONFIG.blockExplorerUrls[0]}/tx/${encodeURIComponent(record.tx_hash)}`;
+            return `<div style="background:var(--bg-main); border:1px solid var(--border-color); border-radius:10px; padding:10px 11px; margin-top:8px; display:flex; justify-content:space-between; gap:10px; align-items:flex-start;"><div style="min-width:0;"><div style="color:#fff; font-size:12px; font-weight:700;">${escapeHtml(action)} · ${escapeHtml(record.amount)} ${escapeHtml(record.asset_symbol || 'USDC')}</div><div style="color:var(--text-muted); font-size:11px; margin-top:4px;">${escapeHtml(record.protocol || 'Aave V3')} · ${escapeHtml(record.network || 'Base')} · ${escapeHtml(date)}</div><div style="color:${status.color}; font-size:11px; margin-top:4px;">${escapeHtml(status.label)}</div></div><a href="${txUrl}" target="_blank" rel="noopener noreferrer" style="color:#c4b5fd; font-size:11px; white-space:nowrap; flex:0 0 auto;">${escapeHtml(locale.defiHistoryOpenTx)}</a></div>`;
+        }).join('');
+    } catch (_) {
+        panel.innerHTML = `<div style="color:#fca5a5; font-size:12px;">${escapeHtml(locale.defiHistoryLoadError)}</div>`;
     }
 }
 
@@ -3429,17 +5044,25 @@ async function requestAaveUsdcSupplyQuote() {
         const data = await response.json();
         if (!response.ok) throw new Error(data.detail || 'aave_supply_quote_failed');
         activeAaveSupplyQuote = data;
-        const rate = Number(data.annual_supply_rate_percent || 0).toLocaleString(undefined, { maximumFractionDigits: 4 });
+        const ratePercent = Number(data.annual_supply_rate_percent || 0);
+        const rate = ratePercent.toLocaleString(undefined, { maximumFractionDigits: 4 });
+        const suppliedAmount = Number(data.amount);
+        const annualInterest = suppliedAmount * ratePercent / 100;
+        const estimatedTotal = suppliedAmount + annualInterest;
+        const displayUsdc = (value) => Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 6 });
+        const yearlyEstimate = Number.isFinite(annualInterest) && annualInterest >= 0 && Number.isFinite(estimatedTotal)
+            ? `<div style="background:rgba(124,58,237,.08); border:1px solid rgba(124,58,237,.3); border-radius:10px; padding:10px 11px; margin-top:10px;"><div style="color:#e9d5ff; font-size:11px; font-weight:700;">${escapeHtml(locale.defiSupplyYearEstimate)}</div><div style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; margin-top:8px;"><div><div style="color:var(--text-muted); font-size:10px;">${escapeHtml(locale.defiSupplyYearInterest)}</div><div style="color:#86efac; font-size:13px; font-weight:700; margin-top:3px;">≈ ${escapeHtml(displayUsdc(annualInterest))} USDC</div></div><div><div style="color:var(--text-muted); font-size:10px;">${escapeHtml(locale.defiSupplyYearTotal)}</div><div style="color:#fff; font-size:13px; font-weight:700; margin-top:3px;">≈ ${escapeHtml(displayUsdc(estimatedTotal))} USDC</div></div></div><div style="color:var(--text-muted); font-size:10px; line-height:1.4; margin-top:8px;">${escapeHtml(locale.defiSupplyYearNote)}</div></div>`
+            : '';
         const approval = data.approval?.required ? `<div style="color:#fde68a; margin-top:5px;">${escapeHtml(locale.defiSupplyNeedsApproval)}</div>` : '';
         const gasWarning = data.gas_reserve_met ? '' : `<div style="color:#fca5a5; margin-top:5px;">${escapeHtml(locale.defiSupplyNoGas.replace('{amount}', data.gas_reserve || ''))}</div>`;
         if (result) {
-            result.innerHTML = `<div style="color:#86efac; font-weight:600;">${escapeHtml(locale.defiSupplyReady.replace('{amount}', data.amount))}</div><div style="color:var(--text-muted); margin-top:5px;">${escapeHtml(locale.defiSupplyAvailable.replace('{amount}', data.wallet_balance))}</div><div style="color:#c4b5fd; margin-top:4px;">${escapeHtml(locale.defiSupplyRate)}: ${escapeHtml(rate)}%</div>${approval}${gasWarning}${data.gas_reserve_met ? `<button type="button" id="aaveSupplyReviewButton" onclick="submitAaveUsdcSupply()" class="btn-purple-lg" style="font-size:13px; padding:10px 14px; width:auto; margin-top:11px;">${escapeHtml(locale.defiSupplyReview)}</button>` : ''}`;
+            result.innerHTML = `<div style="color:#86efac; font-weight:600;">${escapeHtml(locale.defiSupplyReady.replace('{amount}', data.amount))}</div><div style="color:var(--text-muted); margin-top:5px;">${escapeHtml(locale.defiSupplyAvailable.replace('{amount}', data.wallet_balance))}</div><div style="color:#c4b5fd; margin-top:4px;">${escapeHtml(locale.defiSupplyRate)}: ${escapeHtml(rate)}%</div>${yearlyEstimate}${approval}${gasWarning}${data.gas_reserve_met ? `<button type="button" id="aaveSupplyReviewButton" onclick="submitAaveUsdcSupply()" class="btn-purple-lg" style="font-size:13px; padding:10px 14px; width:auto; margin-top:11px;">${escapeHtml(locale.defiSupplyReview)}</button>` : ''}`;
         }
     } catch (error) {
         const message = String(error?.message || '');
         const display = message.includes('exceeds the wallet balance')
             ? locale.defiSupplyInsufficientBalance
-            : (message.includes('temporarily unavailable') ? locale.defiSupplyUnavailable : locale.defiSupplyQuoteError);
+            : (message.includes('Aave USDC supply is temporarily unavailable') ? locale.defiSupplyUnavailable : locale.defiSupplyQuoteError);
         aaveSupplyResult(display, '#fca5a5');
     } finally {
         setButtonLoading(button, false, locale.defiSupplyCheck);
@@ -3523,11 +5146,12 @@ async function submitAaveUsdcSupply() {
         });
         activeAaveSupplyQuote = null;
         try {
-            await fetch('/api/defi/aave-base/supply-submissions', {
+            const submissionResponse = await fetch('/api/defi/aave-base/supply-submissions', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ quote_id: quote.quote_id, tx_hash: txHash }),
             });
+            if (submissionResponse.ok) await loadAaveDefiHistory();
         } catch (_) {
             // The wallet transaction remains valid even if the optional notification fails.
         }
@@ -3544,6 +5168,130 @@ async function submitAaveUsdcSupply() {
         aaveSupplyResult(rejected ? locale.defiSupplyRejected : display, '#fca5a5');
     } finally {
         setButtonLoading(button, false, locale.defiSupplyReview);
+    }
+}
+
+function showAaveUsdcWithdrawForm(positionAmount) {
+    const locale = translations[getActiveLang()];
+    const panel = document.getElementById('aaveWithdrawPanel');
+    if (!panel) return;
+    activeAaveWithdrawQuote = null;
+    panel.innerHTML = `<div style="border-top:1px solid var(--border-color); margin-top:10px; padding-top:11px;"><label style="display:block; color:var(--text-muted); font-size:11px;">${escapeHtml(locale.defiWithdrawAmount)}<input id="aaveWithdrawAmount" inputmode="decimal" value="${escapeHtml(positionAmount)}" class="auth-input" style="margin-top:5px; padding:8px 10px; font-size:12px;"></label><button type="button" id="aaveWithdrawQuoteButton" onclick="requestAaveUsdcWithdrawQuote()" class="btn-dark-sm" style="padding:8px 11px; font-size:12px; margin-top:9px; border-color:#7c3aed;">${escapeHtml(locale.defiWithdrawCheck)}</button><div id="aaveWithdrawResult" style="font-size:12px; line-height:1.5; margin-top:9px;"></div></div>`;
+}
+
+function aaveWithdrawResult(message, color = 'var(--text-muted)') {
+    const result = document.getElementById('aaveWithdrawResult');
+    if (result) result.innerHTML = `<span style="color:${color};">${escapeHtml(message)}</span>`;
+}
+
+async function requestAaveUsdcWithdrawQuote() {
+    const locale = translations[getActiveLang()];
+    const amount = normalizeUsdcInput(document.getElementById('aaveWithdrawAmount')?.value);
+    const activeAddress = getActiveBaseWalletAddress();
+    const button = document.getElementById('aaveWithdrawQuoteButton');
+    const result = document.getElementById('aaveWithdrawResult');
+    activeAaveWithdrawQuote = null;
+    if (!amount) {
+        aaveWithdrawResult(locale.defiWithdrawInvalid, '#fca5a5');
+        return;
+    }
+    if (!/^0x[0-9a-fA-F]{40}$/.test(activeAddress)) {
+        aaveWithdrawResult(locale.defiWithdrawWalletRequired, '#fca5a5');
+        return;
+    }
+    try {
+        setButtonLoading(button, true, locale.defiWithdrawLoading);
+        const response = await fetch('/api/defi/aave-base/usdc-withdraw-quote', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ wallet_address: activeAddress, amount }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'aave_withdraw_quote_failed');
+        activeAaveWithdrawQuote = data;
+        const gasWarning = data.gas_reserve_met ? '' : `<div style="color:#fca5a5; margin-top:5px;">${escapeHtml(locale.defiWithdrawNoGas.replace('{amount}', data.gas_reserve || ''))}</div>`;
+        if (result) {
+            result.innerHTML = `<div style="color:#86efac; font-weight:600;">${escapeHtml(locale.defiWithdrawReady.replace('{amount}', data.amount))}</div><div style="color:var(--text-muted); margin-top:5px;">${escapeHtml(locale.defiWithdrawAvailable.replace('{amount}', data.position_balance))}</div>${gasWarning}${data.gas_reserve_met ? `<button type="button" id="aaveWithdrawReviewButton" onclick="submitAaveUsdcWithdraw()" class="btn-purple-lg" style="font-size:12px; padding:9px 12px; width:auto; margin-top:10px;">${escapeHtml(locale.defiWithdrawReview)}</button>` : ''}`;
+        }
+    } catch (error) {
+        const message = String(error?.message || '');
+        const display = message.includes('exceeds the Aave USDC position')
+            ? locale.defiWithdrawInsufficientPosition
+            : locale.defiWithdrawQuoteError;
+        aaveWithdrawResult(display, '#fca5a5');
+    } finally {
+        setButtonLoading(button, false, locale.defiWithdrawCheck);
+    }
+}
+
+function validateAaveWithdrawTransaction(quote, fromAddress) {
+    const transaction = quote?.transaction || {};
+    const asset = quote?.asset || {};
+    if (!window.ethers?.utils?.Interface) return false;
+    try {
+        const contract = new window.ethers.utils.Interface([
+            'function withdraw(address asset, uint256 amount, address to) returns (uint256)',
+        ]);
+        const expectedData = contract.encodeFunctionData('withdraw', [
+            asset.address,
+            String(quote.amount_atomic),
+            fromAddress,
+        ]).toLowerCase();
+        return transaction.chain_id === 8453
+            && String(transaction.from || '').toLowerCase() === fromAddress.toLowerCase()
+            && String(transaction.to || '').toLowerCase() === String(quote.pool_address || '').toLowerCase()
+            && String(transaction.data || '').toLowerCase() === expectedData
+            && String(transaction.value || '0') === '0';
+    } catch (_) {
+        return false;
+    }
+}
+
+async function submitAaveUsdcWithdraw() {
+    const locale = translations[getActiveLang()];
+    const quote = activeAaveWithdrawQuote;
+    const provider = walletConnectProvider?.session ? walletConnectProvider : window.ethereum;
+    const button = document.getElementById('aaveWithdrawReviewButton');
+    if (!quote || !provider?.request) {
+        aaveWithdrawResult(locale.defiWithdrawExpired, '#fca5a5');
+        return;
+    }
+    try {
+        let accounts = await provider.request({ method: 'eth_accounts' });
+        if (!Array.isArray(accounts) || !accounts.length) accounts = await provider.request({ method: 'eth_requestAccounts' });
+        const activeAddress = getActiveBaseWalletAddress();
+        const fromAddress = (accounts || []).find((account) => String(account || '').toLowerCase() === activeAddress.toLowerCase());
+        if (!/^0x[0-9a-fA-F]{40}$/.test(fromAddress || '')) throw new Error('aave_withdraw_wallet_mismatch');
+        if (!validateAaveWithdrawTransaction(quote, fromAddress)) throw new Error('aave_withdraw_transaction_invalid');
+        await switchToBaseMainnet(provider);
+        if (!await openAaveWithdrawConfirmation(quote)) return;
+        setButtonLoading(button, true, locale.defiWithdrawSigning);
+        const txHash = await provider.request({
+            method: 'eth_sendTransaction',
+            params: [{ from: fromAddress, to: quote.transaction.to, data: quote.transaction.data, value: '0x0' }],
+        });
+        activeAaveWithdrawQuote = null;
+        try {
+            const submissionResponse = await fetch('/api/defi/aave-base/withdraw-submissions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ quote_id: quote.quote_id, tx_hash: txHash }),
+            });
+            if (submissionResponse.ok) await loadAaveDefiHistory();
+        } catch (_) {
+            // The wallet transaction remains valid even if the optional notification fails.
+        }
+        const txUrl = `${BASE_MAINNET_CONFIG.blockExplorerUrls[0]}/tx/${encodeURIComponent(txHash)}`;
+        const result = document.getElementById('aaveWithdrawResult');
+        if (result) result.innerHTML = `<span style="color:#86efac;">${escapeHtml(locale.defiWithdrawSubmitted)}</span> <a href="${txUrl}" target="_blank" rel="noopener noreferrer" style="color:#c4b5fd;">${escapeHtml(locale.defiWithdrawOpenExplorer)}</a>`;
+        window.setTimeout(() => loadDefiOverview(true), 7000);
+    } catch (error) {
+        const rejected = error?.code === 4001 || error?.code === 'ACTION_REJECTED';
+        const message = String(error?.message || '');
+        const display = message.includes('wallet_mismatch') ? locale.defiWithdrawWalletRequired : locale.defiWithdrawFailed;
+        aaveWithdrawResult(rejected ? locale.defiWithdrawRejected : display, '#fca5a5');
+    } finally {
+        setButtonLoading(button, false, locale.defiWithdrawReview);
     }
 }
 
@@ -4075,6 +5823,105 @@ function hideProxyTip() {
     if (box) box.style.display = 'none';
 }
 
+// --- DEX, Bridges, Lending Global Handlers ---
+
+let activeDexQuote = null;
+let activeBridgeQuote = null;
+
+function updateDexTokens() {
+}
+
+function setDexMaxAmount() {
+    return useOperationMaxAmount();
+}
+
+async function requestDexQuote() {
+    return requestBaseSwapQuote();
+}
+async function executeDexSwap() {
+    return submitBaseSwap();
+}
+async function requestBridgeQuote() {
+    return requestUniversalBridgeQuote();
+}
+async function executeBridgeTransfer() {
+    return executeUniversalBridge();
+}
+async function buildLendingOperation() {
+    return buildVerifiedLendingOperation();
+}
+async function loadLendingPositions() {
+    const locale = translations[getActiveLang()];
+    const activeAddress = getActiveBaseWalletAddress();
+    const container = document.getElementById('lendingPositionsList');
+    if (!container) return;
+
+    if (!activeAddress) {
+        container.textContent = locale.defiSupplyWalletRequired;
+        return;
+    }
+
+    try {
+        container.textContent = locale.loading;
+        const username = localStorage.getItem('airdrop_username') || '';
+        const walletsResponse = await fetch(`/api/wallets/${encodeURIComponent(username)}`);
+        const walletsData = await walletsResponse.json();
+        const wallet = walletsData.wallets?.find((item) => String(item.wallet_address || '').toLowerCase() === activeAddress.toLowerCase());
+        if (!walletsResponse.ok || !wallet) throw new Error('wallet_not_saved');
+        const res = await fetch(`/api/defi/aave-base-positions/${encodeURIComponent(wallet.id)}`);
+        const data = await res.json();
+        if (!res.ok || !data.positions || !data.positions.length) {
+            container.textContent = locale.defiOverviewEmpty;
+            return;
+        }
+
+        const positions = data.positions.filter((position) => position.has_supply || position.has_borrow);
+        if (!positions.length) {
+            container.textContent = locale.defiOverviewEmpty;
+            return;
+        }
+        container.innerHTML = positions.map((pos) => `
+            <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-main); border:1px solid var(--border-color); border-radius:10px; padding:10px; margin-bottom:6px;">
+                <div>
+                    <b>${escapeHtml(pos.asset || 'USDC')}</b><br>
+                    <span style="color:var(--text-muted);">Aave V3 · Base</span>
+                </div>
+                <div style="text-align:right;">
+                    <b>${escapeHtml(locale.defiOverviewSupplied)}:</b> ${escapeHtml(pos.supplied || '0')}<br>
+                    <span style="color:var(--text-muted);">${escapeHtml(locale.defiOverviewBorrowed)}: ${escapeHtml(pos.borrowed || '0')}</span>
+                </div>
+            </div>
+        `).join('');
+    } catch (_) {
+        container.textContent = locale.defiOverviewLoadError;
+    }
+}
+
+async function buildVerifiedLendingOperation() {
+    const locale = translations[getActiveLang()];
+    const action = document.getElementById('lendingActionType')?.value || 'supply';
+    const amount = document.getElementById('lendingAmount')?.value || '';
+    const result = document.getElementById('lendingResultContainer');
+    if (!result) return;
+    result.replaceChildren();
+    const hiddenAmount = document.createElement('input');
+    hiddenAmount.type = 'hidden';
+    hiddenAmount.value = amount;
+    const quoteResult = document.createElement('div');
+    if (action === 'withdraw') {
+        hiddenAmount.id = 'aaveWithdrawAmount';
+        quoteResult.id = 'aaveWithdrawResult';
+        result.append(hiddenAmount, quoteResult);
+        await requestAaveUsdcWithdrawQuote();
+    } else {
+        hiddenAmount.id = 'aaveSupplyAmount';
+        quoteResult.id = 'aaveSupplyResult';
+        result.append(hiddenAmount, quoteResult);
+        await requestAaveUsdcSupplyQuote();
+    }
+    if (!quoteResult.textContent.trim()) quoteResult.textContent = locale.errors_genericRequestFailed || 'Request failed';
+}
+
 // --- Рендеринг Дашборда ---
 function renderDashboardContent(section) {
     currentSection = section;
@@ -4103,6 +5950,10 @@ function renderDashboardContent(section) {
         const notifTransactionFinalChecked = localStorage.getItem('ax_notify_transactions_final') !== 'false' ? 'checked' : '';
         const notifRemindersChecked = localStorage.getItem('ax_notify_reminders') !== 'false' ? 'checked' : '';
         const notifErrorsChecked = localStorage.getItem('ax_notify_errors') !== 'false' ? 'checked' : '';
+        const notifDefiSupplySubmittedChecked = localStorage.getItem('ax_notify_defi_supply_submitted') === 'true' ? 'checked' : '';
+        const notifDefiWithdrawSubmittedChecked = localStorage.getItem('ax_notify_defi_withdraw_submitted') === 'true' ? 'checked' : '';
+        const notifDefiFinalChecked = localStorage.getItem('ax_notify_defi_final') === 'true' ? 'checked' : '';
+        const notifDefiErrorsChecked = localStorage.getItem('ax_notify_defi_errors') === 'true' ? 'checked' : '';
 
         const antiSybilWarningHtml = renderInterfaceHint('settings-safety-note', `${t.setWarnTitle}. ${t.setWarnDesc}`, 'warning', '', '🛡️');
 
@@ -4115,35 +5966,6 @@ function renderDashboardContent(section) {
                         <h3 style="color: #fff; margin: 0 0 4px 0; font-size: 16px; font-weight: 600;">${t.setTitle}</h3>
                         <p style="color: var(--text-muted); font-size: 13px; margin: 0;">${t.setDesc}</p>
                     </div>
-                    <button type="button" onclick="randomizeGlobalSettings()" style="background: linear-gradient(135deg, #2563eb, #1d4ed8); color:#fff; border:none; padding: 8px 14px; border-radius: 10px; font-size: 12px; cursor:pointer; font-weight: 600; box-shadow: 0 4px 12px rgba(37,99,235,0.3);">${t.btnRand}</button>
-                </div>
-                
-                <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-main); padding:14px 16px; border-radius:14px; border:1px solid var(--border-color); margin-bottom:18px;">
-                    <div>
-                        <div style="color:#fff; font-size:14px; font-weight:600;">${t.setBgTitle}</div>
-                        <div style="color:var(--text-muted); font-size:12px; margin-top:2px;">${t.setBgDesc}</div>
-                    </div>
-                    <label class="toggle-switch">
-                        <input type="checkbox" id="bgSchedulerToggle" checked onchange="toggleSchedulerState(this)">
-                        <span class="toggle-slider"></span>
-                    </label>
-                </div>
-
-                <div id="schedulerSettingsWrapper" style="transition: opacity 0.3s ease;">
-                    <div style="font-size:13px; color:var(--text-muted); margin-bottom:8px; font-weight:600;">${t.setDays}</div>
-                    
-                    <div class="calendar-grid" id="globalCalendarGrid" style="margin-bottom:16px; display: flex; gap: 8px; flex-wrap: wrap;">
-                        <div class="calendar-day active" data-raw-day="Пн" onclick="handleCalendarDayClick(this)" style="cursor:pointer; user-select:none; flex: 1; min-width: 45px; padding: 12px 6px; font-size: 13px;">${t.calDays['Пн']}</div>
-                        <div class="calendar-day active" data-raw-day="Вт" onclick="handleCalendarDayClick(this)" style="cursor:pointer; user-select:none; flex: 1; min-width: 45px; padding: 12px 6px; font-size: 13px;">${t.calDays['Вт']}</div>
-                        <div class="calendar-day active" data-raw-day="Ср" onclick="handleCalendarDayClick(this)" style="cursor:pointer; user-select:none; flex: 1; min-width: 45px; padding: 12px 6px; font-size: 13px;">${t.calDays['Ср']}</div>
-                        <div class="calendar-day active" data-raw-day="Чт" onclick="handleCalendarDayClick(this)" style="cursor:pointer; user-select:none; flex: 1; min-width: 45px; padding: 12px 6px; font-size: 13px;">${t.calDays['Чт']}</div>
-                        <div class="calendar-day" data-raw-day="Пт" onclick="handleCalendarDayClick(this)" style="cursor:pointer; user-select:none; flex: 1; min-width: 45px; padding: 12px 6px; font-size: 13px;">${t.calDays['Пт']}</div>
-                        <div class="calendar-day" data-raw-day="Сб" onclick="handleCalendarDayClick(this)" style="cursor:pointer; user-select:none; flex: 1; min-width: 45px; padding: 12px 6px; font-size: 13px;">${t.calDays['Сб']}</div>
-                        <div class="calendar-day" data-raw-day="Вс" onclick="handleCalendarDayClick(this)" style="cursor:pointer; user-select:none; flex: 1; min-width: 45px; padding: 12px 6px; font-size: 13px;">${t.calDays['Вс']}</div>
-                    </div>
-
-                    <div style="font-size:13px; color:var(--text-muted); margin-bottom:8px; font-weight:600;">${t.setTimeTitle}</div>
-                    <div id="dailyTimeConfigsContainer" style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 18px;"></div>
                 </div>
 
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px;">
@@ -4165,11 +5987,41 @@ function renderDashboardContent(section) {
                 <div style="background: var(--bg-main); border: 1px solid var(--border-color); border-radius: 12px; padding: 16px; margin-bottom: 18px;">
                     <div style="font-size: 13px; color: #fff; font-weight: 600; margin-bottom: 12px;">${t.notifTitle}</div>
                     <div style="font-size:12px; color:var(--text-muted); line-height:1.45; margin:-4px 0 12px;">${t.notifDesc}</div>
+                    <div style="display:flex; flex-wrap:wrap; gap:8px; margin:0 0 14px;">
+                        <button type="button" onclick="applyTelegramNotificationPreset('important')" class="tg-notification-preset">${t.notifPresetImportant}</button>
+                        <button type="button" onclick="applyTelegramNotificationPreset('all')" class="tg-notification-preset">${t.notifPresetAll}</button>
+                        <button type="button" onclick="applyTelegramNotificationPreset('errors')" class="tg-notification-preset">${t.notifPresetErrors}</button>
+                    </div>
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 13px; color: var(--text-muted);">
                         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" id="notifTransactionSubmittedToggle" ${notifTransactionSubmittedChecked}> ${t.notifTransactionSubmitted}</label>
                         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" id="notifTransactionFinalToggle" ${notifTransactionFinalChecked}> ${t.notifTransactionFinal}</label>
                         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" id="notifRemindersToggle" ${notifRemindersChecked}> ${t.notifReminders}</label>
                         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;"><input type="checkbox" id="notifErrorsToggle" ${notifErrorsChecked}> ${t.notifErrors}</label>
+                    </div>
+                    <div style="border-top:1px solid var(--border-color); margin-top:14px; padding-top:12px;">
+                        <div style="color:#e9d5ff; font-size:12px; font-weight:700;">${t.notifDefiTitle}</div>
+                        <div style="font-size:11px; color:var(--text-muted); line-height:1.45; margin:4px 0 10px;">${t.notifDefiDesc}</div>
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; font-size:13px; color:var(--text-muted);">
+                            <label style="display:flex; align-items:center; gap:8px; cursor:pointer;"><input type="checkbox" id="notifDefiSupplySubmittedToggle" ${notifDefiSupplySubmittedChecked}> ${t.notifDefiSupplySubmitted}</label>
+                            <label style="display:flex; align-items:center; gap:8px; cursor:pointer;"><input type="checkbox" id="notifDefiWithdrawSubmittedToggle" ${notifDefiWithdrawSubmittedChecked}> ${t.notifDefiWithdrawSubmitted}</label>
+                            <label style="display:flex; align-items:center; gap:8px; cursor:pointer;"><input type="checkbox" id="notifDefiFinalToggle" ${notifDefiFinalChecked}> ${t.notifDefiFinal}</label>
+                            <label style="display:flex; align-items:center; gap:8px; cursor:pointer;"><input type="checkbox" id="notifDefiErrorsToggle" ${notifDefiErrorsChecked}> ${t.notifDefiErrors}</label>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="background:var(--bg-main); border:1px solid var(--border-color); border-radius:12px; padding:16px; margin-bottom:18px;">
+                    <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; margin-bottom:5px;">
+                        <div style="font-size:13px; color:#fff; font-weight:700;">${t.securityOverviewTitle}</div>
+                        <button type="button" onclick="loadSecurityOverview()" class="tg-notification-preset">${t.securityRefresh}</button>
+                    </div>
+                    <div style="font-size:12px; color:var(--text-muted); line-height:1.45; margin-bottom:8px;">${t.securityOverviewDesc}</div>
+                    <div id="securityOverviewContent" style="margin-bottom:13px;"></div>
+                    <div style="border-top:1px solid var(--border-color); padding-top:12px; color:#bfdbfe; font-size:12px; line-height:1.55;">
+                        <div style="font-weight:700; color:#e9d5ff; margin-bottom:4px;">${t.securityGuarantees}</div>
+                        <div>• ${t.securityNoKeys}</div>
+                        <div>• ${t.securityConfirm}</div>
+                        <div>• ${t.securitySingleSession}</div>
                     </div>
                 </div>
 
@@ -4179,21 +6031,23 @@ function renderDashboardContent(section) {
             <div class="dashboard-card" style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 18px; padding: 22px; box-shadow: 0 8px 30px rgba(0,0,0,0.4);">
                 <div style="color: #fff; font-weight: 700; font-size: 16px; margin-bottom: 4px;">${t.setInterfaceTitle}</div>
                 <div style="color: var(--text-muted); font-size: 13px; margin-bottom: 14px;">${t.setInterfaceDesc}</div>
-                <label style="display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
-                    <span style="padding-right:16px;">
-                        <span style="display:block; color:#fff; font-size:13px; font-weight:600;">${t.setInterfaceHintsToggle}</span>
-                        <span style="display:block; color:var(--text-muted); font-size:12px; line-height:1.45; margin-top:3px;">${t.setInterfaceHintsToggleDesc}</span>
-                    </span>
-                    <span class="toggle-switch" style="flex:0 0 auto;">
-                        <input type="checkbox" ${areInterfaceHintsEnabled() ? 'checked' : ''} onchange="toggleInterfaceHints(this)">
-                        <span class="toggle-slider"></span>
-                    </span>
-                </label>
+                <div style="display:flex; flex-direction:column; gap:16px;">
+                    <label style="display: flex; align-items: center; justify-content: space-between; cursor: pointer;">
+                        <span style="padding-right:16px;">
+                            <span style="display:block; color:#fff; font-size:13px; font-weight:600;">${t.setInterfaceHintsToggle}</span>
+                            <span style="display:block; color:var(--text-muted); font-size:12px; line-height:1.45; margin-top:3px;">${t.setInterfaceHintsToggleDesc}</span>
+                        </span>
+                        <span class="toggle-switch" style="flex:0 0 auto;">
+                            <input type="checkbox" ${areInterfaceHintsEnabled() ? 'checked' : ''} onchange="toggleInterfaceHints(this)">
+                            <span class="toggle-slider"></span>
+                        </span>
+                    </label>
+                </div>
             </div>
         `;
         setTimeout(() => {
-            updateDailyConfigsUI();
             refreshTelegramConnectionState();
+            loadSecurityOverview();
         }, 50);
 
     } else if (section === 'Looter') {
@@ -4220,110 +6074,153 @@ function renderDashboardContent(section) {
             loadOfficialOpportunities();
             loadAirdropEligibility();
         }, 50);
-    } else if (section === 'Farming') {
+        } else if (section === 'Farming') {
         const storedActivityPane = localStorage.getItem('ax_activity_pane');
-        const activityPane = ['swap', 'transfer', 'plan', 'defi', 'quests', 'journal'].includes(storedActivityPane) ? storedActivityPane : 'swap';
-        const plannerNetworkOptions = NETWORKS_CONFIG.map(net => `<option value="${net.key}">${net.name} (${net.symbol})</option>`).join('');
-        const bridgeDestinationOptions = NETWORKS_CONFIG
-            .filter(net => ['Ethereum', 'Arbitrum', 'Optimism', 'Polygon', 'Linea', 'BNB Chain'].includes(net.key))
-            .map(net => `<option value="${net.key}">${net.name}</option>`).join('');
-        const sourceNetworkOptions = NETWORKS_CONFIG
-            .filter(net => ['Ethereum', 'Base', 'Arbitrum', 'Optimism', 'Polygon', 'Linea', 'BNB Chain'].includes(net.key))
-            .map(net => `<option value="${net.key}">${net.name}</option>`).join('');
-        const reminderDayOptions = [
-            ['Mon', t.planReminderMonday], ['Tue', t.planReminderTuesday], ['Wed', t.planReminderWednesday],
-            ['Thu', t.planReminderThursday], ['Fri', t.planReminderFriday], ['Sat', t.planReminderSaturday], ['Sun', t.planReminderSunday],
-        ].map(([value, label]) => `<option value="${value}">${label}</option>`).join('');
+        const activityPane = ['dex', 'bridges', 'lending', 'journal'].includes(storedActivityPane) ? storedActivityPane : 'dex';
+
         const activityTabs = [
-            ['swap', t.activityTabSwap], ['transfer', t.activityTabTransfer], ['plan', t.activityTabPlan], ['defi', t.activityTabDefi], ['quests', t.activityTabQuests], ['journal', t.activityTabJournal],
+            ['dex', t.activityTabDex || 'DEX'],
+            ['bridges', t.activityTabBridges || 'Bridges'],
+            ['lending', t.activityTabLending || 'Lending'],
+            ['journal', t.activityTabJournal || 'Journal'],
         ].map(([key, label]) => `<button type="button" onclick="switchActivityPane('${key}')" style="background:${activityPane === key ? 'rgba(124,58,237,.22)' : 'var(--bg-main)'}; color:${activityPane === key ? '#e9d5ff' : 'var(--text-muted)'}; border:1px solid ${activityPane === key ? '#7c3aed' : 'var(--border-color)'}; padding:9px 11px; border-radius:9px; cursor:pointer; font-size:12px; white-space:nowrap;">${label}</button>`).join('');
-        const swapPane = `<div id="operationSwapPanel" style="border-top:1px solid var(--border-color); margin-top:18px; padding-top:18px;"><h3 style="color:#fff; margin-top:0; font-size:16px;">${t.baseSwapTitle}</h3><p style="color:var(--text-muted); font-size:13px; line-height:1.5;">${t.baseSwapDesc}</p>${renderInterfaceHint('base-swap-safety', t.baseSwapSafety, 'info', '', '🛡️')}<div style="color:var(--text-muted); font-size:12px; margin-top:10px;">${t.baseSwapSlippage}</div><button type="button" id="baseSwapQuoteButton" onclick="requestBaseSwapQuote()" class="btn-purple-lg" style="font-size:13px; padding:12px 18px; width:auto; margin-top:12px;">${t.baseSwapGetQuote}</button><div id="baseSwapResult" style="font-size:12px; line-height:1.5; margin-top:12px;"></div><div style="margin-top:18px; color:#fff; font-weight:700; font-size:13px;">${t.baseSwapHistoryTitle}</div><div id="baseSwapHistory" style="margin-top:7px;"></div></div>`;
-        const planPane = `
-            <div class="dashboard-card">
-                <h3 style="color:#fff; margin-top:0; font-size:16px;">${t.farmTitle}</h3>
-                <p style="color:var(--text-muted); font-size:13px; line-height:1.5; margin-bottom:12px;">${t.farmDesc}</p>
-                ${renderInterfaceHint('operation-plan-signing', t.planSigningNote, 'info', '', '✍')}
-                <label style="color:var(--text-muted); font-size:12px; display:block; margin-bottom:6px;">${t.netSelect}</label>
-                <select class="auth-input" id="planNetwork" style="margin-bottom:12px; font-size:13px; padding:10px 12px;">${plannerNetworkOptions}</select>
-                <div style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px;">
-                    <label style="color:var(--text-muted); font-size:12px;">${t.planOps}<input id="planOperations" type="number" min="1" max="1000" value="1" oninput="updateTransactionPlanEstimate()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"></label>
-                    <label style="color:var(--text-muted); font-size:12px;">${t.planMaxCost}<input id="planMaxCost" type="number" min="0" step="0.01" value="1" oninput="updateTransactionPlanEstimate()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"></label>
-                    <label style="color:var(--text-muted); font-size:12px;">${t.planReserve}<input id="planReserve" type="number" min="0" step="0.01" value="0" oninput="updateTransactionPlanEstimate()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"></label>
-                    <label style="color:var(--text-muted); font-size:12px;">${t.planDailyCap}<input id="planDailyCap" type="number" min="0" step="0.01" value="10" oninput="updateTransactionPlanEstimate()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"></label>
-                    <label style="color:var(--text-muted); font-size:12px; grid-column:1 / -1;">${t.planMonthlyCap}<input id="planMonthlyCap" type="number" min="0" step="0.01" value="50" oninput="updateTransactionPlanEstimate()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"></label>
-                </div>
-                <div style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:14px;">
-                    <div style="background:var(--bg-main); border:1px solid var(--border-color); border-radius:10px; padding:12px;"><div style="font-size:11px; color:var(--text-muted);">${t.planEstimated}</div><div id="planEstimateValue" style="font-size:18px; color:#fff; font-weight:700; margin-top:4px;">$0.00</div></div>
-                    <div style="background:var(--bg-main); border:1px solid var(--border-color); border-radius:10px; padding:12px;"><div style="font-size:11px; color:var(--text-muted);">${t.planRiskCap}</div><div id="planRiskCapValue" style="font-size:18px; color:#fff; font-weight:700; margin-top:4px;">$0.00</div></div>
-                </div>
-                <div id="planBudgetWarning" style="display:none; color:#fca5a5; font-size:12px; margin-top:10px;"></div>
-                <button type="button" onclick="saveTransactionPlan()" class="btn-purple-lg" style="font-size:13px; padding:12px 20px; width:auto; margin-top:14px;">${t.planSave}</button>
-            </div>
-            <div class="dashboard-card">
-                <h3 style="color:#fff; margin-top:0; font-size:16px;">${t.planReminderTitle}</h3>
-                <p style="color:var(--text-muted); font-size:13px; line-height:1.5; margin-bottom:14px;">${t.planReminderDesc}</p>
-                <label style="display:flex; align-items:center; gap:9px; color:#fff; font-size:13px; cursor:pointer;"><input id="actionReminderEnabled" type="checkbox" onchange="toggleActionReminderFields()"> ${t.planReminderEnabled}</label>
-                <div id="actionReminderFields" style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:14px;">
-                    <label style="color:var(--text-muted); font-size:12px;">${t.planReminderDay}<select id="actionReminderDay" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;">${reminderDayOptions}</select></label>
-                    <label style="color:var(--text-muted); font-size:12px;">${t.planReminderTime}<input id="actionReminderTime" type="text" value="18:00" placeholder="15:32" maxlength="5" inputmode="numeric" pattern="[0-2][0-9]:[0-5][0-9]" oninput="format24HourTimeInput(this)" onblur="normalize24HourTimeInput(this)" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"></label>
-                    <label style="grid-column:1 / -1; display:flex; align-items:center; gap:9px; color:var(--text-muted); font-size:12px; cursor:pointer;"><input id="actionReminderTelegram" type="checkbox" checked> ${t.planReminderTelegram}</label>
-                </div>
-                <div id="actionReminderStatus" style="font-size:12px; margin-top:12px;"></div>
-                <button type="button" onclick="saveActionReminder()" class="btn-purple-lg" style="font-size:13px; padding:12px 20px; width:auto; margin-top:14px;">${t.planReminderSave}</button>
-            </div>
-        `;
-        const bridgePane = `
-            <div id="operationBridgePanel" style="display:none; border-top:1px solid var(--border-color); margin-top:18px; padding-top:18px;">
-                <h3 style="color:#fff; margin:0; font-size:16px;">${t.bridgePlanSimpleTitle}</h3>
-                <p style="color:var(--text-muted); font-size:12px; line-height:1.5; margin:7px 0 0;">${t.bridgePlanSimpleDesc}</p>
-                <div id="bridgePlanResult" style="font-size:12px; line-height:1.5; margin-top:12px; color:var(--text-muted);">${t.bridgePlanStart}</div>
-                <div style="display:flex; flex-wrap:wrap; gap:9px; margin-top:14px;">
-                    <button type="button" onclick="checkBridgeReadiness()" class="btn-dark-sm" style="padding:10px 14px; border-color:#7c3aed;">${t.bridgePlanCheck}</button>
-                    <button type="button" id="bridgePlanSaveButton" onclick="saveBridgePlan()" class="btn-purple-lg" style="display:none; font-size:13px; padding:10px 14px; width:auto;">${t.bridgePlanSave}</button>
-                </div>
-                <details style="border-top:1px solid var(--border-color); margin-top:18px; padding-top:14px;"><summary style="color:var(--text-muted); cursor:pointer; font-size:12px;">${t.bridgePlanHistory}</summary><div id="bridgePlansHistory" style="margin-top:10px;">${t.loading}</div></details>
-            </div>
-        `;
-        const universalBridgePane = `
-            <div id="universalBridgePanel" style="display:none; border-top:1px solid var(--border-color); margin-top:18px; padding-top:18px;">
-                <h3 style="color:#fff; margin:0; font-size:16px;">${t.universalBridgeTitle}</h3>
-                <p style="color:var(--text-muted); font-size:12px; line-height:1.5; margin:7px 0 0;">${t.universalBridgeDesc}</p>
-                ${renderInterfaceHint('universal-bridge-safety', t.universalBridgeSafety, 'info', '', '🛡️')}
-                <div style="display:flex; flex-wrap:wrap; gap:9px; margin-top:14px;">
-                    <button type="button" id="universalBridgeQuoteButton" onclick="requestUniversalBridgeQuote()" class="btn-purple-lg" style="font-size:13px; padding:10px 14px; width:auto;">${t.universalBridgeGetQuote}</button>
-                    <button type="button" id="universalBridgeReviewButton" onclick="executeUniversalBridge()" class="btn-dark-sm" style="display:none; padding:10px 14px; border-color:#7c3aed;">${t.universalBridgeReview}</button>
-                </div>
-                <div id="universalBridgeResult" style="font-size:12px; line-height:1.55; margin-top:12px; color:var(--text-muted);">${t.universalBridgeRouteNotReady}</div>
-                <div style="border-top:1px solid var(--border-color); margin-top:16px; padding-top:14px;">
-                    <div style="color:#fff; font-size:13px; font-weight:700;">${t.universalBridgeHistoryTitle}</div>
-                    <div id="universalBridgeHistory" style="margin-top:7px;"><span style="color:var(--text-muted); font-size:12px;">${t.loading}</span></div>
-                </div>
-            </div>
-        `;
-        const tradePane = `
+
+        const dexPane = `
             <div class="dashboard-card" style="margin-bottom:16px;">
-                <h3 style="color:#fff; margin:0 0 5px; font-size:16px;">${t.operationBuilderTitle}</h3>
-                <p style="color:var(--text-muted); font-size:13px; line-height:1.5; margin:0 0 14px;">${t.operationBuilderDesc}</p>
+                <h3 style="color:#fff; margin:0 0 5px; font-size:16px;">${t.dexTitle || 'DEX Exchange'}</h3>
+                <p style="color:var(--text-muted); font-size:13px; line-height:1.5; margin:0 0 14px;">${t.dexDesc || 'Verified ETH → USDC route through Uniswap on Base.'}</p>
                 <div style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px;">
-                    <label style="color:var(--text-muted); font-size:12px;">${t.operationSourceNetwork}<select id="operationSourceNetwork" class="auth-input" onchange="handleOperationSourceNetworkChange()" style="margin-top:5px; font-size:13px; padding:10px 12px;">${sourceNetworkOptions}</select></label>
-                    <label style="color:var(--text-muted); font-size:12px;">${t.operationSourceAsset}<input id="operationSourceAssetSearch" class="auth-input" placeholder="${t.universalBridgeTokenSearch}" oninput="filterUniversalBridgeTokenSelect('operationSourceAsset')" style="margin-top:5px; font-size:12px; padding:8px 10px;"><select id="operationSourceAsset" class="auth-input" onchange="handleOperationSourceTokenChange()" disabled style="margin-top:5px; font-size:13px; padding:10px 12px;"><option value="">${t.universalBridgeTokensLoading}</option></select></label>
-                    <label style="color:var(--text-muted); font-size:12px;">${t.operationDestinationNetwork}<select id="operationDestinationNetwork" class="auth-input" onchange="handleOperationDestinationNetworkChange()" style="margin-top:5px; font-size:13px; padding:10px 12px;"><option value="Base">Base</option>${bridgeDestinationOptions}</select></label>
-                    <label style="color:var(--text-muted); font-size:12px;">${t.operationReceiveAsset}<input id="operationReceiveAssetSearch" class="auth-input" placeholder="${t.universalBridgeTokenSearch}" oninput="filterUniversalBridgeTokenSelect('operationReceiveAsset')" style="margin-top:5px; font-size:12px; padding:8px 10px;"><select id="operationReceiveAsset" class="auth-input" onchange="handleOperationDestinationTokenChange()" disabled style="margin-top:5px; font-size:13px; padding:10px 12px;"><option value="">${t.universalBridgeTokensLoading}</option></select></label>
-                    <label style="color:var(--text-muted); font-size:12px; grid-column:1 / -1;">${t.operationAmount}<input id="operationAmount" inputmode="decimal" placeholder="0.01" oninput="validateOperationAmount()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"><div id="operationAmountUsd" style="color:#c4b5fd; font-size:14px; font-weight:700; margin-top:6px;"></div></label>
+                    <label style="color:var(--text-muted); font-size:12px;">${t.labelChain || 'Sender Chain'}
+                        <select id="operationSourceNetwork" class="auth-input" disabled style="margin-top:5px; font-size:13px; padding:10px 12px;">
+                            <option value="Base">Base</option>
+                        </select>
+                    </label>
+                    <label style="color:var(--text-muted); font-size:12px;">${t.labelProvider || 'Provider'}
+                        <select class="auth-input" disabled style="margin-top:5px; font-size:13px; padding:10px 12px;">
+                            <option value="uniswap">Uniswap</option>
+                        </select>
+                    </label>
+                    <label style="color:var(--text-muted); font-size:12px;">${t.labelTokenIn || 'From Token'}
+                        <select id="operationSourceAsset" class="auth-input" disabled style="margin-top:5px; font-size:13px; padding:10px 12px;">
+                            <option value="${UNIVERSAL_BRIDGE_NATIVE_TOKEN}">ETH</option>
+                        </select>
+                    </label>
+                    <label style="color:var(--text-muted); font-size:12px;">${t.labelTokenOut || 'To Token'}
+                        <select class="auth-input" disabled style="margin-top:5px; font-size:13px; padding:10px 12px;">
+                            <option value="USDC">USDC</option>
+                        </select>
+                    </label>
+                    <label style="color:var(--text-muted); font-size:12px; grid-column:1 / -1;">${t.labelAmount || 'Amount'}
+                        <input id="operationAmount" inputmode="decimal" placeholder="0.01" oninput="validateOperationAmount()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;">
+                    </label>
                 </div>
-                <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:7px;">
-                    <div id="operationAmountAvailability" style="font-size:12px; color:var(--text-muted);">${t.operationAmountBalanceLoading}</div>
-                    <button type="button" onclick="useOperationMaxAmount()" class="btn-dark-sm" style="padding:6px 10px; font-size:11px; white-space:nowrap;">${t.operationAmountMax}</button>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; font-size:12px;">
+                    <span id="operationAmountAvailability" style="color:var(--text-muted);">${t.loading}</span>
+                    <button type="button" class="btn-dark-sm" onclick="useOperationMaxAmount()" style="padding:4px 8px; font-size:11px;">${t.maxShort || 'MAX'}</button>
                 </div>
-                <div id="operationWalletStatus" style="display:none;"></div>
-                <div id="operationRouteSummary" style="display:none;"></div>
-                ${renderInterfaceHint('universal-bridge-catalog', t.universalBridgeTokensLoading, 'success', 'universalBridgeCatalogStatus', 'ⓘ')}
-                ${universalBridgePane}${swapPane}${bridgePane}
+                <div id="operationWalletStatus" style="margin-top:8px; color:var(--text-muted); font-size:12px;">${t.loading}</div>
+                <div style="margin-top:10px;">
+                    <label style="color:var(--text-muted); font-size:12px;">${t.labelSlippage || 'Slippage'}:
+                        <select id="dexSlippage" class="auth-input" style="margin-top:5px; font-size:13px; padding:6px 12px;">
+                            <option value="0.5">0.5%</option>
+                            <option value="1.0">1.0%</option>
+                        </select>
+                    </label>
+                </div>
+                <button type="button" id="baseSwapQuoteButton" onclick="requestBaseSwapQuote()" class="btn-purple-lg" style="margin-top:14px; width:100%; font-size:13px; padding:12px;">${t.dexGetQuote || 'Get Quote'}</button>
+                <div id="baseSwapResult" style="margin-top:12px; padding:12px; background:var(--bg-main); border:1px solid var(--border-color); border-radius:10px; font-size:12px;"></div>
             </div>
         `;
-        const directTransferPane = `<div class="dashboard-card" style="margin-bottom:16px;"><h3 style="color:#fff; margin:0 0 5px; font-size:16px;">${t.directTransferTitle}</h3><p style="color:var(--text-muted); font-size:13px; line-height:1.5; margin:0 0 14px;">${t.directTransferDesc}</p><div id="directTransferPanel">${t.loading}</div></div>`;
-        const defiPane = `<div class="dashboard-card" style="margin-bottom:16px;"><h3 style="color:#fff; margin:0 0 5px; font-size:16px;">${t.defiSupplyTitle}</h3><p style="color:var(--text-muted); font-size:13px; line-height:1.55; margin:0 0 12px;">${t.defiSupplyDesc}</p>${renderInterfaceHint('defi-supply-safety', t.defiSupplySafety, 'warning', '', '🛡️')}<label style="display:block; color:var(--text-muted); font-size:12px; margin-top:13px;">${t.defiSupplyAmount}<input id="aaveSupplyAmount" inputmode="decimal" placeholder="10" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"></label><button type="button" id="aaveSupplyQuoteButton" onclick="requestAaveUsdcSupplyQuote()" class="btn-purple-lg" style="font-size:13px; padding:10px 14px; width:auto; margin-top:12px;">${t.defiSupplyCheck}</button><div id="aaveSupplyResult" style="font-size:12px; line-height:1.5; margin-top:11px;"></div></div><div class="dashboard-card"><div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px;"><div><h3 style="color:#fff; margin:0 0 5px; font-size:16px;">${t.defiOverviewTitle}</h3><p style="color:var(--text-muted); font-size:13px; line-height:1.55; margin:0;">${t.defiOverviewDesc}</p></div><button type="button" id="defiRefreshButton" onclick="loadDefiOverview(true)" class="btn-dark-sm" style="padding:7px 10px; font-size:12px; white-space:nowrap;">${t.defiRefresh}</button></div>${renderInterfaceHint('defi-read-only', t.defiReadOnlyNote, 'info', '', '🛡️')}<div id="defiOverviewPanel" style="margin-top:12px;"><span style="color:var(--text-muted); font-size:13px;">${t.loading}</span></div></div>`;
-        const questsPane = `<div class="dashboard-card"><h3 style="color:#fff; margin-top:0; font-size:16px;">${t.activityQuestsTitle}</h3><p style="color:var(--text-muted); font-size:13px; line-height:1.55;">${t.activityQuestsDesc}</p><button type="button" onclick="switchMenu(null, 'Looter')" class="btn-dark-sm" style="margin-top:8px; padding:10px 14px; border-color:#7c3aed;">${t.activityQuestsOpen}</button></div>`;
+
+        const bridgesPane = `
+            <div class="dashboard-card" style="margin-bottom:16px;">
+                <h3 style="color:#fff; margin:0 0 5px; font-size:16px;">${t.bridgesTitle || 'Bridges Routing'}</h3>
+                <p style="color:var(--text-muted); font-size:13px; line-height:1.5; margin:0 0 14px;">${t.bridgesDesc || 'Live cross-network routes supplied and validated through LI.FI.'}</p>
+                <div style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px;">
+                    <label style="color:var(--text-muted); font-size:12px;">${t.labelFromNetwork || 'From Network'}
+                        <select id="operationSourceNetwork" onchange="handleOperationSourceNetworkChange()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;">
+                            <option value="Base">Base</option>
+                            <option value="Arbitrum">Arbitrum</option>
+                            <option value="Ethereum">Ethereum</option>
+                            <option value="Optimism">Optimism</option>
+                            <option value="Polygon">Polygon</option>
+                            <option value="Linea">Linea</option>
+                            <option value="BNB Chain">BNB Chain</option>
+                        </select>
+                    </label>
+                    <label style="color:var(--text-muted); font-size:12px;">${t.labelToNetwork || 'To Network'}
+                        <select id="operationDestinationNetwork" onchange="handleOperationDestinationNetworkChange()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;">
+                            <option value="Arbitrum">Arbitrum</option>
+                            <option value="Base">Base</option>
+                            <option value="Ethereum">Ethereum</option>
+                            <option value="Optimism">Optimism</option>
+                            <option value="Polygon">Polygon</option>
+                            <option value="Linea">Linea</option>
+                            <option value="BNB Chain">BNB Chain</option>
+                        </select>
+                    </label>
+                    <label style="color:var(--text-muted); font-size:12px;">${t.labelTokenIn || 'From Token'}
+                        <select id="operationSourceAsset" onchange="handleOperationSourceTokenChange()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"><option value="">${t.loading}</option></select>
+                    </label>
+                    <label style="color:var(--text-muted); font-size:12px;">${t.labelTokenOut || 'To Token'}
+                        <select id="operationReceiveAsset" onchange="handleOperationDestinationTokenChange()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"><option value="">${t.loading}</option></select>
+                    </label>
+                    <label style="color:var(--text-muted); font-size:12px; grid-column:1 / -1;">${t.labelAmount || 'Amount'}
+                        <input id="operationAmount" inputmode="decimal" placeholder="0.01" oninput="validateOperationAmount()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;">
+                    </label>
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; font-size:12px;">
+                    <span id="operationAmountAvailability" style="color:var(--text-muted);">${t.loading}</span>
+                    <button type="button" class="btn-dark-sm" onclick="useOperationMaxAmount()" style="padding:4px 8px; font-size:11px;">${t.maxShort || 'MAX'}</button>
+                </div>
+                <div id="operationWalletStatus" style="margin-top:8px; color:var(--text-muted); font-size:12px;">${t.loading}</div>
+                <div id="universalBridgeCatalogStatus" style="margin-top:6px; color:var(--text-muted); font-size:12px;"></div>
+                <button type="button" id="universalBridgeQuoteButton" onclick="requestUniversalBridgeQuote()" class="btn-purple-lg" style="margin-top:14px; width:100%; font-size:13px; padding:12px;">${t.bridgeGetQuote || 'Get Quote'}</button>
+                <button type="button" id="universalBridgeReviewButton" onclick="executeUniversalBridge()" class="btn-dark-sm" style="display:none; margin-top:9px; width:100%; padding:11px; border-color:#7c3aed;">${t.universalBridgeReview}</button>
+                <div id="universalBridgeResult" style="margin-top:12px; padding:12px; background:var(--bg-main); border:1px solid var(--border-color); border-radius:10px; font-size:12px;"></div>
+            </div>
+        `;
+
+        const lendingPane = `
+            <div class="dashboard-card" style="margin-bottom:16px;">
+                <h3 style="color:#fff; margin:0 0 5px; font-size:16px;">${t.lendingTitle || 'Lending Markets'}</h3>
+                <p style="color:var(--text-muted); font-size:13px; line-height:1.5; margin:0 0 14px;">${t.lendingDesc || 'DeFi Lending credit protocols integrations: Aave V3.'}</p>
+                <div style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px;">
+                    <label style="color:var(--text-muted); font-size:12px;">${t.labelChain || 'Network'}
+                        <select id="lendingNetwork" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;">
+                            <option value="Base">Base</option>
+                        </select>
+                    </label>
+                    <label style="color:var(--text-muted); font-size:12px;">${t.labelProtocol || 'Protocol'}
+                        <select id="lendingProtocol" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;">
+                            <option value="aave_v3">Aave V3</option>
+                        </select>
+                    </label>
+                    <label style="color:var(--text-muted); font-size:12px;">${t.labelAsset || 'Asset'}
+                        <select id="lendingAsset" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;">
+                            <option value="USDC">USDC</option>
+                        </select>
+                    </label>
+                    <label style="color:var(--text-muted); font-size:12px;">${t.labelAction || 'Action'}
+                        <select id="lendingActionType" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;">
+                            <option value="supply">${t.actionSupply || 'Supply'}</option>
+                            <option value="withdraw">${t.actionWithdraw || 'Withdraw'}</option>
+                        </select>
+                    </label>
+                    <label style="color:var(--text-muted); font-size:12px; grid-column:1 / -1;">${t.labelAmount || 'Amount'}
+                        <input id="lendingAmount" inputmode="decimal" placeholder="10.0" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;">
+                    </label>
+                </div>
+                <div style="margin-top:10px; font-size:12px; color:var(--text-muted);">${t.lendingLiveRateNote || 'The live variable rate and available balance are checked before wallet confirmation.'}</div>
+                <button type="button" id="lendingBuildButton" onclick="buildVerifiedLendingOperation()" class="btn-purple-lg" style="margin-top:14px; width:100%; font-size:13px; padding:12px;">${t.lendingSubmit || 'Supply / Withdraw'}</button>
+                <div id="lendingResultContainer" style="margin-top:12px; padding:12px; background:var(--bg-main); border:1px solid var(--border-color); border-radius:10px; font-size:12px;"></div>
+            </div>
+            <div class="dashboard-card">
+                <h3 style="color:#fff; margin:0 0 10px; font-size:15px;">${t.lendingPositionsTitle || 'Active Positions'}</h3>
+                <div id="lendingPositionsList" style="font-size:12px; color:var(--text-muted);">${t.loading}</div>
+            </div>
+        `;
+
         const journalFilters = [
             ['all', t.operationsJournalAll], ['pending', t.operationsJournalPending], ['completed', t.operationsJournalCompleted],
         ].map(([key, label]) => `<button type="button" onclick="setOperationsJournalFilter('${key}')" style="background:${operationsJournalFilter === key ? 'rgba(124,58,237,.22)' : 'var(--bg-main)'}; color:${operationsJournalFilter === key ? '#e9d5ff' : 'var(--text-muted)'}; border:1px solid ${operationsJournalFilter === key ? '#7c3aed' : 'var(--border-color)'}; padding:7px 10px; border-radius:8px; cursor:pointer; font-size:12px;">${label}</button>`).join('');
@@ -4331,55 +6228,24 @@ function renderDashboardContent(section) {
             ? `<button type="button" id="operationsJournalCheckButton" onclick="checkPendingOperations(this)" class="btn-dark-sm" style="padding:7px 10px; font-size:12px; white-space:nowrap; border-color:#7c3aed;">${t.operationsJournalCheckPending}</button>`
             : `<button type="button" onclick="loadOperationsJournal()" class="btn-dark-sm" style="padding:7px 10px; font-size:12px; white-space:nowrap;">${t.operationsJournalRefresh}</button>`;
         const journalPane = `<div class="dashboard-card"><div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px;"><div><h3 style="color:#fff; margin:0 0 5px; font-size:16px;">${t.operationsJournalTitle}</h3><p style="color:var(--text-muted); font-size:13px; line-height:1.5; margin:0;">${t.operationsJournalDesc}</p></div>${journalAction}</div><div style="display:flex; flex-wrap:wrap; gap:7px; margin-top:14px;">${journalFilters}</div><div id="operationsJournalList" style="margin-top:12px;"><span style="color:var(--text-muted); font-size:13px;">${t.loading}</span></div></div>`;
-        const activePane = { swap: tradePane, transfer: directTransferPane, plan: planPane, defi: defiPane, quests: questsPane, journal: journalPane }[activityPane];
-        centerHtml = `<div class="dashboard-card" style="margin-bottom:16px;"><h3 style="color:#fff; margin:0 0 5px; font-size:17px;">${t.activityTitle}</h3><p style="color:var(--text-muted); font-size:13px; line-height:1.5; margin:0 0 14px;">${t.activityDesc}</p><div style="display:flex; flex-wrap:wrap; gap:8px;">${activityTabs}</div></div>${activePane}`;
-        if (activityPane === 'plan') setTimeout(() => { loadTransactionPlan(); loadActionReminder(); }, 50);
-        if (activityPane === 'swap') setTimeout(() => { loadOperationBuilderWalletStatus(); updateOperationBuilder(); loadUniversalBridgeHistory(); }, 50);
-        if (activityPane === 'transfer') setTimeout(loadDirectTransferPanel, 50);
-        if (activityPane === 'journal') setTimeout(loadOperationsJournal, 50);
-        if (activityPane === 'defi') setTimeout(loadDefiOverview, 50);
-    } else if (section === 'Farming' && false) {
-        const plannerNetworkOptions = NETWORKS_CONFIG.map(net => `<option value="${net.key}">${net.name} (${net.symbol})</option>`).join('');
+
+        const activePane = { dex: dexPane, bridges: bridgesPane, lending: lendingPane, journal: journalPane }[activityPane];
+        
         centerHtml = `
-            <div class="dashboard-card">
-                <h3 style="color:#fff; margin-top:0; font-size:16px;">${t.baseSwapTitle}</h3>
-                <p style="color:var(--text-muted); font-size:13px; line-height:1.5;">${t.baseSwapDesc}</p>
-                <div style="background:rgba(59,130,246,.08); border:1px solid rgba(59,130,246,.25); color:#bfdbfe; padding:10px 12px; border-radius:10px; font-size:12px; line-height:1.5; margin:12px 0;">${t.baseSwapSafety}</div>
-                <div style="display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); gap:10px; align-items:end;">
-                    <label style="color:var(--text-muted); font-size:12px;">${t.baseSwapYouPay}<input id="baseSwapAmount" inputmode="decimal" class="auth-input" placeholder="0.01" style="font-size:13px; padding:10px 12px; margin-top:5px;"></label>
-                    <div style="color:#c4b5fd; padding:0 0 11px; font-size:18px;">→</div>
-                    <div style="background:var(--bg-main); border:1px solid var(--border-color); border-radius:10px; padding:10px 12px;"><div style="color:var(--text-muted); font-size:11px;">${t.baseSwapYouReceive}</div><div style="color:#fff; margin-top:4px; font-weight:700;">USDC</div></div>
-                </div>
-                <div style="color:var(--text-muted); font-size:12px; margin-top:10px;">${t.baseSwapSlippage}</div>
-                <button type="button" id="baseSwapQuoteButton" onclick="requestBaseSwapQuote()" class="btn-purple-lg" style="font-size:13px; padding:12px 18px; width:auto; margin-top:12px;">${t.baseSwapGetQuote}</button>
-                <div id="baseSwapResult" style="font-size:12px; line-height:1.5; margin-top:12px;"></div>
+            <div class="dashboard-card" style="margin-bottom:16px;">
+                <h3 style="color:#fff; margin:0 0 5px; font-size:17px;">${t.activityTitle}</h3>
+                <p style="color:var(--text-muted); font-size:13px; line-height:1.5; margin:0 0 14px;">${t.activityDesc}</p>
+                <div style="display:flex; flex-wrap:wrap; gap:8px;">${activityTabs}</div>
             </div>
-            <div class="dashboard-card">
-                <h3 style="color: #fff; margin-top: 0; font-size: 16px;">${t.farmTitle}</h3>
-                <p style="color: var(--text-muted); font-size: 13px; line-height: 1.5; margin-bottom: 12px;">${t.farmDesc}</p>
-                <div style="background:rgba(59,130,246,.08); border:1px solid rgba(59,130,246,.25); color:#bfdbfe; padding:10px 12px; border-radius:10px; font-size:12px; line-height:1.5; margin-bottom:14px;">${t.planSigningNote}</div>
-                <label style="color: var(--text-muted); font-size: 12px; display: block; margin-bottom: 6px;">${t.netSelect}</label>
-                <select class="auth-input" id="planNetwork" style="margin-bottom: 12px; font-size: 13px; padding: 10px 12px;">${plannerNetworkOptions}</select>
-                <div style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px;">
-                    <label style="color:var(--text-muted); font-size:12px;">${t.planOps}<input id="planOperations" type="number" min="1" max="1000" value="1" oninput="updateTransactionPlanEstimate()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"></label>
-                    <label style="color:var(--text-muted); font-size:12px;">${t.planMaxCost}<input id="planMaxCost" type="number" min="0" step="0.01" value="1" oninput="updateTransactionPlanEstimate()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"></label>
-                    <label style="color:var(--text-muted); font-size:12px;">${t.planReserve}<input id="planReserve" type="number" min="0" step="0.01" value="0" oninput="updateTransactionPlanEstimate()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"></label>
-                    <label style="color:var(--text-muted); font-size:12px;">${t.planDailyCap}<input id="planDailyCap" type="number" min="0" step="0.01" value="10" oninput="updateTransactionPlanEstimate()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"></label>
-                    <label style="color:var(--text-muted); font-size:12px; grid-column:1 / -1;">${t.planMonthlyCap}<input id="planMonthlyCap" type="number" min="0" step="0.01" value="50" oninput="updateTransactionPlanEstimate()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"></label>
-                </div>
-                <div style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-top:14px;">
-                    <div style="background:var(--bg-main); border:1px solid var(--border-color); border-radius:10px; padding:12px;"><div style="font-size:11px; color:var(--text-muted);">${t.planEstimated}</div><div id="planEstimateValue" style="font-size:18px; color:#fff; font-weight:700; margin-top:4px;">$0.00</div></div>
-                    <div style="background:var(--bg-main); border:1px solid var(--border-color); border-radius:10px; padding:12px;"><div style="font-size:11px; color:var(--text-muted);">${t.planRiskCap}</div><div id="planRiskCapValue" style="font-size:18px; color:#fff; font-weight:700; margin-top:4px;">$0.00</div></div>
-                </div>
-                <div id="planBudgetWarning" style="display:none; color:#fca5a5; font-size:12px; margin-top:10px;"></div>
-                <button type="button" onclick="saveTransactionPlan()" class="btn-purple-lg" style="font-size:13px; padding:12px 20px; width:auto; margin-top:14px;">${t.planSave}</button>
-            </div>
+            ${activePane}
         `;
-        setTimeout(() => {
-            loadTransactionPlan();
-        }, 50);
+        
+        if (activityPane === 'dex') setTimeout(loadOperationBuilderWalletStatus, 50);
+        if (activityPane === 'bridges') setTimeout(loadOperationBuilderWalletStatus, 50);
+        if (activityPane === 'lending') setTimeout(loadLendingPositions, 50);
+        if (activityPane === 'journal') setTimeout(loadOperationsJournal, 50);
     } else if (section === 'Wallets') {
-        const isTipHidden = localStorage.getItem('hideProxyTip') === 'true' || hideAllBanners;
+        const isTipHidden = localStorage.getItem('hideProxyTip') === 'true' || !areInterfaceHintsEnabled();
         const proxyTipHtml = isTipHidden ? '' : `
             <div id="proxyTipBox" style="background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.2); padding: 12px 14px; border-radius: 10px; font-size: 12px; color: #93c5fd; display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; box-sizing: border-box; line-height: 1.4;">
                 <div style="display: flex; align-items: flex-start; gap: 8px;">
@@ -4419,30 +6285,18 @@ function renderDashboardContent(section) {
                     <input type="text" id="newWalletAddress" placeholder="${t.phAddr}" class="auth-input" style="font-size: 13px; padding: 10px 12px;">
                     ${proxyTipHtml}
                     <input type="text" id="newWalletProxy" placeholder="${t.phProxy}" class="auth-input" style="font-size: 13px; padding: 10px 12px;">
+                    <div style="display:flex; gap:8px; align-items:flex-start; padding:9px 10px; border:1px solid rgba(124,58,237,.28); background:rgba(124,58,237,.08); border-radius:9px; color:#d8b4fe; font-size:12px; line-height:1.4;">
+                        <span aria-hidden="true">✓</span><span>${t.walletProfileHint}</span>
+                    </div>
                     <button type="button" onclick="addNewWalletToDB()" class="btn-modal-primary" style="margin-top:4px; padding: 12px; font-size: 14px;">${t.btnAddWal}</button>
                 </div>
                 <div id="walletResponseMsg" style="margin-top: 8px; font-size:12px;"></div>
-            </div>
-            <div class="dashboard-card">
-                <h3 style="color:#fff; margin-top:0; font-size:16px;">${t.transferTemplatesTitle}</h3>
-                <p style="color:var(--text-muted); font-size:13px; line-height:1.5;">${t.transferTemplatesDesc}</p>
-                <div id="walletTransferCenter" style="display:flex; flex-direction:column; gap:10px;">${t.loading}</div>
-            </div>
-            <div class="dashboard-card">
-                <h3 style="color:#fff; margin-top:0; font-size:16px;">${t.testTransferTitle}</h3>
-                <p style="color:var(--text-muted); font-size:13px; line-height:1.5;">${t.testTransferDesc}</p>
-                <div style="display:grid; grid-template-columns:2fr 1fr; gap:10px;">
-                    <input type="text" id="baseSepoliaTestRecipient" placeholder="${t.testTransferRecipient}" class="auth-input" style="font-size:13px; padding:10px 12px;">
-                    <input type="text" inputmode="decimal" id="baseSepoliaTestAmount" placeholder="0.001" class="auth-input" style="font-size:13px; padding:10px 12px;">
-                </div>
-                <button type="button" id="baseSepoliaTestButton" onclick="sendBaseSepoliaTestTransfer()" class="btn-dark-sm" style="margin-top:10px; width:auto; padding:10px 14px; border-color:#7c3aed;">${t.testTransferButton}</button>
-                <div id="baseSepoliaTestResult" style="font-size:12px; line-height:1.5; margin-top:9px;"></div>
             </div>
         `;
         setTimeout(() => {
             updateBaseWalletConnectionState();
             loadWalletsFromDB();
-            loadTransferCenter();
+            injectWalletSecurityBanner();
         }, 50);
     } else if (section === 'Networks') {
         const networksHtml = NETWORKS_CONFIG.map(net => `
@@ -4461,7 +6315,7 @@ function renderDashboardContent(section) {
             </div>
         `).join('');
 
-        const networkGuideHtml = hideAllBanners ? '' : `
+        const networkGuideHtml = !areInterfaceHintsEnabled() ? '' : `
             <div id="guide-box" style="position: relative; background: rgba(157,78,221,0.08); border: 1px solid rgba(157,78,221,0.25); border-radius: 14px; padding: 16px 18px; margin-bottom: 18px; font-size: 13px; color: var(--text-muted); line-height: 1.5;">
                 <button onclick="document.getElementById('guide-box').style.display='none'" style="position: absolute; top: 14px; right: 16px; background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 16px; font-weight: bold;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--text-muted)'">✕</button>
                 <b style="color: #fff;">${t.guideTitle}</b><br>
@@ -4514,27 +6368,24 @@ function renderDashboardContent(section) {
 
     // Общий вывод дашборда
     content.innerHTML = `
-        <div class="desktop-sidebar" style="height: fit-content; align-self: flex-start;">
-            <div style="border-bottom: 1px solid var(--border-color); padding-bottom: 12px; margin-bottom: 8px;">
-                <div style="font-weight: 600; color: #fff; font-size: 14px;">${username}</div>
-                <div style="font-size: 12px; color: var(--text-muted);">${t.subPlan}: ${userPlan}</div>
-                <div style="font-size: 11px; color: #22c55e; margin-top: 4px;">${t.subActive} (${subscriptionDaysLeft} ${t.days})</div>
+        <div class="dashboard-topbar">
+            <div class="dashboard-identity">
+                <span class="dashboard-identity__mark">AX</span>
+                <span class="dashboard-identity__copy">
+                    <b>${username}</b>
+                    <small>${userPlan} · ${t.subActive} · ${subscriptionDaysLeft} ${t.days}</small>
+                </span>
             </div>
-
-            <div style="display: flex; flex-direction: column; gap: 2px;">
-                <div style="font-size: 11px; color: #737373; text-transform: uppercase; padding: 4px 8px; font-weight: bold;">${t.menuMain}</div>
-                <div class="sidebar-menu-item ${section === 'Account' ? 'active' : ''}" onclick="switchMenu(this, 'Account')">${t.menuAcc}</div>
-                <div class="sidebar-menu-item ${section === 'Looter' ? 'active' : ''}" onclick="switchMenu(this, 'Looter')">${t.menuLooter}</div>
-                <div class="sidebar-menu-item ${section === 'Farming' ? 'active' : ''}" onclick="switchMenu(this, 'Farming')">${t.menuFarm}</div>
-                <div class="sidebar-menu-item ${section === 'Wallets' ? 'active' : ''}" onclick="switchMenu(this, 'Wallets')">${t.menuWallets}</div>
-                <div class="sidebar-menu-item ${section === 'Networks' ? 'active' : ''}" onclick="switchMenu(this, 'Networks')">${t.menuNet}</div>
-                <div class="sidebar-menu-item ${section === 'Settings' ? 'active' : ''}" onclick="switchMenu(this, 'Settings')">${t.menuSet}</div>
-                
-                <div class="sidebar-menu-item" style="color: #ef4444; margin-top: 4px;" onclick="returnToMainSite()">
-                    ${t.menuExit}
-                </div>
-            </div>
+            <nav class="dashboard-topnav" aria-label="${t.menuMain}">
+                <button type="button" class="dashboard-nav-item ${section === 'Account' ? 'active' : ''}" onclick="switchMenu(this, 'Account')">${t.menuAcc}</button>
+                <button type="button" class="dashboard-nav-item ${section === 'Looter' ? 'active' : ''}" onclick="switchMenu(this, 'Looter')">${t.menuLooter}</button>
+                <button type="button" class="dashboard-nav-item ${section === 'Farming' ? 'active' : ''}" onclick="switchMenu(this, 'Farming')">${t.menuFarm}</button>
+                <button type="button" class="dashboard-nav-item ${section === 'Wallets' ? 'active' : ''}" onclick="switchMenu(this, 'Wallets')">${t.menuWallets}</button>
+                <button type="button" class="dashboard-nav-item ${section === 'Networks' ? 'active' : ''}" onclick="switchMenu(this, 'Networks')">${t.menuNet}</button>
+                <button type="button" class="dashboard-nav-item ${section === 'Settings' ? 'active' : ''}" onclick="switchMenu(this, 'Settings')">${t.menuSet}</button>
+            </nav>
+            <button type="button" class="dashboard-logout" onclick="logoutUser()">${t.menuExit}</button>
         </div>
-        <div style="flex: 1; display: flex; flex-direction: column; gap: 16px; min-width: 0;">${centerHtml}</div>
+        <div class="dashboard-main">${centerHtml}</div>
     `;
 }

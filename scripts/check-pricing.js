@@ -16,6 +16,10 @@ for (const legacyPrice of ['$95', '$150', '$280']) {
   if (files.markup.includes(legacyPrice)) throw new Error(`Legacy price remains in pricing modal: ${legacyPrice}`);
 }
 
-if (!files.server.includes('ONBOARDING_PRICE = 49')) throw new Error('Server onboarding price is missing');
-if (!files.client.includes('const ONBOARDING_PRICE = 49')) throw new Error('Client onboarding price is missing');
-console.log('Pricing configuration verified: $29 / $49 / $89, optional onboarding $49.');
+for (const onboardingMarker of ['ONBOARDING_PRICE', 'onboardingOption', 'onboarding-title', 'onboarding-desc']) {
+  if (files.client.includes(onboardingMarker) || files.server.includes(onboardingMarker) || files.markup.includes(onboardingMarker)) {
+    throw new Error(`Removed onboarding option is still exposed: ${onboardingMarker}`);
+  }
+}
+
+console.log('Pricing configuration verified: $29 / $49 / $89, without onboarding add-on.');

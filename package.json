@@ -1,0 +1,16 @@
+{
+  "name": "airdrop-x-interface",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "build:ui": "vite build",
+    "watch:ui": "vite build --watch"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "latest",
+    "vite": "latest",
+    "react": "latest",
+    "react-dom": "latest"
+  },
+  "devDependencies": {}
+}

@@ -15,3 +15,9 @@ telegram-bot*.log
 
 .pytest_cache/
 .mypy_cache/
+
+# Persistent Chromium data can contain authenticated browser sessions.
+browser_profiles/
+
+# Local React build tooling. The compiled UI in ui-dist is committed and served by FastAPI.
+node_modules/

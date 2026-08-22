@@ -12,7 +12,14 @@ const context = {
   sessionStorage: { getItem: () => null, setItem() {}, removeItem() {} },
   navigator: { userAgent: 'locale-test' },
   document: { getElementById: element, documentElement: { setAttribute() {} }, body: { setAttribute() {} } },
-  window: { AIRDROP_LOCALES: {}, addEventListener() {} }
+  window: {
+    AIRDROP_LOCALES: {},
+    addEventListener() {},
+    crypto: {
+      randomUUID: () => '00000000-0000-4000-8000-000000000000',
+      getRandomValues: bytes => bytes.fill(7)
+    }
+  }
 };
 
 vm.createContext(context);

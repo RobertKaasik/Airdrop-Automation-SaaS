@@ -1,5 +1,6 @@
 import os
 import random
+import json
 import asyncio
 import smtplib
 import time
@@ -8,11 +9,21 @@ import uuid
 import datetime
 import requests
 import logging
+import ipaddress
 import hashlib
 import hmac
 import bcrypt
 import re
 import math
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from core.database import Base, SessionLocal, engine, init_db
+from core.models import FinancialTransferIntent, ProfileRun, UserProfile
+from core.browser_profile_manager import (
+    BrowserProfileManager,
+    ProfileBusyError,
+    ProfileConfigurationError,
+)
+from decimal import Decimal
 from email.message import EmailMessage
 from pathlib import Path
 from urllib.parse import urlparse
@@ -21,6 +32,10 @@ from dotenv import load_dotenv
 # Securely load environment variables from .env
 BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
+
+browser_manager = BrowserProfileManager(
+    base_profiles_path=str(BASE_DIR / "browser_profiles")
+)
 
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 465
@@ -31,6 +46,7 @@ TELEGRAM_BOT_USERNAME = os.getenv("TELEGRAM_BOT_USERNAME", "").strip().lstrip("@
 WALLETCONNECT_PROJECT_ID = os.getenv("WALLETCONNECT_PROJECT_ID", "").strip()
 UNISWAP_API_KEY = os.getenv("UNISWAP_API_KEY", "").strip()
 LIFI_API_KEY = os.getenv("LIFI_API_KEY", "").strip()
+SUBSCRIPTION_PAYMENTS_ENABLED = os.getenv("SUBSCRIPTION_PAYMENTS_ENABLED", "false").strip().lower() == "true"
 ADMIN_USERNAMES = {
     username.strip()
     for username in os.getenv("AIRDROP_ADMIN_USERNAMES", "").split(",")
@@ -39,6 +55,16 @@ ADMIN_USERNAMES = {
 
 MASTER_WALLET_ADDRESS = "0x5e5316Dea1c44d220d4c60A5fcC2949E5A06Fc66"
 BASE_RPC_URL = "https://mainnet.base.org"
+BASE_SEPOLIA_RPC_URL = "https://sepolia.base.org"
+BASE_USDC_MAINNET_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+BASE_USDC_SEPOLIA_ADDRESS = "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
+SUBSCRIPTION_PAYMENT_MODE = os.getenv("SUBSCRIPTION_PAYMENT_MODE", "testnet").strip().lower()
+SUBSCRIPTION_PAYMENT_RECEIVER = os.getenv(
+    "SUBSCRIPTION_PAYMENT_RECEIVER", MASTER_WALLET_ADDRESS
+).strip()
+# Testnet payments follow the exact same USDC verification path as production,
+# but use a faucet-friendly amount. This value is never used on Base mainnet.
+SUBSCRIPTION_TEST_AMOUNT_USDC = Decimal("1.00")
 
 DEFAULT_OFFICIAL_OPPORTUNITY_SOURCES = [
     {
@@ -113,13 +139,14 @@ DEFAULT_OFFICIAL_OPPORTUNITY_SOURCES = [
     },
 ]
 
-from fastapi import FastAPI, APIRouter, Depends, HTTPException, Header
+from fastapi import FastAPI, APIRouter, Depends, HTTPException, Header, Request
+from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Any, Dict, List, Optional
-from sqlalchemy import create_engine, Column, Integer, String, Float, Boolean, text
-from sqlalchemy.orm import declarative_base, sessionmaker, Session
+from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, text
+from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from web3 import Web3
@@ -129,10 +156,8 @@ logging.getLogger('apscheduler.executors.default').setLevel(logging.WARNING)
 logging.getLogger('apscheduler.scheduler').setLevel(logging.WARNING)
 
 try:
-    from core_engine import run_real_farm, get_live_gas_price
+    from core_engine import get_live_gas_price
 except ImportError:
-    async def run_real_farm(*args, **kwargs):
-        return [{"wallet_id": 0, "status": "Failed", "error": "Core engine not found"}]
     def get_live_gas_price(network):
         return "N/A"
     
@@ -140,10 +165,8 @@ USER_SETTINGS_DB = {}
 verification_codes = {}
 SUBSCRIPTION_DURATION_SECONDS = 30 * 24 * 60 * 60
 PLAN_PRICES = {"Standard": 29, "Pro": 49, "Premium": 89}
-ONBOARDING_PRICE = 49
 BASE_SLOT_LIMITS = {"Standard": 5, "Pro": 15, "Premium": 30}
-payment_sessions = {}
-payment_tokens = {}
+request_rate_limits = {}
 gas_cache = {}
 wallet_health_cache = {}
 network_balance_cache = {}
@@ -151,6 +174,7 @@ native_usd_price_cache = {}
 transaction_status_cache = {}
 defi_positions_cache = {}
 aave_supply_quote_sessions = {}
+aave_withdraw_quote_sessions = {}
 WALLET_HEALTH_CACHE_TTL_SECONDS = 20
 ETH_USD_PRICE_CACHE_TTL_SECONDS = 60
 TRANSACTION_STATUS_CACHE_TTL_SECONDS = 20
@@ -161,6 +185,12 @@ AUTH_SESSION_DURATION_SECONDS = 12 * 60 * 60
 EMAIL_CODE_TTL_SECONDS = 10 * 60
 EMAIL_CODE_RESEND_SECONDS = 60
 PAYMENT_SESSION_TTL_SECONDS = 30 * 60
+PAYMENT_TOKEN_TTL_SECONDS = 30 * 60
+PAYMENT_REGISTRATION_RESUME_TTL_SECONDS = 7 * 24 * 60 * 60
+PASSWORD_RESET_TTL_SECONDS = 10 * 60
+PASSWORD_RESET_RESEND_SECONDS = 60
+DEVICE_CHANGE_WINDOW_SECONDS = 30 * 24 * 60 * 60
+MAX_DEVICE_CHANGES_PER_WINDOW = 1
 TELEGRAM_LINK_TTL_SECONDS = 10 * 60
 TELEGRAM_TEST_COOLDOWN_SECONDS = 60
 BASE_CHAIN_ID = 8453
@@ -350,11 +380,6 @@ SWAP_SUBMISSION_TTL_SECONDS = 10 * 60
 swap_submission_sessions = {}
 BRIDGE_PLAN_DESTINATIONS = {"Ethereum", "Arbitrum", "Optimism", "Polygon", "Linea", "BNB Chain"}
 
-SQLALCHEMY_DATABASE_URL = "sqlite:///./airdrop_x.db"
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-Base = declarative_base()
-
 class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, index=True)
@@ -373,7 +398,6 @@ class Wallet(Base):
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, index=True)
     wallet_address = Column(String)
-    encrypted_pk = Column(String)
     label = Column(String, nullable=True)
     proxy = Column(String)
 
@@ -400,6 +424,60 @@ class ProcessedBlockchainTransaction(Base):
     purpose = Column(String, nullable=False)
     username = Column(String, nullable=True)
     created_at = Column(Integer, nullable=False)
+
+class PaymentCheckoutSession(Base):
+    """Short-lived checkout state, persisted so a local reload cannot lose it."""
+    __tablename__ = "payment_checkout_sessions"
+    id = Column(String, primary_key=True)
+    client_session_id = Column(String, index=True, nullable=False)
+    plan = Column(String, nullable=False)
+    amount_usdc = Column(String, nullable=False)
+    amount_atomic = Column(String, nullable=False)
+    onboarding = Column(Boolean, nullable=False, default=False)
+    payment_mode = Column(String, nullable=False)
+    status = Column(String, nullable=False, default="pending")
+    txid = Column(String, nullable=True)
+    created_at = Column(Integer, nullable=False)
+    paid_at = Column(Integer, nullable=True)
+
+class PaymentAccessToken(Base):
+    """Hashed, short-lived registration access issued after a verified payment."""
+    __tablename__ = "payment_access_tokens"
+    token_hash = Column(String, primary_key=True)
+    checkout_session_id = Column(String, index=True, nullable=True)
+    client_session_id = Column(String, index=True, nullable=False)
+    plan = Column(String, nullable=False)
+    amount = Column(String, nullable=False)
+    onboarding = Column(Boolean, nullable=False, default=False)
+    created_at = Column(Integer, nullable=False)
+    expires_at = Column(Integer, nullable=False)
+    used_at = Column(Integer, nullable=True)
+
+class EmailVerificationCode(Base):
+    """Registration code state survives a safe server restart."""
+    __tablename__ = "email_verification_codes"
+    email = Column(String, primary_key=True)
+    code_hash = Column(String, nullable=False)
+    attempts = Column(Integer, nullable=False, default=0)
+    sent_at = Column(Integer, nullable=False)
+    expires_at = Column(Integer, nullable=False)
+
+class PasswordResetCode(Base):
+    __tablename__ = "password_reset_codes"
+    email = Column(String, primary_key=True)
+    code_hash = Column(String, nullable=False)
+    attempts = Column(Integer, nullable=False, default=0)
+    sent_at = Column(Integer, nullable=False)
+    expires_at = Column(Integer, nullable=False)
+
+class UserDeviceAccess(Base):
+    """One trusted browser/device per account with a deliberate monthly change limit."""
+    __tablename__ = "user_device_access"
+    username = Column(String, primary_key=True)
+    device_hash = Column(String, nullable=False)
+    window_started_at = Column(Integer, nullable=False)
+    changes_in_window = Column(Integer, nullable=False, default=0)
+    updated_at = Column(Integer, nullable=False)
 
 class BudgetPlan(Base):
     __tablename__ = "budget_plans"
@@ -433,6 +511,10 @@ class TelegramSubscription(Base):
     notify_transaction_final = Column(Boolean, nullable=False, default=True)
     notify_reminders = Column(Boolean, nullable=False, default=True)
     notify_errors = Column(Boolean, nullable=False, default=True)
+    notify_defi_supply_submitted = Column(Boolean, nullable=False, default=False)
+    notify_defi_withdraw_submitted = Column(Boolean, nullable=False, default=False)
+    notify_defi_final = Column(Boolean, nullable=False, default=False)
+    notify_defi_errors = Column(Boolean, nullable=False, default=False)
 
 class OfficialOpportunitySource(Base):
     __tablename__ = "official_opportunity_sources"
@@ -486,6 +568,21 @@ class BaseSwapRecord(Base):
     status = Column(String, nullable=False, default="submitted")
     created_at = Column(Integer, nullable=False)
 
+class DefiOperationRecord(Base):
+    """A public, wallet-confirmed Aave action recorded for the DeFi screen."""
+    __tablename__ = "defi_operation_records"
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, index=True, nullable=False)
+    wallet_address = Column(String, nullable=False)
+    operation_type = Column(String, nullable=False)  # supply | withdraw
+    protocol = Column(String, nullable=False, default="Aave V3")
+    network = Column(String, nullable=False, default="Base")
+    asset_symbol = Column(String, nullable=False, default="USDC")
+    amount = Column(String, nullable=False)
+    tx_hash = Column(String, unique=True, index=True, nullable=False)
+    status = Column(String, nullable=False, default="submitted")
+    created_at = Column(Integer, nullable=False)
+
 class UniversalBridgeRecord(Base):
     __tablename__ = "universal_bridge_records"
     id = Column(Integer, primary_key=True, index=True)
@@ -518,6 +615,35 @@ class ActionReminder(Base):
     last_sent_slot = Column(String, nullable=True)
     updated_at = Column(Integer, nullable=False)
 
+class WalletActionSchedule(Base):
+    """A per-wallet calendar rule that only prepares and reminds about an action.
+
+    The record never contains a private key, signature, or authority to submit a
+    blockchain transaction. Every real action still requires confirmation in the
+    user's connected MetaMask or WalletConnect wallet.
+    """
+    __tablename__ = "wallet_action_schedules"
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, index=True, nullable=False)
+    wallet_id = Column(Integer, ForeignKey("wallets.id", ondelete="CASCADE"), index=True, nullable=False)
+    action_type = Column(String, nullable=False)
+    day_of_week = Column(String, nullable=False)
+    time_of_day = Column(String, nullable=False)
+    timezone = Column(String, nullable=False, default="UTC")
+    enabled = Column(Boolean, nullable=False, default=True)
+    telegram_enabled = Column(Boolean, nullable=False, default=True)
+    acknowledgement = Column(Boolean, nullable=False, default=False)
+    schedule_mode = Column(String, nullable=False, default="fixed")
+    weekly_min = Column(Integer, nullable=False, default=3)
+    weekly_max = Column(Integer, nullable=False, default=4)
+    window_start = Column(String, nullable=False, default="10:00")
+    window_end = Column(String, nullable=False, default="21:00")
+    generated_week = Column(String, nullable=True)
+    generated_slots = Column(String, nullable=True)
+    last_sent_slot = Column(String, nullable=True)
+    created_at = Column(Integer, nullable=False)
+    updated_at = Column(Integer, nullable=False)
+
 class BridgePlan(Base):
     __tablename__ = "bridge_plans"
     id = Column(Integer, primary_key=True, index=True)
@@ -530,7 +656,7 @@ class BridgePlan(Base):
     status = Column(String, nullable=False, default="planned")
     created_at = Column(Integer, nullable=False)
 
-Base.metadata.create_all(bind=engine)
+init_db()
 
 def ensure_schema_columns():
     with engine.connect() as conn:
@@ -565,6 +691,10 @@ def ensure_schema_columns():
             "notify_transaction_final": "BOOLEAN DEFAULT 1",
             "notify_reminders": "BOOLEAN DEFAULT 1",
             "notify_errors": "BOOLEAN DEFAULT 1",
+            "notify_defi_supply_submitted": "BOOLEAN DEFAULT 0",
+            "notify_defi_withdraw_submitted": "BOOLEAN DEFAULT 0",
+            "notify_defi_final": "BOOLEAN DEFAULT 0",
+            "notify_defi_errors": "BOOLEAN DEFAULT 0",
         }
         for column_name, column_type in telegram_filter_columns.items():
             if telegram_subscription_columns and column_name not in telegram_subscription_columns:
@@ -574,6 +704,20 @@ def ensure_schema_columns():
         if opportunity_columns and "claim_url" not in opportunity_columns:
             conn.execute(text("ALTER TABLE official_opportunity_sources ADD COLUMN claim_url VARCHAR"))
             conn.commit()
+        wallet_schedule_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(wallet_action_schedules)"))}
+        wallet_schedule_additions = {
+            "schedule_mode": "VARCHAR DEFAULT 'fixed'",
+            "weekly_min": "INTEGER DEFAULT 3",
+            "weekly_max": "INTEGER DEFAULT 4",
+            "window_start": "VARCHAR DEFAULT '10:00'",
+            "window_end": "VARCHAR DEFAULT '21:00'",
+            "generated_week": "VARCHAR",
+            "generated_slots": "VARCHAR",
+        }
+        for column_name, column_type in wallet_schedule_additions.items():
+            if wallet_schedule_columns and column_name not in wallet_schedule_columns:
+                conn.execute(text(f"ALTER TABLE wallet_action_schedules ADD COLUMN {column_name} {column_type}"))
+                conn.commit()
 
 ensure_schema_columns()
 
@@ -596,9 +740,77 @@ def ensure_default_opportunity_sources() -> None:
     finally:
         db.close()
 
+def migrate_schedules() -> None:
+    db = SessionLocal()
+    try:
+        schedules = db.query(WalletActionSchedule).all()
+        for s in schedules:
+            if s.action_type == "swap":
+                s.action_type = "dex"
+            elif s.action_type == "defi":
+                s.action_type = "lending"
+            elif s.action_type == "bridge":
+                pass
+            elif s.action_type not in ("dex", "lending", "bridge"):
+                logging.warning("Unknown action_type '%s' for schedule ID %s, disabling.", s.action_type, s.id)
+                s.enabled = False
+        db.commit()
+    except Exception as e:
+        logging.error("Error migrating action schedules: %s", e)
+        db.rollback()
+    finally:
+        db.close()
+
 ensure_default_opportunity_sources()
+migrate_schedules()
 
 app = FastAPI(title="AIRDROP-X Backend API")
+
+# Never expose the project directory itself: it contains server code, the local
+# database, and environment files. The UI only needs this small allow-list.
+PUBLIC_STATIC_PATHS = {
+    "",
+    "index.html",
+    "app.js",
+    "style.css",
+    "autofarm.gif",
+    "wallets.gif",
+    "looter.gif",
+    "support.gif",
+    "demo-gas.gif",
+    "demo-wallets.gif",
+    "demo-checks.gif",
+    "demo-telegram.gif",
+    "demo-gas-ru.gif",
+    "demo-wallets-ru.gif",
+    "demo-checks-ru.gif",
+    "demo-telegram-ru.gif",
+    "demo-gas-en.gif",
+    "demo-wallets-en.gif",
+    "demo-checks-en.gif",
+    "demo-telegram-en.gif",
+    "demo-gas-zh.gif",
+    "demo-wallets-zh.gif",
+    "demo-checks-zh.gif",
+    "demo-telegram-zh.gif",
+    "ui-dist/react-ui.js",
+    "ui-dist/react-ui.css",
+    "favicon.svg",
+    "locales/ru.js",
+    "locales/en.js",
+    "locales/zh.js",
+}
+
+class RestrictedStaticFiles(StaticFiles):
+    async def get_response(self, path: str, scope):
+        # Starlette resolves a mounted path with Windows separators when the
+        # application runs locally on Windows.  Keep the allow-list in one
+        # canonical (URL) format so nested public files such as locales/ru.js
+        # are served, while every non-listed file remains unavailable.
+        normalized_path = "" if path in {"", "."} else path.replace("\\", "/").lstrip("/")
+        if normalized_path not in PUBLIC_STATIC_PATHS:
+            return Response(status_code=404)
+        return await super().get_response(normalized_path, scope)
 
 allowed_origins = [
     origin.strip()
@@ -620,6 +832,10 @@ async def add_security_headers(request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    # API responses can carry session-scoped state, account data, or payment
+    # progress. Never let a browser or an intermediate proxy reuse them.
+    if request.url.path.startswith("/api/"):
+        response.headers.setdefault("Cache-Control", "no-store")
     if os.getenv("APP_ENV", "development").lower() == "production":
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
@@ -751,41 +967,145 @@ def get_displayable_wallet_assets(
     return visible_assets, native_price_usd is not None, native_reserve
 
 # --- REAL BLOCKCHAIN TX VERIFICATION ---
-def verify_blockchain_tx(txid: str, expected_amount: float) -> bool:
+def get_subscription_payment_config() -> Optional[dict]:
+    """Return the one explicit USDC settlement route, or None when disabled."""
+    if not SUBSCRIPTION_PAYMENTS_ENABLED:
+        return None
+    if not re.fullmatch(r"0x[0-9a-fA-F]{40}", SUBSCRIPTION_PAYMENT_RECEIVER):
+        logging.error("Subscription payment receiver is not a valid EVM address")
+        return None
+    if SUBSCRIPTION_PAYMENT_MODE in {"testnet", "base-sepolia"}:
+        return {
+            "mode": "testnet",
+            "is_testnet": True,
+            "network": "Base Sepolia",
+            "chain_id": 84532,
+            "rpc_url": BASE_SEPOLIA_RPC_URL,
+            "usdc_contract": BASE_USDC_SEPOLIA_ADDRESS,
+            "receiver": Web3.to_checksum_address(SUBSCRIPTION_PAYMENT_RECEIVER),
+        }
+    if SUBSCRIPTION_PAYMENT_MODE in {"mainnet", "base-mainnet"}:
+        return {
+            "mode": "mainnet",
+            "is_testnet": False,
+            "network": "Base",
+            "chain_id": 8453,
+            "rpc_url": BASE_RPC_URL,
+            "usdc_contract": BASE_USDC_MAINNET_ADDRESS,
+            "receiver": Web3.to_checksum_address(SUBSCRIPTION_PAYMENT_RECEIVER),
+        }
+    logging.error("Unknown subscription payment mode: %s", SUBSCRIPTION_PAYMENT_MODE)
+    return None
+
+def decode_erc20_transfer_call(call_data: Any) -> Optional[tuple[str, int]]:
+    """Decode exactly ERC-20 transfer(address,uint256), without ABI fallbacks."""
+    if isinstance(call_data, (bytes, bytearray)):
+        data = "0x" + bytes(call_data).hex()
+    else:
+        data = str(call_data or "")
+    data = data.lower()
+    if not re.fullmatch(r"0xa9059cbb[0-9a-f]{128}", data):
+        return None
+    payload = data[2:]
+    recipient = "0x" + payload[8 + 24:8 + 64]
+    amount_atomic = int(payload[8 + 64:8 + 128], 16)
+    return recipient, amount_atomic
+
+
+ERC20_TRANSFER_EVENT_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef"
+
+
+def normalize_hex_value(value: Any) -> str:
+    """Convert JSON-RPC hex values and HexBytes values to lower-case 0x form."""
+    if isinstance(value, (bytes, bytearray)):
+        return "0x" + bytes(value).hex()
+    try:
+        hex_value = value.hex()
+    except (AttributeError, TypeError):
+        hex_value = str(value or "")
+    hex_value = str(hex_value).lower()
+    return hex_value if hex_value.startswith("0x") else "0x" + hex_value
+
+
+def receipt_has_exact_usdc_transfer(
+    receipt: Any,
+    payment_config: dict,
+    expected_atomic_amount: int,
+) -> bool:
+    """Match one exact official-USDC Transfer event in a successful receipt.
+
+    Smart-account wallets can wrap an ERC-20 transfer inside a user operation,
+    meaning the top-level transaction is sent to an account/entry-point contract
+    instead of directly to USDC. The USDC Transfer event remains the canonical
+    on-chain proof of the exact payment.
+    """
+    for log in receipt.get("logs", []):
+        if normalize_hex_value(log.get("address")).lower() != payment_config["usdc_contract"].lower():
+            continue
+        topics = log.get("topics") or []
+        if len(topics) != 3:
+            continue
+        normalized_topics = [normalize_hex_value(topic) for topic in topics]
+        if normalized_topics[0] != ERC20_TRANSFER_EVENT_TOPIC:
+            continue
+        recipient = "0x" + normalized_topics[2][-40:]
+        data = normalize_hex_value(log.get("data"))
+        if not re.fullmatch(r"0x[0-9a-f]{64}", data):
+            continue
+        amount_atomic = int(data[2:], 16)
+        if (
+            recipient.lower() == payment_config["receiver"].lower()
+            and amount_atomic == expected_atomic_amount
+        ):
+            return True
+    return False
+
+
+def get_usdc_payment_verification_state(txid: str, payment_config: dict, expected_atomic_amount: int) -> str:
+    """Return confirmed, pending, or invalid for one exact USDC transfer."""
     try:
         clean_txid = txid.strip()
-        if expected_amount <= 0 or not clean_txid.startswith("0x") or len(clean_txid) != 66:
-            return False
-            
-        w3 = Web3(Web3.HTTPProvider(BASE_RPC_URL, request_kwargs={"timeout": 10}))
+        if expected_atomic_amount <= 0 or not re.fullmatch(r"0x[0-9a-fA-F]{64}", clean_txid):
+            return "invalid"
+
+        w3 = Web3(Web3.HTTPProvider(payment_config["rpc_url"], request_kwargs={"timeout": 10}))
         if not w3.is_connected():
-            print("[Web3 Error] No connection to Base node")
-            return False 
-            
-        receipt = w3.eth.get_transaction_receipt(clean_txid)
+            return "pending"
+        try:
+            receipt = w3.eth.get_transaction_receipt(clean_txid)
+        except Exception:
+            # A wallet can return a hash before the node can see its receipt.
+            return "pending"
         if not receipt or receipt.get("status") != 1:
-            return False
-            
+            return "invalid"
         tx = w3.eth.get_transaction(clean_txid)
         if not tx:
-            return False
-            
-        to_addr = tx.get("to")
-        if not to_addr or to_addr.lower() != MASTER_WALLET_ADDRESS.lower():
-            return False
-            
-        value_wei = tx.get("value", 0)
-        value_eth = float(w3.from_wei(value_wei, 'ether'))
-        
-        # The sender pays network fees separately, so the transfer itself must cover
-        # the expected payment amount.
-        if value_eth < (expected_amount * 0.95):
-            return False
-            
-        return True
-    except Exception as e:
-        print(f"[Blockchain Verify Exception] {e}")
-        return False
+            return "pending"
+
+        if int(tx.get("chainId", 0)) != payment_config["chain_id"]:
+            return "invalid"
+        contract_address = tx.get("to")
+        if contract_address and contract_address.lower() == payment_config["usdc_contract"].lower():
+            # Standard EOA path: the outer transaction itself is USDC.transfer.
+            decoded = decode_erc20_transfer_call(tx.get("input") or tx.get("data"))
+            if not decoded:
+                return "invalid"
+            recipient, amount_atomic = decoded
+            return "confirmed" if (
+                recipient.lower() == payment_config["receiver"].lower()
+                and amount_atomic == expected_atomic_amount
+            ) else "invalid"
+
+        # Smart-account path: trust only the exact official USDC Transfer event
+        # emitted in this successful transaction receipt.
+        return "confirmed" if receipt_has_exact_usdc_transfer(
+            receipt, payment_config, expected_atomic_amount
+        ) else "invalid"
+    except Exception:
+        return "pending"
+
+def verify_usdc_payment_tx(txid: str, payment_config: dict, expected_atomic_amount: int) -> bool:
+    return get_usdc_payment_verification_state(txid, payment_config, expected_atomic_amount) == "confirmed"
 
 scheduler = AsyncIOScheduler()
 
@@ -830,6 +1150,87 @@ async def run_scheduled_action_reminder_job():
                     messages[normalize_language(subscription.language)],
                 )
             reminder.last_sent_slot = current_slot
+
+        wallet_schedules = db.query(WalletActionSchedule).filter(
+            WalletActionSchedule.enabled.is_(True),
+        ).all()
+        action_labels = {
+            "ru": {"swap": "Обмен", "bridge": "Мост", "defi": "DeFi"},
+            "en": {"swap": "Swap", "bridge": "Bridge", "defi": "DeFi"},
+            "zh": {"swap": "兑换", "bridge": "跨链桥", "defi": "DeFi"},
+        }
+        for schedule in wallet_schedules:
+            try:
+                local_now = datetime.datetime.now(ZoneInfo(schedule.timezone))
+            except (ZoneInfoNotFoundError, ValueError):
+                logging.warning("Invalid timezone on wallet schedule id=%s", schedule.id)
+                continue
+            local_day = current_day_map.get(local_now.weekday())
+            local_time = local_now.strftime("%H:%M")
+            local_slot = f"{local_now.strftime('%Y-%m-%d %H:%M')}|{schedule.timezone}"
+            if schedule.schedule_mode == "flexible":
+                try:
+                    generated_slots = ensure_flexible_schedule_week(schedule, local_now)
+                except ValueError:
+                    logging.warning("Invalid flexible schedule id=%s", schedule.id)
+                    schedule.enabled = False
+                    schedule.updated_at = int(time.time())
+                    continue
+                current_date = local_now.date().isoformat()
+                if not any(
+                    item.get("date") == current_date and item.get("time") == local_time
+                    for item in generated_slots
+                ):
+                    continue
+            elif schedule.day_of_week != local_day or schedule.time_of_day != local_time:
+                continue
+            if schedule.last_sent_slot == local_slot:
+                continue
+
+            wallet = db.query(Wallet).filter(
+                Wallet.id == schedule.wallet_id,
+                Wallet.username == schedule.username,
+            ).first()
+            if not wallet or not wallet.proxy:
+                schedule.enabled = False
+                schedule.updated_at = int(time.time())
+                continue
+
+            subscription = get_telegram_subscription(db, schedule.username)
+            if subscription and schedule.telegram_enabled and subscription.notify_reminders:
+                language = normalize_language(subscription.language)
+                wallet_name = re.sub(
+                    r"([_*`\[])",
+                    r"\\\1",
+                    (wallet.label or f"Wallet {wallet.id}")[:80],
+                )
+                short_address = f"{wallet.wallet_address[:8]}…{wallet.wallet_address[-6:]}"
+                action_name = action_labels[language].get(schedule.action_type, schedule.action_type)
+                messages = {
+                    "ru": (
+                        "🗓 *AIRDROP-X: действие по расписанию*\n"
+                        f"Кошелёк: *{wallet_name}* (`{short_address}`)\n"
+                        f"Действие: *{action_name}*\n"
+                        "Откройте Центр действий, проверьте параметры и подтвердите операцию в MetaMask или WalletConnect. "
+                        "Без подтверждения средства не перемещаются."
+                    ),
+                    "en": (
+                        "🗓 *AIRDROP-X: scheduled action*\n"
+                        f"Wallet: *{wallet_name}* (`{short_address}`)\n"
+                        f"Action: *{action_name}*\n"
+                        "Open the Action Center, review the parameters, and approve the operation in MetaMask or WalletConnect. "
+                        "No funds move without your confirmation."
+                    ),
+                    "zh": (
+                        "🗓 *AIRDROP-X：计划操作*\n"
+                        f"钱包：*{wallet_name}* (`{short_address}`)\n"
+                        f"操作：*{action_name}*\n"
+                        "请打开操作中心、检查参数，并在 MetaMask 或 WalletConnect 中确认。未经确认不会转移资金。"
+                    ),
+                }
+                send_telegram_notification(subscription.chat_id, messages[language])
+            schedule.last_sent_slot = local_slot
+            schedule.updated_at = int(time.time())
         db.commit()
     except Exception:
         db.rollback()
@@ -837,11 +1238,206 @@ async def run_scheduled_action_reminder_job():
     finally:
         db.close()
 
+def get_request_client_key(request: Request) -> str:
+    """Return a rate-limit key without accepting spoofed client addresses.
+
+    A reverse proxy is trusted only when an operator explicitly enables it in
+    the deployment environment. This keeps local/ngrok development safe by
+    default while allowing Render-style deployments to rate-limit per visitor.
+    """
+    if os.getenv("APP_TRUST_PROXY_HEADERS", "false").strip().lower() == "true":
+        forwarded = request.headers.get("x-forwarded-for", "").split(",", 1)[0].strip()
+        try:
+            return str(ipaddress.ip_address(forwarded))
+        except ValueError:
+            pass
+    return str(request.client.host if request.client else "unknown")[:80]
+
+def enforce_request_rate_limit(scope: str, key: str, limit: int, window_seconds: int) -> None:
+    """Small in-memory abuse guard for public endpoints; no personal data is logged."""
+    now_ts = int(time.time())
+    for bucket_key, bucket in list(request_rate_limits.items()):
+        if bucket["reset_at"] <= now_ts:
+            request_rate_limits.pop(bucket_key, None)
+    bucket_key = f"{scope}:{key[:160]}"
+    bucket = request_rate_limits.get(bucket_key)
+    if not bucket or bucket["reset_at"] <= now_ts:
+        request_rate_limits[bucket_key] = {"count": 1, "reset_at": now_ts + window_seconds}
+        return
+    if bucket["count"] >= limit:
+        retry_after = max(1, bucket["reset_at"] - now_ts)
+        raise HTTPException(
+            status_code=429,
+            detail="Too many requests. Please wait and try again",
+            headers={"Retry-After": str(retry_after)},
+        )
+    bucket["count"] += 1
+
+def normalize_registration_email(value: str) -> str:
+    email = (value or "").strip().lower()
+    if len(email) > 254 or not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email):
+        raise HTTPException(status_code=422, detail="Enter a valid email address")
+    return email
+
+def normalize_proxy_configuration(value: Optional[str]) -> Optional[str]:
+    """Validate proxy settings without logging or returning credentials."""
+    proxy = (value or "").strip()
+    if not proxy:
+        return None
+    if len(proxy) > 512 or any(ord(character) < 32 for character in proxy):
+        raise HTTPException(status_code=422, detail="Proxy configuration is invalid")
+
+    try:
+        if "://" in proxy:
+            parsed = urlparse(proxy)
+            if parsed.scheme.lower() not in {"http", "https", "socks5", "socks5h"}:
+                raise ValueError("unsupported scheme")
+            host = parsed.hostname or ""
+            port = parsed.port
+        else:
+            host, port_text, _login, _password = proxy.rsplit(":", 3)
+            port = int(port_text)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=422, detail="Proxy configuration is invalid")
+
+    if not host or port is None or not 1 <= int(port) <= 65535:
+        raise HTTPException(status_code=422, detail="Proxy configuration is invalid")
+
+    try:
+        address = ipaddress.ip_address(host.strip("[]"))
+        if not address.is_global:
+            raise HTTPException(status_code=422, detail="Proxy must use a public address")
+    except ValueError:
+        hostname = host.lower().rstrip(".")
+        if hostname in {"localhost", "localhost.localdomain"} or hostname.endswith(".local"):
+            raise HTTPException(status_code=422, detail="Proxy must use a public address")
+        if not re.fullmatch(r"[a-z0-9](?:[a-z0-9.-]{0,251}[a-z0-9])?", hostname):
+            raise HTTPException(status_code=422, detail="Proxy configuration is invalid")
+
+    return proxy
+
+def validate_client_session_id(value: str) -> str:
+    session_id = (value or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9_-]{16,128}", session_id):
+        raise HTTPException(status_code=422, detail="Payment session identifier is invalid")
+    return session_id
+
+async def run_defi_status_notification_job():
+    """Check only recorded Aave receipts and send the user's opted-in final status."""
+    db = SessionLocal()
+    try:
+        records = db.query(DefiOperationRecord).filter(
+            DefiOperationRecord.status.in_(["submitted", "in_progress"]),
+        ).order_by(DefiOperationRecord.created_at.desc()).limit(12).all()
+        refresh_defi_operation_statuses(db, records)
+    except Exception:
+        db.rollback()
+        logging.exception("Unable to refresh Aave DeFi notification statuses")
+    finally:
+        db.close()
+
+SCHEDULE_DAY_CODES = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+
+def parse_schedule_minutes(value: str) -> int:
+    if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", value or ""):
+        raise ValueError("Invalid schedule time")
+    hours, minutes = (int(part) for part in value.split(":"))
+    return hours * 60 + minutes
+
+def ensure_flexible_schedule_week(
+    schedule: WalletActionSchedule,
+    local_now: datetime.datetime,
+    force: bool = False,
+) -> list[dict]:
+    """Create a fresh reminder plan for the current ISO week.
+
+    Only reminder timestamps are generated. No transaction parameters,
+    signatures, approvals, or wallet credentials are created or stored.
+    """
+    iso = local_now.isocalendar()
+    current_week_key = f"{iso.year}-W{iso.week:02d}"
+    if not force and schedule.generated_slots:
+        try:
+            slots = json.loads(schedule.generated_slots)
+            # A rule created near the end of a week may already contain the
+            # first complete plan for the following week. Keep that plan until
+            # its week starts instead of replacing it on every scheduler tick.
+            if (
+                isinstance(slots, list)
+                and schedule.generated_week
+                and schedule.generated_week >= current_week_key
+            ):
+                return slots
+        except (TypeError, ValueError, json.JSONDecodeError):
+            pass
+
+    start_minutes = parse_schedule_minutes(schedule.window_start or "10:00")
+    end_minutes = parse_schedule_minutes(schedule.window_end or "21:00")
+    if start_minutes >= end_minutes:
+        raise ValueError("Invalid flexible schedule window")
+
+    week_start = local_now.date() - datetime.timedelta(days=iso.weekday - 1)
+    remaining_days = sum(
+        1
+        for day_index in range(7)
+        if datetime.datetime.combine(
+            week_start + datetime.timedelta(days=day_index),
+            datetime.time(hour=end_minutes // 60, minute=end_minutes % 60),
+            tzinfo=local_now.tzinfo,
+        ) > local_now
+    )
+    # A 3–4 day plan must not silently become a one-day plan on a weekend.
+    # In that situation schedule the first complete set for next week.
+    if remaining_days < schedule.weekly_min:
+        week_start += datetime.timedelta(days=7)
+
+    target_iso = week_start.isocalendar()
+    target_week_key = f"{target_iso.year}-W{target_iso.week:02d}"
+    rng = secrets.SystemRandom()
+    candidate_slots = []
+    for day_index, day_code in enumerate(SCHEDULE_DAY_CODES):
+        minute_of_day = rng.randint(start_minutes, end_minutes)
+        slot_date = week_start + datetime.timedelta(days=day_index)
+        slot_time = datetime.time(hour=minute_of_day // 60, minute=minute_of_day % 60)
+        slot_datetime = datetime.datetime.combine(slot_date, slot_time, tzinfo=local_now.tzinfo)
+        if slot_datetime <= local_now:
+            continue
+        candidate_slots.append({
+            "date": slot_date.isoformat(),
+            "day": day_code,
+            "time": slot_time.strftime("%H:%M"),
+        })
+
+    if candidate_slots:
+        requested_count = rng.randint(schedule.weekly_min, schedule.weekly_max)
+        selected_count = min(requested_count, len(candidate_slots))
+        slots = sorted(
+            rng.sample(candidate_slots, selected_count),
+            key=lambda item: (item["date"], item["time"]),
+        )
+    else:
+        slots = []
+
+    schedule.generated_week = target_week_key
+    schedule.generated_slots = json.dumps(slots, ensure_ascii=False, separators=(",", ":"))
+    schedule.updated_at = int(time.time())
+    return slots
+
 @app.on_event("startup")
 async def startup_event():
     scheduler.add_job(run_scheduled_action_reminder_job, 'interval', minutes=1)
+    scheduler.add_job(run_defi_status_notification_job, 'interval', minutes=2, id='defi_status_notifications', replace_existing=True)
     scheduler.start()
-    print("✅ Background async task scheduler started.")
+    logging.info("Background async task scheduler started.")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Release local resources cleanly when the API process stops."""
+    if scheduler.running:
+        scheduler.shutdown(wait=False)
+    await browser_manager.shutdown()
+    logging.info("AIRDROP-X backend stopped cleanly.")
 
 class DailyScheduleItem(BaseModel):
     time: str
@@ -864,12 +1460,18 @@ class ProfileSettingsRequest(BaseModel):
     notifyTransactionFinal: Optional[bool] = True
     notifyReminders: Optional[bool] = True
     notifyErrors: Optional[bool] = True
+    notifyDefiSupplySubmitted: Optional[bool] = False
+    notifyDefiWithdrawSubmitted: Optional[bool] = False
+    notifyDefiFinal: Optional[bool] = False
+    notifyDefiErrors: Optional[bool] = False
     interfaceHints: Optional[bool] = True
     language: Optional[str] = "ru"
 
 class PaymentRecoverReq(BaseModel):
     txid: str
     client_session_id: str
+    plan: str
+    onboarding: bool = False
 
 class UserRegister(BaseModel):
     username: str
@@ -877,7 +1479,6 @@ class UserRegister(BaseModel):
     password: str
     code: str
     plan: str = "Standard"
-    activation_price: int
     client_session_id: str
     payment_token: str
     fingerprint: str = ""
@@ -886,6 +1487,14 @@ class UserLogin(BaseModel):
     username: str
     password: str
     fingerprint: str = ""
+
+class PasswordResetConfirmRequest(BaseModel):
+    email: str
+    code: str
+    password: str
+
+class PaymentRegistrationResumeRequest(BaseModel):
+    client_session_id: str
 
 class WalletAdd(BaseModel):
     username: str
@@ -934,6 +1543,21 @@ class ActionReminderRequest(BaseModel):
     time_of_day: str
     enabled: bool = False
     telegram_enabled: bool = True
+
+class WalletActionScheduleRequest(BaseModel):
+    action_type: str
+    day_of_week: str
+    time_of_day: str
+    timezone: str = "UTC"
+    enabled: bool = True
+    telegram_enabled: bool = True
+    acknowledgement: bool = False
+    schedule_mode: str = "fixed"
+    weekly_min: int = 3
+    weekly_max: int = 4
+    window_start: str = "10:00"
+    window_end: str = "21:00"
+    reroll: bool = False
 
 class BridgePlanRequest(BaseModel):
     wallet_address: str
@@ -996,8 +1620,11 @@ class DirectTransferRecordCreateRequest(BaseModel):
 class WalletBatchAddRequest(BaseModel):
     wallet_addresses: List[str]
 
-class WalletLabelUpdateRequest(BaseModel):
+class WalletUpdateRequest(BaseModel):
     label: str
+    # None means that the existing proxy remains unchanged. Credentials are
+    # accepted only for an explicit replacement and are never returned by APIs.
+    proxy: Optional[str] = None
 
 class BaseSwapQuoteRequest(BaseModel):
     wallet_address: str
@@ -1019,20 +1646,47 @@ class AaveSupplySubmissionRequest(BaseModel):
     quote_id: str
     tx_hash: str
 
+class AaveWithdrawQuoteRequest(BaseModel):
+    wallet_address: str
+    amount: str
+
+class AaveWithdrawSubmissionRequest(BaseModel):
+    quote_id: str
+    tx_hash: str
+
 def normalize_language(language: Optional[str]) -> str:
     return language if language in {"ru", "en", "zh"} else "ru"
 
-def issue_payment_token(client_session_id: str, plan: str, amount: float, onboarding: bool = False) -> str:
-    token = secrets.token_urlsafe(32)
-    payment_tokens[token] = {
-        "client_session_id": client_session_id,
-        "plan": plan,
-        "amount": amount,
-        "onboarding": onboarding,
-        "created_at": int(time.time()),
-        "used": False,
-    }
-    return token
+def hash_secret(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+def issue_payment_token(
+    db: Session,
+    client_session_id: str,
+    plan: str,
+    amount: str,
+    onboarding: bool = False,
+    checkout_session_id: Optional[str] = None,
+) -> str:
+    """Create a one-use access token without persisting its raw value."""
+    now_ts = int(time.time())
+    db.query(PaymentAccessToken).filter(
+        PaymentAccessToken.client_session_id == client_session_id,
+        PaymentAccessToken.used_at.is_(None),
+    ).delete(synchronize_session=False)
+    raw_token = secrets.token_urlsafe(32)
+    db.add(PaymentAccessToken(
+        token_hash=hash_secret(raw_token),
+        checkout_session_id=checkout_session_id,
+        client_session_id=client_session_id,
+        plan=plan,
+        amount=amount,
+        onboarding=onboarding,
+        created_at=now_ts,
+        expires_at=now_ts + PAYMENT_TOKEN_TTL_SECONDS,
+    ))
+    db.commit()
+    return raw_token
 
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt(rounds=12)).decode("utf-8")
@@ -1058,6 +1712,8 @@ def issue_access_token(username: str, db: Session) -> str:
     raw_token = secrets.token_urlsafe(32)
     now_ts = int(time.time())
     db.query(AuthSession).filter(AuthSession.expires_at <= now_ts).delete()
+    # A new successful login immediately invalidates every older browser session.
+    db.query(AuthSession).filter(AuthSession.username == username).delete(synchronize_session=False)
     db.add(AuthSession(
         username=username,
         token_hash=hashlib.sha256(raw_token.encode("utf-8")).hexdigest(),
@@ -1066,6 +1722,50 @@ def issue_access_token(username: str, db: Session) -> str:
     ))
     db.commit()
     return raw_token
+
+def authorize_login_device(username: str, fingerprint: str, db: Session, local_development: bool = False) -> None:
+    """Keep one recognised device per account; permit one deliberate replacement per 30 days."""
+    device_value = (fingerprint or "").strip()
+    if len(device_value) < 16 or len(device_value) > 256:
+        raise HTTPException(status_code=400, detail="Device identity is invalid. Refresh the page and try again")
+    now_ts = int(time.time())
+    device_hash = hash_secret(device_value)
+    record = db.query(UserDeviceAccess).filter(UserDeviceAccess.username == username).first()
+    if not record:
+        db.add(UserDeviceAccess(
+            username=username,
+            device_hash=device_hash,
+            window_started_at=now_ts,
+            changes_in_window=0,
+            updated_at=now_ts,
+        ))
+        db.commit()
+        return
+    # localhost and 127.0.0.1 are separate browser origins. They are only used
+    # for local development, so treating them as separate paid "devices" would
+    # incorrectly lock out the developer while they test the app.
+    if local_development:
+        record.device_hash = device_hash
+        record.window_started_at = now_ts
+        record.changes_in_window = 0
+        record.updated_at = now_ts
+        db.commit()
+        return
+    if hmac.compare_digest(record.device_hash, device_hash):
+        record.updated_at = now_ts
+        db.commit()
+        return
+    if now_ts - record.window_started_at >= DEVICE_CHANGE_WINDOW_SECONDS:
+        record.window_started_at = now_ts
+        record.changes_in_window = 0
+    if record.changes_in_window >= MAX_DEVICE_CHANGES_PER_WINDOW:
+        remaining_days = max(1, math.ceil((DEVICE_CHANGE_WINDOW_SECONDS - (now_ts - record.window_started_at)) / 86400))
+        db.commit()
+        raise HTTPException(status_code=429, detail=f"Device change limit reached. Try again in {remaining_days} days")
+    record.device_hash = device_hash
+    record.changes_in_window += 1
+    record.updated_at = now_ts
+    db.commit()
 
 def get_current_user(
     authorization: Optional[str] = Header(default=None),
@@ -1088,6 +1788,118 @@ def get_current_user(
     if not current_user:
         raise HTTPException(status_code=401, detail="Session user not found")
     return current_user
+
+
+@app.post("/api/profiles/{profile_id}/launch")
+async def launch_browser_profile(
+    profile_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    profile = (
+        db.query(UserProfile)
+        .filter(
+            UserProfile.id == profile_id,
+            UserProfile.user_id == current_user.id,
+        )
+        .first()
+    )
+
+    if not profile:
+        raise HTTPException(status_code=404, detail="Profile not found")
+    if not profile.proxy_configuration:
+        raise HTTPException(
+            status_code=422,
+            detail="A proxy is required before launching an isolated profile",
+        )
+
+    try:
+        await browser_manager.launch_profile(
+            profile_id=profile.id,
+            user_id=current_user.id,
+        )
+
+        return {
+            "status": "success",
+            "profile_id": profile.id,
+            "message": "Profile session started",
+        }
+
+    except ProfileBusyError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except ProfileConfigurationError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except Exception:
+        logging.exception("Unable to launch browser profile_id=%s", profile_id)
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to start profile session",
+        )
+
+
+@app.post("/api/profiles/{profile_id}/close")
+async def close_browser_profile(
+    profile_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    profile = (
+        db.query(UserProfile)
+        .filter(
+            UserProfile.id == profile_id,
+            UserProfile.user_id == current_user.id,
+        )
+        .first()
+    )
+
+    if not profile:
+        raise HTTPException(status_code=404, detail="Profile not found")
+
+    try:
+        closed = await browser_manager.close_profile(profile.id)
+
+        return {
+            "status": "success",
+            "profile_id": profile.id,
+            "closed": closed,
+            "message": (
+                "Profile session closed"
+                if closed
+                else "No active session for this profile"
+            ),
+        }
+
+    except ProfileBusyError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except ProfileConfigurationError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except Exception:
+        logging.exception("Unable to close browser profile_id=%s", profile_id)
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to close profile session",
+        )
+
+@app.post("/api/logout")
+async def logout(
+    authorization: Optional[str] = Header(default=None),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Revoke the current bearer token when the user explicitly signs out."""
+    raw_token = (authorization or "").removeprefix("Bearer ").strip()
+    if raw_token:
+        token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+        db.query(AuthSession).filter(
+            AuthSession.username == current_user.username,
+            AuthSession.token_hash == token_hash,
+        ).delete(synchronize_session=False)
+        db.commit()
+    return {"status": "success"}
 
 def require_owned_username(username: str, current_user: User) -> None:
     if username != current_user.username:
@@ -1346,25 +2158,33 @@ def get_aave_v3_base_usdc_supply_quote(wallet_address: str, amount: str) -> dict
     normalized_amount, amount_atomic = normalize_token_amount(amount, BASE_USDC_DECIMALS)
     if not is_valid_evm_address(wallet_address):
         raise HTTPException(status_code=422, detail="Invalid wallet address")
-    try:
-        web3 = Web3(Web3.HTTPProvider(BASE_RPC_URL, request_kwargs={"timeout": 12}))
-        if not web3.is_connected():
-            raise RuntimeError("Base RPC unavailable")
-        owner = Web3.to_checksum_address(wallet_address)
-        usdc_address = Web3.to_checksum_address(BASE_USDC_ADDRESS)
-        pool_address = Web3.to_checksum_address(AAVE_V3_BASE_POOL)
-        usdc = web3.eth.contract(address=usdc_address, abi=[*ERC20_BALANCE_OF_ABI, *ERC20_ALLOWANCE_ABI])
-        provider = web3.eth.contract(
-            address=Web3.to_checksum_address(AAVE_V3_BASE_PROTOCOL_DATA_PROVIDER),
-            abi=AAVE_V3_POOL_DATA_PROVIDER_ABI,
-        )
-        balance_raw = int(usdc.functions.balanceOf(owner).call())
-        allowance_raw = int(usdc.functions.allowance(owner, pool_address).call())
-        native_balance_raw = int(web3.eth.get_balance(owner))
-        configuration = provider.functions.getReserveConfigurationData(usdc_address).call()
-        paused = bool(provider.functions.getPaused(usdc_address).call())
-        reserve_data = provider.functions.getReserveData(usdc_address).call()
-    except Exception:
+    last_error = None
+    for attempt in range(2):
+        try:
+            web3 = Web3(Web3.HTTPProvider(BASE_RPC_URL, request_kwargs={"timeout": 12}))
+            if not web3.is_connected():
+                raise RuntimeError("Base RPC unavailable")
+            owner = Web3.to_checksum_address(wallet_address)
+            usdc_address = Web3.to_checksum_address(BASE_USDC_ADDRESS)
+            pool_address = Web3.to_checksum_address(AAVE_V3_BASE_POOL)
+            usdc = web3.eth.contract(address=usdc_address, abi=[*ERC20_BALANCE_OF_ABI, *ERC20_ALLOWANCE_ABI])
+            provider = web3.eth.contract(
+                address=Web3.to_checksum_address(AAVE_V3_BASE_PROTOCOL_DATA_PROVIDER),
+                abi=AAVE_V3_POOL_DATA_PROVIDER_ABI,
+            )
+            balance_raw = int(usdc.functions.balanceOf(owner).call())
+            allowance_raw = int(usdc.functions.allowance(owner, pool_address).call())
+            native_balance_raw = int(web3.eth.get_balance(owner))
+            configuration = provider.functions.getReserveConfigurationData(usdc_address).call()
+            paused = bool(provider.functions.getPaused(usdc_address).call())
+            reserve_data = provider.functions.getReserveData(usdc_address).call()
+            break
+        except Exception as error:
+            last_error = error
+            if attempt == 0:
+                time.sleep(0.35)
+    else:
+        logging.warning("Aave Base supply read failed: %s", last_error)
         raise HTTPException(status_code=503, detail="Aave Base supply data is temporarily unavailable")
 
     requested_raw = int(amount_atomic)
@@ -1408,6 +2228,78 @@ def get_aave_v3_base_usdc_supply_quote(wallet_address: str, amount: str) -> dict
         },
     }
 
+def build_aave_withdraw_calldata(asset_address: str, amount_atomic: str, wallet_address: str) -> str:
+    """Encode Aave Pool.withdraw(asset, amount, to) from fixed inputs."""
+    selector = Web3.keccak(text="withdraw(address,uint256,address)")[:4].hex()
+    encoded_asset = asset_address.lower().replace("0x", "").rjust(64, "0")
+    encoded_amount = format(int(amount_atomic), "x").rjust(64, "0")
+    encoded_wallet = wallet_address.lower().replace("0x", "").rjust(64, "0")
+    return f"0x{selector}{encoded_asset}{encoded_amount}{encoded_wallet}"
+
+def get_aave_v3_base_usdc_withdraw_quote(wallet_address: str, amount: str) -> dict:
+    """Prepare a fixed, user-confirmed USDC withdrawal from Aave V3 on Base."""
+    normalized_amount, amount_atomic = normalize_token_amount(amount, BASE_USDC_DECIMALS)
+    if not is_valid_evm_address(wallet_address):
+        raise HTTPException(status_code=422, detail="Invalid wallet address")
+    requested_raw = int(amount_atomic)
+
+    last_error = None
+    for attempt in range(2):
+        try:
+            web3 = Web3(Web3.HTTPProvider(BASE_RPC_URL, request_kwargs={"timeout": 12}))
+            if not web3.is_connected():
+                raise RuntimeError("Base RPC unavailable")
+            owner = Web3.to_checksum_address(wallet_address)
+            usdc_address = Web3.to_checksum_address(BASE_USDC_ADDRESS)
+            pool_address = Web3.to_checksum_address(AAVE_V3_BASE_POOL)
+            provider = web3.eth.contract(
+                address=Web3.to_checksum_address(AAVE_V3_BASE_PROTOCOL_DATA_PROVIDER),
+                abi=AAVE_V3_POOL_DATA_PROVIDER_ABI,
+            )
+            user_data = provider.functions.getUserReserveData(usdc_address, owner).call()
+            a_token_balance_raw = int(user_data[0])
+            if requested_raw > a_token_balance_raw:
+                raise HTTPException(status_code=422, detail="The requested amount exceeds the Aave USDC position")
+            native_balance_raw = int(web3.eth.get_balance(owner))
+            transaction_data = build_aave_withdraw_calldata(BASE_USDC_ADDRESS, amount_atomic, wallet_address)
+            # Read-only simulation catches an unavailable reserve or insufficient
+            # pool liquidity before the wallet displays a signature request.
+            web3.eth.call({"from": owner, "to": pool_address, "data": transaction_data, "value": 0})
+            break
+        except HTTPException:
+            raise
+        except Exception as error:
+            last_error = error
+            if attempt == 0:
+                time.sleep(0.35)
+    else:
+        logging.warning("Aave Base withdrawal read failed: %s", last_error)
+        raise HTTPException(status_code=503, detail="Aave Base withdrawal data is temporarily unavailable")
+
+    gas_reserve = PUBLIC_NETWORK_BALANCE_CONFIG["Base"]["gas_reserve"]
+    return {
+        "amount": normalized_amount,
+        "amount_atomic": amount_atomic,
+        "asset": {
+            "symbol": "USDC",
+            "address": BASE_USDC_ADDRESS,
+            "decimals": BASE_USDC_DECIMALS,
+        },
+        "network": "Base",
+        "pool_address": AAVE_V3_BASE_POOL,
+        "position_balance": format_token_amount(a_token_balance_raw, BASE_USDC_DECIMALS),
+        "native_balance": format_token_amount(native_balance_raw, 18),
+        "gas_reserve": gas_reserve,
+        "gas_reserve_met": native_balance_raw >= int(float(gas_reserve) * (10 ** 18)),
+        "transaction": {
+            "chain_id": BASE_CHAIN_ID,
+            "from": wallet_address,
+            "to": AAVE_V3_BASE_POOL,
+            "data": transaction_data,
+            "value": "0",
+        },
+    }
+
 def refresh_base_operation_statuses(
     db: Session,
     swap_records: List[BaseSwapRecord],
@@ -1418,14 +2310,141 @@ def refresh_base_operation_statuses(
         record for record in [*swap_records, *transfer_records]
         if (record.status or "submitted") in {"submitted", "in_progress"}
     ][:24]
-    changed = False
+    changed_records = []
     for record in pending_records:
         current_status = get_base_transaction_status(record.tx_hash)
         if current_status and record.status != current_status:
             record.status = current_status
-            changed = True
-    if changed:
+            changed_records.append(record)
+    if changed_records:
         db.commit()
+        for record in changed_records:
+            notify_base_operation_status(get_telegram_subscription(db, record.username), record)
+
+def notify_base_operation_status(subscription: Optional[TelegramSubscription], record: Any) -> bool:
+    """Send one opt-in final status message when a saved Base receipt changes."""
+    if not subscription or record.status not in {"completed", "failed"}:
+        return False
+    if record.status == "completed" and not subscription.notify_transaction_final:
+        return False
+    if record.status == "failed" and not subscription.notify_errors:
+        return False
+
+    is_swap = isinstance(record, BaseSwapRecord)
+    if is_swap:
+        amount = f"{record.amount_in} ETH → {format_journal_token_amount(record.amount_out, BASE_USDC_DECIMALS)} USDC"
+        operation = {"ru": "обмен", "en": "swap", "zh": "兑换"}
+    else:
+        amount = f"{record.amount} ETH"
+        operation = {"ru": "перевод", "en": "transfer", "zh": "转账"}
+
+    completed = record.status == "completed"
+    icon = "✅" if completed else "⚠️"
+    status = (
+        {"ru": "подтверждён", "en": "confirmed", "zh": "已确认"}
+        if completed else {"ru": "не выполнен", "en": "failed", "zh": "失败"}
+    )
+    recipient = ""
+    if not is_swap:
+        recipient = f"\nПолучатель: `{record.to_address}`"
+    messages = {
+        "ru": f"{icon} *AIRDROP-X: {operation['ru']} {status['ru']}*\nСеть: `Base`\nСумма: `{amount}`{recipient}\nTX: `{record.tx_hash}`",
+        "en": f"{icon} *AIRDROP-X: {operation['en']} {status['en']}*\nNetwork: `Base`\nAmount: `{amount}`\nTX: `{record.tx_hash}`",
+        "zh": f"{icon} *AIRDROP-X：{operation['zh']}{status['zh']}*\n网络：`Base`\n数量：`{amount}`\n交易：`{record.tx_hash}`",
+    }
+    return send_telegram_notification(subscription.chat_id, messages[normalize_language(subscription.language)])
+
+def notify_base_transfer_submitted(subscription: Optional[TelegramSubscription], amount: str, tx_hash: str) -> bool:
+    """Send a direct-transfer notification only when the user explicitly enabled it."""
+    if not subscription or not subscription.notify_transaction_submitted:
+        return False
+    messages = {
+        "ru": f"↗️ *AIRDROP-X: перевод отправлен*\nСеть: `Base`\nСумма: `{amount} ETH`\nTX: `{tx_hash}`",
+        "en": f"↗️ *AIRDROP-X: transfer submitted*\nNetwork: `Base`\nAmount: `{amount} ETH`\nTX: `{tx_hash}`",
+        "zh": f"↗️ *AIRDROP-X：转账已提交*\n网络：`Base`\n数量：`{amount} ETH`\n交易：`{tx_hash}`",
+    }
+    return send_telegram_notification(subscription.chat_id, messages[normalize_language(subscription.language)])
+
+def serialize_defi_operation_record(record: DefiOperationRecord) -> Dict[str, Any]:
+    return {
+        "id": record.id,
+        "wallet_address": record.wallet_address,
+        "operation_type": record.operation_type,
+        "protocol": record.protocol,
+        "network": record.network,
+        "asset_symbol": record.asset_symbol,
+        "amount": record.amount,
+        "tx_hash": record.tx_hash,
+        "status": record.status,
+        "created_at": record.created_at,
+    }
+
+def save_verified_aave_operation(
+    db: Session,
+    username: str,
+    wallet_address: str,
+    operation_type: str,
+    amount_atomic: str,
+    tx_hash: str,
+    created_at: int,
+) -> DefiOperationRecord:
+    """Persist only a transaction already matched to the exact Aave calldata."""
+    existing = db.query(DefiOperationRecord).filter(DefiOperationRecord.tx_hash == tx_hash).first()
+    if existing:
+        if existing.username != username:
+            raise HTTPException(status_code=409, detail="Transaction is already recorded")
+        return existing
+
+    record = DefiOperationRecord(
+        username=username,
+        wallet_address=wallet_address,
+        operation_type=operation_type,
+        protocol="Aave V3",
+        network="Base",
+        asset_symbol="USDC",
+        amount=format_token_amount(int(amount_atomic), BASE_USDC_DECIMALS),
+        tx_hash=tx_hash,
+        status="submitted",
+        created_at=created_at,
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    return record
+
+def notify_defi_operation_status(subscription: Optional[TelegramSubscription], record: DefiOperationRecord) -> bool:
+    """Send an opt-in final Aave status update once a public Base receipt changes."""
+    if not subscription or record.status not in {"completed", "failed"}:
+        return False
+    if record.status == "completed" and not subscription.notify_defi_final:
+        return False
+    if record.status == "failed" and not subscription.notify_defi_errors:
+        return False
+    operation = {
+        "supply": {"ru": "внесение", "en": "supply", "zh": "存入"},
+        "withdraw": {"ru": "вывод", "en": "withdrawal", "zh": "提取"},
+    }.get(record.operation_type, {"ru": "действие", "en": "action", "zh": "操作"})
+    status_icon = "✅" if record.status == "completed" else "⚠️"
+    status_label = {"ru": "подтверждено", "en": "confirmed", "zh": "已确认"} if record.status == "completed" else {"ru": "не выполнено", "en": "failed", "zh": "失败"}
+    messages = {
+        "ru": f"{status_icon} *AIRDROP-X: Aave — {operation['ru']} {status_label['ru']}*\nСеть: `Base`\nСумма: `{record.amount} {record.asset_symbol}`\nTX: `{record.tx_hash}`",
+        "en": f"{status_icon} *AIRDROP-X: Aave {operation['en']} {status_label['en']}*\nNetwork: `Base`\nAmount: `{record.amount} {record.asset_symbol}`\nTX: `{record.tx_hash}`",
+        "zh": f"{status_icon} *AIRDROP-X：Aave {operation['zh']}{status_label['zh']}*\n网络：`Base`\n数量：`{record.amount} {record.asset_symbol}`\n交易：`{record.tx_hash}`",
+    }
+    return send_telegram_notification(subscription.chat_id, messages[normalize_language(subscription.language)])
+
+def refresh_defi_operation_statuses(db: Session, records: List[DefiOperationRecord]) -> None:
+    """Refresh a small set of pending Base receipts; this never creates a transaction."""
+    changed_records = []
+    for record in [item for item in records if (item.status or "submitted") in {"submitted", "in_progress"}][:12]:
+        current_status = get_base_transaction_status(record.tx_hash)
+        if current_status and current_status != record.status:
+            record.status = current_status
+            changed_records.append(record)
+    if changed_records:
+        db.commit()
+        for record in changed_records:
+            notify_defi_operation_status(get_telegram_subscription(db, record.username), record)
 
 def get_lifi_tokens(network: str) -> list[dict]:
     """Fetch LI.FI's official catalog for one supported EVM chain and cache it briefly."""
@@ -1545,14 +2564,22 @@ def serialize_transfer_template(template: WalletTransferTemplate) -> dict:
         "network": template.network,
     }
 
-def reserve_verified_transaction(
-    db: Session, txid: str, expected_amount: float, purpose: str, username: Optional[str] = None
+def reserve_verified_usdc_payment(
+    db: Session,
+    txid: str,
+    payment_config: dict,
+    expected_atomic_amount: int,
+    purpose: str,
+    username: Optional[str] = None,
 ) -> None:
     clean_txid = txid.strip().lower()
     if db.query(ProcessedBlockchainTransaction).filter(ProcessedBlockchainTransaction.txid == clean_txid).first():
         raise HTTPException(status_code=409, detail="This blockchain transaction has already been used")
-    if not verify_blockchain_tx(clean_txid, expected_amount):
-        raise HTTPException(status_code=400, detail="Blockchain transaction was not confirmed or amount did not match")
+    verification_state = get_usdc_payment_verification_state(clean_txid, payment_config, expected_atomic_amount)
+    if verification_state == "pending":
+        raise HTTPException(status_code=409, detail="USDC payment is waiting for Base confirmation")
+    if verification_state != "confirmed":
+        raise HTTPException(status_code=400, detail="USDC payment was not confirmed or did not match the session")
     db.add(ProcessedBlockchainTransaction(
         txid=clean_txid,
         purpose=purpose,
@@ -1634,7 +2661,35 @@ def send_real_email(to_email: str, code: str):
             server.send_message(msg)
         return True
     except Exception as e:
-        print(f"🔥 EMAIL SEND ERROR: {e}")
+        logging.exception("Email delivery failed: %s", e)
+        return False
+
+def send_password_reset_email(to_email: str, code: str) -> bool:
+    msg = EmailMessage()
+    msg["Subject"] = "[AIRDROP-X] Password reset code"
+    msg["From"] = f"Airdrop-X Core <{SENDER_EMAIL}>"
+    msg["To"] = to_email
+    msg.set_content(
+        f"Your AIRDROP-X password reset code is: {code}\n\n"
+        "It expires in 10 minutes. If you did not request this, you can ignore this email."
+    )
+    msg.add_alternative(f"""
+    <div style="background:#07050c;padding:32px;font-family:Arial,sans-serif;color:#f3f0ff;">
+      <div style="max-width:500px;margin:auto;background:#100a1c;border:1px solid rgba(157,78,221,.5);border-radius:12px;padding:28px;">
+        <div style="color:#e0aaff;font-weight:700;letter-spacing:1px;">AIRDROP-X // SECURITY</div>
+        <h2 style="color:#fff;">Password reset</h2>
+        <p style="color:#d8c9f1;line-height:1.5;">Use this code to choose a new password. It expires in 10 minutes.</p>
+        <div style="margin:20px 0;padding:16px;text-align:center;border:1px solid #c77dff;border-radius:8px;background:#07050c;color:#fff;font-size:30px;font-weight:700;letter-spacing:7px;">{code}</div>
+        <p style="color:#a3a3a3;font-size:12px;">If you did not request a reset, simply ignore this message.</p>
+      </div>
+    </div>
+    """, subtype="html")
+    try:
+        with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as server:
+            server.login(SENDER_EMAIL, SENDER_PASSWORD)
+            server.send_message(msg)
+        return True
+    except Exception:
         return False
 
 @app.post("/api/settings/save")
@@ -1658,6 +2713,10 @@ async def save_user_settings(
             subscription.notify_transaction_final = bool(data.notifyTransactionFinal)
             subscription.notify_reminders = bool(data.notifyReminders)
             subscription.notify_errors = bool(data.notifyErrors)
+            subscription.notify_defi_supply_submitted = bool(data.notifyDefiSupplySubmitted)
+            subscription.notify_defi_withdraw_submitted = bool(data.notifyDefiWithdrawSubmitted)
+            subscription.notify_defi_final = bool(data.notifyDefiFinal)
+            subscription.notify_defi_errors = bool(data.notifyDefiErrors)
             subscription.updated_at = int(time.time())
             db.commit()
         
@@ -1670,9 +2729,41 @@ async def save_user_settings(
 @app.get("/api/telegram/status")
 def telegram_status(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     subscription = get_telegram_subscription(db, current_user.username)
+    filters = None
+    if subscription:
+        filters = {
+            "transactionSubmitted": bool(subscription.notify_transaction_submitted),
+            "transactionFinal": bool(subscription.notify_transaction_final),
+            "reminders": bool(subscription.notify_reminders),
+            "errors": bool(subscription.notify_errors),
+            "defiSupplySubmitted": bool(subscription.notify_defi_supply_submitted),
+            "defiWithdrawSubmitted": bool(subscription.notify_defi_withdraw_submitted),
+            "defiFinal": bool(subscription.notify_defi_final),
+            "defiErrors": bool(subscription.notify_defi_errors),
+        }
     return {
         "linked": bool(subscription),
         "bot_configured": bool(TELEGRAM_BOT_TOKEN and TELEGRAM_BOT_USERNAME),
+        "filters": filters,
+    }
+
+@app.get("/api/security/overview")
+def security_overview(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Return only account safety indicators; never exposes keys, tokens, or wallet secrets."""
+    now_ts = int(time.time())
+    active_session = db.query(AuthSession).filter(
+        AuthSession.username == current_user.username,
+        AuthSession.expires_at > now_ts,
+    ).order_by(AuthSession.expires_at.desc()).first()
+    wallet_count = db.query(Wallet).filter(Wallet.username == current_user.username).count()
+    telegram_linked = bool(get_telegram_subscription(db, current_user.username))
+    return {
+        "status": "success",
+        "session_active": bool(active_session),
+        "session_expires_at": active_session.expires_at if active_session else None,
+        "single_session_enforced": True,
+        "wallet_count": wallet_count,
+        "telegram_linked": telegram_linked,
     }
 
 @app.get("/api/walletconnect/config")
@@ -1747,84 +2838,315 @@ async def get_network_gas(network: str):
     return {"status": "success", "network": network, **data, "cached": False}
 
 @app.post("/api/payment/recover")
-async def recover_payment_session(req: PaymentRecoverReq):
-    raise HTTPException(status_code=410, detail="Payment recovery is disabled for security. Contact support with your transaction ID.")
-
-@app.post("/api/send-code")
-def api_send_code(data: EmailRequest):
-    now_ts = int(time.time())
-    existing = verification_codes.get(data.email)
-    if existing and now_ts - existing.get("sent_at", 0) < EMAIL_CODE_RESEND_SECONDS:
-        raise HTTPException(status_code=429, detail="Please wait before requesting another verification code")
-    code = str(random.randint(100000, 999999))
-    verification_codes[data.email] = {
-        "code": code,
-        "attempts": 0,
-        "sent_at": now_ts,
-        "expires_at": now_ts + EMAIL_CODE_TTL_SECONDS,
-    }
-    
-    success = send_real_email(data.email, code)
-    if not success:
-        raise HTTPException(status_code=500, detail="SMTP Error. Check App Password in .env")
-        
-    return {"status": "success", "message": "Code sent successfully!"}  
-
-@app.post("/api/payment/create-session")
-async def create_payment_session(req: PaymentSessionCreateReq):
-    base_amount = PLAN_PRICES.get(req.plan)
-    if base_amount is None:
+async def recover_payment_session(
+    req: PaymentRecoverReq,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Recover only a Base Sepolia checkout interrupted by a local reload."""
+    payment_config = get_subscription_payment_config()
+    if not payment_config or not payment_config["is_testnet"]:
+        raise HTTPException(status_code=410, detail="Payment recovery is unavailable for this network")
+    enforce_request_rate_limit("payment-recovery", get_request_client_key(request), 6, 15 * 60)
+    client_session_id = validate_client_session_id(req.client_session_id)
+    if req.plan not in PLAN_PRICES:
         raise HTTPException(status_code=400, detail="Unknown plan")
-    
-    unique_amount = round(base_amount + (ONBOARDING_PRICE if req.onboarding else 0) + 0.47, 2)
-    
-    payment_session_id = str(uuid.uuid4())
-    payment_sessions[payment_session_id] = {
-        "client_session_id": req.client_session_id,
-        "plan": req.plan,
-        "amount": unique_amount,
-        "onboarding": req.onboarding,
-        "status": "pending",
-        "created_at": int(time.time()),
-    }
-    return {
-        "status": "success",
-        "payment_session_id": payment_session_id,
-        "wallet": MASTER_WALLET_ADDRESS,
-        "amount": unique_amount,
-        "plan": req.plan,
-        "onboarding": req.onboarding,
-    }
-
-@app.post("/api/payment/confirm")
-async def confirm_payment_session(req: PaymentSessionConfirmReq, db: Session = Depends(get_db)):
-    session_data = payment_sessions.get(req.payment_session_id)
-    if not session_data:
-        raise HTTPException(status_code=404, detail="Payment session not found")
-    if session_data["client_session_id"] != req.client_session_id:
-        raise HTTPException(status_code=403, detail="Payment confirmed for a different session")
-    if int(time.time()) - session_data["created_at"] > PAYMENT_SESSION_TTL_SECONDS:
-        raise HTTPException(status_code=410, detail="Payment session expired. Create a new payment session.")
-    if session_data.get("status") == "paid":
-        raise HTTPException(status_code=409, detail="Payment session has already been confirmed")
-
-    reserve_verified_transaction(db, req.txid, session_data["amount"], "subscription_payment")
-    session_data["status"] = "paid"
-    session_data["txid"] = req.txid.strip()
-    session_data["paid_at"] = int(time.time())
-    
+    amount_usdc = SUBSCRIPTION_TEST_AMOUNT_USDC.quantize(Decimal("0.01"))
+    reserve_verified_usdc_payment(
+        db,
+        req.txid,
+        payment_config,
+        int(amount_usdc * Decimal(1_000_000)),
+        "subscription_payment_test_recovery",
+    )
+    recovery_session = PaymentCheckoutSession(
+        id=str(uuid.uuid4()),
+        client_session_id=client_session_id,
+        plan=req.plan,
+        amount_usdc=format(amount_usdc, ".2f"),
+        amount_atomic=str(int(amount_usdc * Decimal(1_000_000))),
+        onboarding=False,
+        payment_mode=payment_config["mode"],
+        status="paid",
+        txid=req.txid.strip(),
+        created_at=int(time.time()),
+        paid_at=int(time.time()),
+    )
+    db.add(recovery_session)
+    db.commit()
     payment_token = issue_payment_token(
-        client_session_id=session_data["client_session_id"],
-        plan=session_data["plan"],
-        amount=session_data["amount"],
-        onboarding=session_data.get("onboarding", False),
+        db=db,
+        client_session_id=client_session_id,
+        plan=req.plan,
+        amount=format(amount_usdc, ".2f"),
+        onboarding=False,
+        checkout_session_id=recovery_session.id,
     )
     return {
         "status": "success",
         "payment_token": payment_token,
-        "plan": session_data["plan"],
-        "amount": session_data["amount"],
-        "onboarding": session_data.get("onboarding", False),
+        "plan": req.plan,
+        "amount": format(amount_usdc, ".2f"),
+        "onboarding": False,
+    }
+
+@app.post("/api/send-code")
+def api_send_code(data: EmailRequest, request: Request, db: Session = Depends(get_db)):
+    email = normalize_registration_email(data.email)
+    enforce_request_rate_limit("email-code", get_request_client_key(request), 5, 15 * 60)
+    now_ts = int(time.time())
+    existing = db.query(EmailVerificationCode).filter(EmailVerificationCode.email == email).first()
+    if existing and now_ts - existing.sent_at < EMAIL_CODE_RESEND_SECONDS:
+        raise HTTPException(status_code=429, detail="Please wait before requesting another verification code")
+    code = f"{secrets.randbelow(1_000_000):06d}"
+    success = send_real_email(email, code)
+    if not success:
+        raise HTTPException(status_code=502, detail="Email service is temporarily unavailable")
+    if existing:
+        existing.code_hash = hash_password(code)
+        existing.attempts = 0
+        existing.sent_at = now_ts
+        existing.expires_at = now_ts + EMAIL_CODE_TTL_SECONDS
+    else:
+        db.add(EmailVerificationCode(
+            email=email,
+            code_hash=hash_password(code),
+            attempts=0,
+            sent_at=now_ts,
+            expires_at=now_ts + EMAIL_CODE_TTL_SECONDS,
+        ))
+    db.commit()
+        
+    return {"status": "success", "message": "Code sent successfully!"}  
+
+@app.post("/api/payment/resume-registration")
+def resume_paid_registration(
+    req: PaymentRegistrationResumeRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    """Re-issue registration access after a page/server restart for the same browser session."""
+    enforce_request_rate_limit("payment-registration-resume", get_request_client_key(request), 12, 15 * 60)
+    client_session_id = validate_client_session_id(req.client_session_id)
+    now_ts = int(time.time())
+    payment_session = db.query(PaymentCheckoutSession).filter(
+        PaymentCheckoutSession.client_session_id == client_session_id,
+        PaymentCheckoutSession.status == "paid",
+    ).order_by(PaymentCheckoutSession.paid_at.desc()).first()
+    if not payment_session:
+        raise HTTPException(status_code=404, detail="No confirmed payment is available for this browser session")
+    if not payment_session.paid_at or now_ts - payment_session.paid_at > PAYMENT_REGISTRATION_RESUME_TTL_SECONDS:
+        raise HTTPException(status_code=410, detail="Paid registration session expired. Contact support with your payment TXID")
+    payment_token = issue_payment_token(
+        db=db,
+        client_session_id=payment_session.client_session_id,
+        plan=payment_session.plan,
+        amount=payment_session.amount_usdc,
+        onboarding=payment_session.onboarding,
+        checkout_session_id=payment_session.id,
+    )
+    return {
+        "status": "success",
+        "payment_token": payment_token,
+        "plan": payment_session.plan,
+        "amount": payment_session.amount_usdc,
+        "onboarding": payment_session.onboarding,
+    }
+
+@app.post("/api/password-reset/request")
+def request_password_reset(data: EmailRequest, request: Request, db: Session = Depends(get_db)):
+    """Send a reset code without revealing whether an account exists for the email."""
+    email = normalize_registration_email(data.email)
+    client_key = get_request_client_key(request)
+    enforce_request_rate_limit("password-reset-email", f"{client_key}:{email}", 5, 15 * 60)
+    enforce_request_rate_limit("password-reset-ip", client_key, 10, 15 * 60)
+    now_ts = int(time.time())
+    account = db.query(User).filter(User.email == email).first()
+    existing = db.query(PasswordResetCode).filter(PasswordResetCode.email == email).first()
+    if existing and now_ts - existing.sent_at < PASSWORD_RESET_RESEND_SECONDS:
+        # Keep the response identical so this endpoint cannot be used to enumerate users.
+        return {"status": "success", "message": "If an account exists, a reset code was sent"}
+    if account:
+        code = f"{secrets.randbelow(1_000_000):06d}"
+        if not send_password_reset_email(email, code):
+            raise HTTPException(status_code=502, detail="Email service is temporarily unavailable")
+        if existing:
+            existing.code_hash = hash_password(code)
+            existing.attempts = 0
+            existing.sent_at = now_ts
+            existing.expires_at = now_ts + PASSWORD_RESET_TTL_SECONDS
+        else:
+            db.add(PasswordResetCode(
+                email=email,
+                code_hash=hash_password(code),
+                attempts=0,
+                sent_at=now_ts,
+                expires_at=now_ts + PASSWORD_RESET_TTL_SECONDS,
+            ))
+        db.commit()
+    return {"status": "success", "message": "If an account exists, a reset code was sent"}
+
+@app.post("/api/password-reset/confirm")
+def confirm_password_reset(data: PasswordResetConfirmRequest, request: Request, db: Session = Depends(get_db)):
+    email = normalize_registration_email(data.email)
+    enforce_request_rate_limit("password-reset-confirm", get_request_client_key(request), 8, 15 * 60)
+    if len(data.password.encode("utf-8")) > 72:
+        raise HTTPException(status_code=400, detail="Password must be no more than 72 bytes")
+    if len(data.password) < 12:
+        raise HTTPException(status_code=400, detail="Password must be at least 12 characters")
+    reset = db.query(PasswordResetCode).filter(PasswordResetCode.email == email).first()
+    now_ts = int(time.time())
+    if not reset or reset.expires_at <= now_ts:
+        if reset:
+            db.delete(reset)
+            db.commit()
+        raise HTTPException(status_code=400, detail="Password reset code is invalid or expired")
+    if reset.attempts >= 5:
+        db.delete(reset)
+        db.commit()
+        raise HTTPException(status_code=400, detail="Password reset code is invalid or expired")
+    if not re.fullmatch(r"\d{6}", data.code or "") or not verify_password(data.code, reset.code_hash):
+        reset.attempts += 1
+        db.commit()
+        raise HTTPException(status_code=400, detail="Password reset code is invalid or expired")
+    account = db.query(User).filter(User.email == email).first()
+    if not account:
+        db.delete(reset)
+        db.commit()
+        raise HTTPException(status_code=400, detail="Password reset code is invalid or expired")
+    account.password_hash = hash_password(data.password)
+    db.query(AuthSession).filter(AuthSession.username == account.username).delete(synchronize_session=False)
+    # A verified password reset is also the safe account-recovery route when a
+    # browser was lost or its local storage was cleared.
+    db.query(UserDeviceAccess).filter(UserDeviceAccess.username == account.username).delete(synchronize_session=False)
+    db.delete(reset)
+    db.commit()
+    return {"status": "success", "message": "Password updated. Sign in with your email or nickname."}
+
+@app.post("/api/payment/create-session")
+async def create_payment_session(
+    req: PaymentSessionCreateReq,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    payment_config = get_subscription_payment_config()
+    if not payment_config:
+        raise HTTPException(
+            status_code=503,
+            detail="Subscription payments are temporarily unavailable while exact USDC settlement is configured.",
+        )
+    enforce_request_rate_limit("payment-session", get_request_client_key(request), 12, 15 * 60)
+    client_session_id = validate_client_session_id(req.client_session_id)
+    base_amount = PLAN_PRICES.get(req.plan)
+    if base_amount is None:
+        raise HTTPException(status_code=400, detail="Unknown plan")
+
+    amount_usdc = (
+        SUBSCRIPTION_TEST_AMOUNT_USDC
+        if payment_config["is_testnet"]
+        else Decimal(base_amount)
+    ).quantize(Decimal("0.01"))
+    amount_atomic = int(amount_usdc * Decimal(1_000_000))
+    
+    now_ts = int(time.time())
+    db.query(PaymentCheckoutSession).filter(
+        PaymentCheckoutSession.status == "pending",
+        PaymentCheckoutSession.created_at < now_ts - PAYMENT_SESSION_TTL_SECONDS,
+    ).delete(synchronize_session=False)
+    payment_session_id = str(uuid.uuid4())
+    db.add(PaymentCheckoutSession(
+        id=payment_session_id,
+        client_session_id=client_session_id,
+        plan=req.plan,
+        amount_usdc=format(amount_usdc, ".2f"),
+        amount_atomic=str(amount_atomic),
+        onboarding=False,
+        payment_mode=payment_config["mode"],
+        status="pending",
+        created_at=now_ts,
+    ))
+    db.commit()
+    return {
+        "status": "success",
+        "payment_session_id": payment_session_id,
+        "payment": {
+            "network": payment_config["network"],
+            "chain_id": payment_config["chain_id"],
+            "asset": "USDC",
+            "decimals": 6,
+            "contract": payment_config["usdc_contract"],
+            "receiver": payment_config["receiver"],
+            "amount": format(amount_usdc, ".2f"),
+        },
+        "plan": req.plan,
+        "onboarding": False,
+        "is_testnet": payment_config["is_testnet"],
+    }
+
+@app.post("/api/payment/confirm")
+async def confirm_payment_session(
+    req: PaymentSessionConfirmReq,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    enforce_request_rate_limit("payment-confirm", get_request_client_key(request), 30, 15 * 60)
+    payment_config = get_subscription_payment_config()
+    if not payment_config:
+        raise HTTPException(status_code=503, detail="Subscription payments are temporarily unavailable while exact USDC settlement is configured.")
+    session_data = db.query(PaymentCheckoutSession).filter(
+        PaymentCheckoutSession.id == req.payment_session_id,
+    ).first()
+    if not session_data:
+        raise HTTPException(status_code=404, detail="Payment session not found")
+    if session_data.client_session_id != req.client_session_id:
+        raise HTTPException(status_code=403, detail="Payment confirmed for a different session")
+    if int(time.time()) - session_data.created_at > PAYMENT_SESSION_TTL_SECONDS:
+        raise HTTPException(status_code=410, detail="Payment session expired. Create a new payment session.")
+    if session_data.status == "paid":
+        payment_token = issue_payment_token(
+            db=db,
+            client_session_id=session_data.client_session_id,
+            plan=session_data.plan,
+            amount=session_data.amount_usdc,
+            onboarding=session_data.onboarding,
+            checkout_session_id=session_data.id,
+        )
+        return {
+            "status": "success",
+            "payment_token": payment_token,
+            "plan": session_data.plan,
+            "amount": session_data.amount_usdc,
+            "onboarding": session_data.onboarding,
+        }
+    if session_data.payment_mode != payment_config["mode"]:
+        raise HTTPException(status_code=409, detail="Payment session network changed. Create a new payment session.")
+
+    reserve_verified_usdc_payment(
+        db,
+        req.txid,
+        payment_config,
+        int(session_data.amount_atomic),
+        "subscription_payment",
+    )
+    session_data.status = "paid"
+    session_data.txid = req.txid.strip()
+    session_data.paid_at = int(time.time())
+    db.commit()
+    
+    payment_token = issue_payment_token(
+        db=db,
+        client_session_id=session_data.client_session_id,
+        plan=session_data.plan,
+        amount=session_data.amount_usdc,
+        onboarding=session_data.onboarding,
+        checkout_session_id=session_data.id,
+    )
+    return {
+        "status": "success",
+        "payment_token": payment_token,
+        "plan": session_data.plan,
+        "amount": session_data.amount_usdc,
+        "onboarding": session_data.onboarding,
     }
 
 @app.post("/api/balance/deposit")
@@ -1849,28 +3171,41 @@ async def get_balance(username: str, db: Session = Depends(get_db), current_user
 
 @app.post("/api/register")
 async def register(user: UserRegister, db: Session = Depends(get_db)):
-    payment_data = payment_tokens.get(user.payment_token)
-    if not payment_data or payment_data.get("used"):
+    user.email = normalize_registration_email(user.email)
+    user.username = user.username.strip()
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{3,32}", user.username):
+        raise HTTPException(status_code=400, detail="Username must contain 3-32 letters, digits, dots, hyphens, or underscores")
+    payment_data = db.query(PaymentAccessToken).filter(
+        PaymentAccessToken.token_hash == hash_secret(user.payment_token or ""),
+    ).first()
+    if not payment_data or payment_data.used_at:
         raise HTTPException(status_code=403, detail="Payment not confirmed or token already used")
-    if payment_data["client_session_id"] != user.client_session_id:
+    if int(time.time()) > payment_data.expires_at:
+        db.delete(payment_data)
+        db.commit()
+        raise HTTPException(status_code=410, detail="Payment confirmation expired. Create a new payment session.")
+    if not hmac.compare_digest(payment_data.client_session_id, user.client_session_id):
         raise HTTPException(status_code=403, detail="Payment confirmed for a different session")
-    if payment_data["plan"] != user.plan:
+    if payment_data.plan != user.plan:
         raise HTTPException(status_code=400, detail="Registration plan does not match the paid one")
 
-    code_data = verification_codes.get(user.email)
+    code_data = db.query(EmailVerificationCode).filter(EmailVerificationCode.email == user.email).first()
     if not code_data:
         raise HTTPException(status_code=400, detail="Please request a verification code first!")
-    if int(time.time()) > code_data.get("expires_at", 0):
-        verification_codes.pop(user.email, None)
+    if int(time.time()) > code_data.expires_at:
+        db.delete(code_data)
+        db.commit()
         raise HTTPException(status_code=400, detail="Verification code expired. Request a new code.")
         
-    if code_data["attempts"] >= 3:
-        verification_codes.pop(user.email, None)
+    if code_data.attempts >= 3:
+        db.delete(code_data)
+        db.commit()
         raise HTTPException(status_code=400, detail="Attempt limit exceeded (3/3). Request a new code.")
 
-    if code_data["code"] != user.code:
-        code_data["attempts"] += 1
-        left_attempts = 3 - code_data["attempts"]
+    if not re.fullmatch(r"\d{6}", user.code or "") or not verify_password(user.code, code_data.code_hash):
+        code_data.attempts += 1
+        left_attempts = 3 - code_data.attempts
+        db.commit()
         raise HTTPException(status_code=400, detail=f"Invalid code! Attempts left: {left_attempts}")
 
     db_user = db.query(User).filter((User.username == user.username) | (User.email == user.email)).first()
@@ -1894,24 +3229,33 @@ async def register(user: UserRegister, db: Session = Depends(get_db)):
         fingerprint=user.fingerprint,
         balance=0.0,
         subscription_activated_at=int(time.time()),
-        onboarding_purchased=payment_data.get("onboarding", False)
+        onboarding_purchased=payment_data.onboarding,
     )
     db.add(new_user)
+    payment_data.used_at = int(time.time())
+    if payment_data.checkout_session_id:
+        checkout = db.query(PaymentCheckoutSession).filter(
+            PaymentCheckoutSession.id == payment_data.checkout_session_id,
+        ).first()
+        if checkout:
+            checkout.status = "registered"
+    db.delete(code_data)
     db.commit()
     
-    payment_data["used"] = True
-    verification_codes.pop(user.email, None)
-    
     try:
-        send_payment_receipt_email(user.email, user.plan, payment_data["amount"], "Base Blockchain Gateway")
+        send_payment_receipt_email(user.email, user.plan, payment_data.amount, "Base Blockchain Gateway")
     except Exception as e:
-        print(f"[Warning] Failed to send email: {e}")
+        logging.warning("Failed to send email: %s", e)
 
-    return {"status": "success", "message": "Registered successfully", "onboarding": payment_data.get("onboarding", False)}
+    return {"status": "success", "message": "Registered successfully", "onboarding": payment_data.onboarding}
 
 @app.post("/api/login")
-async def login(user: UserLogin, db: Session = Depends(get_db)):
-    db_user = db.query(User).filter((User.username == user.username) | (User.email == user.username)).first()
+async def login(user: UserLogin, request: Request, db: Session = Depends(get_db)):
+    login_value = user.username.strip()
+    login_key = f"{get_request_client_key(request)}:{login_value.lower()}"
+    enforce_request_rate_limit("login-account", login_key, 8, 15 * 60)
+    enforce_request_rate_limit("login-ip", get_request_client_key(request), 30, 15 * 60)
+    db_user = db.query(User).filter((User.username == login_value) | (User.email == login_value.lower())).first()
     
     if not db_user or not verify_password(user.password, db_user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid login or password")
@@ -1922,6 +3266,13 @@ async def login(user: UserLogin, db: Session = Depends(get_db)):
     if not db_user.subscription_activated_at:
         db_user.subscription_activated_at = now_ts
     db.commit()
+    request_host = (request.url.hostname or "").lower()
+    authorize_login_device(
+        db_user.username,
+        user.fingerprint,
+        db,
+        local_development=request_host in {"127.0.0.1", "localhost", "::1"},
+    )
 
     expires_at = db_user.subscription_activated_at + SUBSCRIPTION_DURATION_SECONDS
     days_left = max(0, int((expires_at - now_ts) / (24 * 60 * 60)))
@@ -1941,6 +3292,45 @@ async def login(user: UserLogin, db: Session = Depends(get_db)):
         "expires_in": AUTH_SESSION_DURATION_SECONDS,
     }
     
+def ensure_wallet_profile(db: Session, user: User, wallet: Wallet) -> tuple[UserProfile, bool]:
+    """Create one owner-scoped local profile for a saved public wallet address.
+
+    The profile contains no private key and does not start a browser session.  It
+    only keeps the address, optional proxy configuration, and isolated-profile
+    settings that may be used later by an explicit, authenticated action.
+    """
+    profiles = (
+        db.query(UserProfile)
+        .filter(UserProfile.user_id == user.id)
+        .all()
+    )
+    wallet_address = wallet.wallet_address.lower()
+    profile = next(
+        (
+            item
+            for item in profiles
+            if item.evm_wallet_address.lower() == wallet_address
+        ),
+        None,
+    )
+
+    if profile:
+        profile.proxy_configuration = wallet.proxy
+        profile.status = "active"
+        return profile, False
+
+    profile = UserProfile(
+        user_id=user.id,
+        profile_name=f"wallet-{wallet.id}",
+        proxy_configuration=wallet.proxy,
+        evm_wallet_address=wallet.wallet_address,
+        status="active",
+    )
+    db.add(profile)
+    db.flush()
+    return profile, True
+
+
 @app.post("/api/wallets/add")
 async def add_wallet(wallet: WalletAdd, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     require_owned_username(wallet.username, current_user)
@@ -1962,10 +3352,22 @@ async def add_wallet(wallet: WalletAdd, db: Session = Depends(get_db), current_u
     if current_count >= max_allowed:
         raise HTTPException(status_code=400, detail=f"⚠️ Plan limit reached: {max_allowed} slots allowed for {plan}")
 
-    new_wallet = Wallet(username=wallet.username, wallet_address=wallet_address, encrypted_pk=None, label=wallet_label or None, proxy=wallet.proxy)
+    new_wallet = Wallet(
+        username=wallet.username,
+        wallet_address=wallet_address,
+        label=wallet_label or None,
+        proxy=normalize_proxy_configuration(wallet.proxy),
+    )
     db.add(new_wallet)
+    db.flush()
+    profile, _ = ensure_wallet_profile(db, user, new_wallet)
     db.commit()
-    return {"status": "success", "message": "Wallet added"}
+    return {
+        "status": "success",
+        "message": "Wallet and local profile added",
+        "wallet_id": new_wallet.id,
+        "profile_id": profile.id,
+    }
 
 @app.post("/api/wallets/buy-slot")
 async def buy_extra_slot(req: BuyExtraSlotReq, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -2003,26 +3405,55 @@ async def add_wallet_batch(
             status_code=409,
             detail=f"Selected wallets exceed your plan limit of {max_allowed} slots",
         )
+    profiles_created = 0
     for address in new_addresses:
-        db.add(Wallet(
+        wallet = Wallet(
             username=current_user.username,
             wallet_address=address,
-            encrypted_pk=None,
             label=None,
             proxy=None,
-        ))
+        )
+        db.add(wallet)
+        db.flush()
+        _profile, created = ensure_wallet_profile(db, current_user, wallet)
+        profiles_created += int(created)
     if new_addresses:
         db.commit()
     return {
         "status": "success",
         "added": len(new_addresses),
         "already_saved": len(addresses) - len(new_addresses),
+        "profiles_created": profiles_created,
     }
 
-@app.patch("/api/wallets/{wallet_id}/label")
-async def update_wallet_label(
+
+@app.post("/api/wallets/{wallet_id}/profile")
+async def create_wallet_profile(
     wallet_id: int,
-    payload: WalletLabelUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Create a missing local profile for one existing saved wallet."""
+    wallet = db.query(Wallet).filter(
+        Wallet.id == wallet_id,
+        Wallet.username == current_user.username,
+    ).first()
+    if not wallet:
+        raise HTTPException(status_code=404, detail="Wallet not found")
+
+    profile, created = ensure_wallet_profile(db, current_user, wallet)
+    db.commit()
+    return {
+        "status": "success",
+        "profile_id": profile.id,
+        "created": created,
+        "message": "Local profile ready",
+    }
+
+@app.patch("/api/wallets/{wallet_id}")
+async def update_wallet(
+    wallet_id: int,
+    payload: WalletUpdateRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -2036,8 +3467,11 @@ async def update_wallet_label(
     if not label or len(label) > 40 or any(ord(char) < 32 for char in label):
         raise HTTPException(status_code=422, detail="Wallet label is invalid")
     wallet.label = label
+    if payload.proxy is not None:
+        wallet.proxy = normalize_proxy_configuration(payload.proxy)
+        ensure_wallet_profile(db, current_user, wallet)
     db.commit()
-    return {"status": "success", "label": wallet.label}
+    return {"status": "success", "label": wallet.label, "has_proxy": bool(wallet.proxy)}
 
 @app.get("/api/wallets/{wallet_id}/health")
 async def get_wallet_health(wallet_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -2266,8 +3700,19 @@ async def save_aave_base_supply_submission(
 
     subscription = get_telegram_subscription(db, current_user.username)
     telegram_sent = False
-    if verified and subscription and subscription.notify_transaction_submitted:
-        amount = format_token_amount(int(session["amount_atomic"]), BASE_USDC_DECIMALS)
+    record = None
+    if verified:
+        record = save_verified_aave_operation(
+            db,
+            current_user.username,
+            session["wallet_address"],
+            "supply",
+            session["amount_atomic"],
+            tx_hash,
+            now_ts,
+        )
+    if verified and subscription and subscription.notify_defi_supply_submitted:
+        amount = record.amount if record else format_token_amount(int(session["amount_atomic"]), BASE_USDC_DECIMALS)
         messages = {
             "ru": f"💧 *AIRDROP-X: USDC внесён в Aave*\nСеть: `Base`\nСумма: `{amount} USDC`\nTX: `{tx_hash}`",
             "en": f"💧 *AIRDROP-X: USDC supplied to Aave*\nNetwork: `Base`\nAmount: `{amount} USDC`\nTX: `{tx_hash}`",
@@ -2278,7 +3723,126 @@ async def save_aave_base_supply_submission(
             messages[normalize_language(subscription.language)],
         )
     aave_supply_quote_sessions.pop(quote_id, None)
-    return {"status": "success", "verified": verified, "telegram_sent": telegram_sent}
+    return {
+        "status": "success",
+        "verified": verified,
+        "telegram_sent": telegram_sent,
+        "record": serialize_defi_operation_record(record) if record else None,
+    }
+
+@app.post("/api/defi/aave-base/usdc-withdraw-quote")
+async def get_aave_base_usdc_withdraw_quote(
+    payload: AaveWithdrawQuoteRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Prepare only the official Aave V3 Base USDC withdraw call; never sign it here."""
+    wallet_address = get_saved_base_wallet(db, current_user.username, payload.wallet_address)
+    quote = get_aave_v3_base_usdc_withdraw_quote(wallet_address, payload.amount)
+    now_ts = int(time.time())
+    quote_id = secrets.token_urlsafe(24)
+    aave_withdraw_quote_sessions[quote_id] = {
+        "username": current_user.username,
+        "wallet_address": wallet_address.lower(),
+        "amount_atomic": quote["amount_atomic"],
+        "created_at": now_ts,
+    }
+    for session_id, session in list(aave_withdraw_quote_sessions.items()):
+        if session["created_at"] < now_ts - AAVE_SUPPLY_QUOTE_TTL_SECONDS:
+            aave_withdraw_quote_sessions.pop(session_id, None)
+    return {
+        "status": "success",
+        "quote_id": quote_id,
+        "expires_in": AAVE_SUPPLY_QUOTE_TTL_SECONDS,
+        **quote,
+    }
+
+@app.post("/api/defi/aave-base/withdraw-submissions")
+async def save_aave_base_withdraw_submission(
+    payload: AaveWithdrawSubmissionRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Notify about an on-chain-verified Aave USDC withdrawal submitted by the user's wallet."""
+    quote_id = payload.quote_id.strip()
+    session = aave_withdraw_quote_sessions.get(quote_id)
+    now_ts = int(time.time())
+    if (
+        not session
+        or session["username"] != current_user.username
+        or session["created_at"] < now_ts - AAVE_SUPPLY_QUOTE_TTL_SECONDS
+    ):
+        aave_withdraw_quote_sessions.pop(quote_id, None)
+        raise HTTPException(status_code=410, detail="The Aave withdrawal request expired. Check the amount again")
+    tx_hash = payload.tx_hash.strip()
+    if not re.fullmatch(r"0x[a-fA-F0-9]{64}", tx_hash):
+        raise HTTPException(status_code=422, detail="Transaction hash is invalid")
+
+    verified = False
+    try:
+        web3 = Web3(Web3.HTTPProvider(BASE_RPC_URL, request_kwargs={"timeout": 8}))
+        transaction = web3.eth.get_transaction(tx_hash)
+        raw_input = transaction.get("input") or transaction.get("data") or ""
+        tx_input = raw_input.hex() if hasattr(raw_input, "hex") else str(raw_input)
+        if not tx_input.startswith("0x"):
+            tx_input = f"0x{tx_input}"
+        expected_input = build_aave_withdraw_calldata(
+            BASE_USDC_ADDRESS,
+            session["amount_atomic"],
+            session["wallet_address"],
+        )
+        verified = (
+            str(transaction.get("from") or "").lower() == session["wallet_address"]
+            and str(transaction.get("to") or "").lower() == AAVE_V3_BASE_POOL.lower()
+            and tx_input.lower() == expected_input.lower()
+            and int(transaction.get("value") or 0) == 0
+        )
+    except Exception:
+        verified = False
+
+    subscription = get_telegram_subscription(db, current_user.username)
+    telegram_sent = False
+    record = None
+    if verified:
+        record = save_verified_aave_operation(
+            db,
+            current_user.username,
+            session["wallet_address"],
+            "withdraw",
+            session["amount_atomic"],
+            tx_hash,
+            now_ts,
+        )
+    if verified and subscription and subscription.notify_defi_withdraw_submitted:
+        amount = record.amount if record else format_token_amount(int(session["amount_atomic"]), BASE_USDC_DECIMALS)
+        messages = {
+            "ru": f"💧 *AIRDROP-X: USDC выведен из Aave*\nСеть: `Base`\nСумма: `{amount} USDC`\nTX: `{tx_hash}`",
+            "en": f"💧 *AIRDROP-X: USDC withdrawn from Aave*\nNetwork: `Base`\nAmount: `{amount} USDC`\nTX: `{tx_hash}`",
+            "zh": f"💧 *AIRDROP-X：USDC 已从 Aave 提取*\n网络：`Base`\n数量：`{amount} USDC`\n交易：`{tx_hash}`",
+        }
+        telegram_sent = send_telegram_notification(
+            subscription.chat_id,
+            messages[normalize_language(subscription.language)],
+        )
+    aave_withdraw_quote_sessions.pop(quote_id, None)
+    return {
+        "status": "success",
+        "verified": verified,
+        "telegram_sent": telegram_sent,
+        "record": serialize_defi_operation_record(record) if record else None,
+    }
+
+@app.get("/api/defi/aave-base/history")
+async def get_aave_base_history(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """List verified Aave actions for this user and refresh pending Base receipts."""
+    records = db.query(DefiOperationRecord).filter(
+        DefiOperationRecord.username == current_user.username,
+    ).order_by(DefiOperationRecord.created_at.desc()).limit(20).all()
+    refresh_defi_operation_statuses(db, records)
+    return {"status": "success", "records": [serialize_defi_operation_record(record) for record in records]}
 
 @app.get("/api/universal-bridge/tokens/{network}")
 async def get_universal_bridge_tokens(network: str, current_user: User = Depends(get_current_user)):
@@ -2639,6 +4203,15 @@ async def refresh_universal_bridge_record(
 async def get_wallets(username: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     require_owned_username(username, current_user)
     wallets = db.query(Wallet).filter(Wallet.username == username).all()
+    profiles = (
+        db.query(UserProfile)
+        .filter(UserProfile.user_id == current_user.id)
+        .all()
+    )
+    profiles_by_address = {
+        profile.evm_wallet_address.lower(): profile
+        for profile in profiles
+    }
     user = db.query(User).filter(User.username == username).first()
     plan = user.subscription_plan if user else "Standard"
     extra = user.extra_slots if user else 0
@@ -2648,16 +4221,49 @@ async def get_wallets(username: str, db: Session = Depends(get_db), current_user
         "status": "success", 
         "plan": plan,
         "max_slots": max_allowed,
-        "wallets": [{"id": w.id, "wallet_address": w.wallet_address, "label": w.label, "proxy": w.proxy} for w in wallets]
+        "wallets": [
+            {
+                "id": wallet.id,
+                "wallet_address": wallet.wallet_address,
+                "label": wallet.label,
+                "has_proxy": bool(wallet.proxy),
+                "profile_id": (
+                    profiles_by_address[wallet.wallet_address.lower()].id
+                    if wallet.wallet_address.lower() in profiles_by_address
+                    else None
+                ),
+                "profile_status": (
+                    profiles_by_address[wallet.wallet_address.lower()].status
+                    if wallet.wallet_address.lower() in profiles_by_address
+                    else None
+                ),
+                "profile_has_proxy": bool(
+                    profiles_by_address.get(wallet.wallet_address.lower())
+                    and profiles_by_address[wallet.wallet_address.lower()].proxy_configuration
+                ),
+            }
+            for wallet in wallets
+        ]
     }
 
 @app.post("/api/wallets/test-proxy/{wallet_id}")
-async def test_wallet_proxy(wallet_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+async def test_wallet_proxy(
+    wallet_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    enforce_request_rate_limit(
+        "proxy-test",
+        f"{current_user.username}:{get_request_client_key(request)}",
+        10,
+        60,
+    )
     wallet = db.query(Wallet).filter(Wallet.id == wallet_id, Wallet.username == current_user.username).first()
     if not wallet or not wallet.proxy:
         raise HTTPException(status_code=404, detail="Wallet or proxy not found")
     
-    proxy_raw = wallet.proxy.strip()
+    proxy_raw = normalize_proxy_configuration(wallet.proxy)
     
     if "://" not in proxy_raw:
         parts = proxy_raw.rsplit(':', 3)
@@ -2681,14 +4287,18 @@ async def test_wallet_proxy(wallet_id: int, db: Session = Depends(get_db), curre
             return {"status": "success", "message": f"Proxy is working! Ping: {ping_ms}ms (IP: {external_ip})"}
         else:
             return {"status": "error", "message": "Proxy responded with an error"}
-    except Exception as e:
-        return {"status": "error", "message": f"Connection error: {str(e)}"}
+    except Exception:
+        return {"status": "error", "message": "Proxy connection failed"}
 
 @app.delete("/api/wallets/delete/{wallet_id}")
 async def delete_wallet(wallet_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     wallet = db.query(Wallet).filter(Wallet.id == wallet_id, Wallet.username == current_user.username).first()
     if not wallet:
         raise HTTPException(status_code=404, detail="Wallet not found")
+    db.query(WalletActionSchedule).filter(
+        WalletActionSchedule.wallet_id == wallet.id,
+        WalletActionSchedule.username == current_user.username,
+    ).delete(synchronize_session=False)
     db.delete(wallet)
     db.commit()
     return {"status": "success", "message": "Wallet deleted"}
@@ -2781,6 +4391,242 @@ async def get_action_reminder(db: Session = Depends(get_db), current_user: User 
         },
         "telegram_linked": bool(subscription),
     }
+
+def serialize_wallet_action_schedule(schedule: WalletActionSchedule) -> dict:
+    try:
+        generated_slots = json.loads(schedule.generated_slots or "[]")
+    except (TypeError, ValueError, json.JSONDecodeError):
+        generated_slots = []
+    return {
+        "id": schedule.id,
+        "wallet_id": schedule.wallet_id,
+        "action_type": schedule.action_type,
+        "day_of_week": schedule.day_of_week,
+        "time_of_day": schedule.time_of_day,
+        "timezone": schedule.timezone,
+        "enabled": bool(schedule.enabled),
+        "telegram_enabled": bool(schedule.telegram_enabled),
+        "acknowledgement": bool(schedule.acknowledgement),
+        "schedule_mode": schedule.schedule_mode or "fixed",
+        "weekly_min": schedule.weekly_min or 3,
+        "weekly_max": schedule.weekly_max or 4,
+        "window_start": schedule.window_start or "10:00",
+        "window_end": schedule.window_end or "21:00",
+        "generated_week": schedule.generated_week,
+        "generated_slots": generated_slots if isinstance(generated_slots, list) else [],
+        "last_sent_slot": schedule.last_sent_slot,
+    }
+
+def validate_wallet_schedule_payload(payload: WalletActionScheduleRequest) -> None:
+    if payload.action_type not in {"dex", "bridge", "lending"}:
+        raise HTTPException(status_code=422, detail="Unsupported scheduled action")
+    if payload.schedule_mode not in {"fixed", "flexible"}:
+        raise HTTPException(status_code=422, detail="Unsupported schedule mode")
+    if payload.day_of_week not in set(SCHEDULE_DAY_CODES):
+        raise HTTPException(status_code=422, detail="Unsupported schedule day")
+    try:
+        parse_schedule_minutes(payload.time_of_day)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Invalid schedule time")
+    if not payload.timezone or len(payload.timezone) > 64:
+        raise HTTPException(status_code=422, detail="Invalid schedule timezone")
+    try:
+        ZoneInfo(payload.timezone)
+    except (ZoneInfoNotFoundError, ValueError):
+        raise HTTPException(status_code=422, detail="Invalid schedule timezone")
+    if not 1 <= payload.weekly_min <= payload.weekly_max <= 7:
+        raise HTTPException(status_code=422, detail="Invalid weekly schedule frequency")
+    try:
+        window_start = parse_schedule_minutes(payload.window_start)
+        window_end = parse_schedule_minutes(payload.window_end)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Invalid flexible schedule window")
+    if window_start >= window_end:
+        raise HTTPException(status_code=422, detail="Invalid flexible schedule window")
+    if payload.enabled and not payload.acknowledgement:
+        raise HTTPException(status_code=422, detail="Schedule acknowledgement is required")
+
+def get_owned_wallet_or_404(db: Session, wallet_id: int, current_user: User) -> Wallet:
+    wallet = db.query(Wallet).filter(
+        Wallet.id == wallet_id,
+        Wallet.username == current_user.username,
+    ).first()
+    if not wallet:
+        raise HTTPException(status_code=404, detail="Wallet not found")
+    return wallet
+
+@app.get("/api/wallets/{wallet_id}/schedules")
+async def get_wallet_action_schedules(
+    wallet_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    wallet = get_owned_wallet_or_404(db, wallet_id, current_user)
+    schedules = db.query(WalletActionSchedule).filter(
+        WalletActionSchedule.wallet_id == wallet.id,
+        WalletActionSchedule.username == current_user.username,
+    ).order_by(WalletActionSchedule.created_at.asc()).all()
+    changed = False
+    for schedule in schedules:
+        if schedule.schedule_mode != "flexible":
+            continue
+        try:
+            local_now = datetime.datetime.now(ZoneInfo(schedule.timezone))
+            previous_week = schedule.generated_week
+            previous_slots = schedule.generated_slots
+            ensure_flexible_schedule_week(schedule, local_now)
+            changed = changed or previous_week != schedule.generated_week or previous_slots != schedule.generated_slots
+        except (ZoneInfoNotFoundError, ValueError):
+            continue
+    if changed:
+        db.commit()
+    return {
+        "status": "success",
+        "wallet": {
+            "id": wallet.id,
+            "label": wallet.label,
+            "wallet_address": wallet.wallet_address,
+            "has_proxy": bool(wallet.proxy),
+        },
+        "telegram_linked": bool(get_telegram_subscription(db, current_user.username)),
+        "schedules": [serialize_wallet_action_schedule(item) for item in schedules],
+    }
+
+@app.post("/api/wallets/{wallet_id}/schedules")
+async def create_wallet_action_schedule(
+    wallet_id: int,
+    payload: WalletActionScheduleRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    wallet = get_owned_wallet_or_404(db, wallet_id, current_user)
+    validate_wallet_schedule_payload(payload)
+    if payload.enabled and not wallet.proxy:
+        raise HTTPException(status_code=422, detail="A proxy is required before enabling a wallet schedule")
+    now_ts = int(time.time())
+    schedule = WalletActionSchedule(
+        username=current_user.username,
+        wallet_id=wallet.id,
+        action_type=payload.action_type,
+        day_of_week=payload.day_of_week,
+        time_of_day=payload.time_of_day,
+        timezone=payload.timezone,
+        enabled=payload.enabled,
+        telegram_enabled=payload.telegram_enabled,
+        acknowledgement=payload.acknowledgement,
+        schedule_mode=payload.schedule_mode,
+        weekly_min=payload.weekly_min,
+        weekly_max=payload.weekly_max,
+        window_start=payload.window_start,
+        window_end=payload.window_end,
+        created_at=now_ts,
+        updated_at=now_ts,
+    )
+    if payload.schedule_mode == "flexible":
+        ensure_flexible_schedule_week(
+            schedule,
+            datetime.datetime.now(ZoneInfo(payload.timezone)),
+            force=True,
+        )
+    db.add(schedule)
+    db.commit()
+    db.refresh(schedule)
+    return {"status": "success", "schedule": serialize_wallet_action_schedule(schedule)}
+
+@app.patch("/api/wallets/{wallet_id}/schedules/{schedule_id}")
+async def update_wallet_action_schedule(
+    wallet_id: int,
+    schedule_id: int,
+    payload: WalletActionScheduleRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    wallet = get_owned_wallet_or_404(db, wallet_id, current_user)
+    validate_wallet_schedule_payload(payload)
+    if payload.enabled and not wallet.proxy:
+        raise HTTPException(status_code=422, detail="A proxy is required before enabling a wallet schedule")
+    schedule = db.query(WalletActionSchedule).filter(
+        WalletActionSchedule.id == schedule_id,
+        WalletActionSchedule.wallet_id == wallet.id,
+        WalletActionSchedule.username == current_user.username,
+    ).first()
+    if not schedule:
+        raise HTTPException(status_code=404, detail="Wallet schedule not found")
+    schedule.action_type = payload.action_type
+    schedule.day_of_week = payload.day_of_week
+    schedule.time_of_day = payload.time_of_day
+    schedule.timezone = payload.timezone
+    schedule.enabled = payload.enabled
+    schedule.telegram_enabled = payload.telegram_enabled
+    schedule.acknowledgement = payload.acknowledgement
+    schedule.schedule_mode = payload.schedule_mode
+    schedule.weekly_min = payload.weekly_min
+    schedule.weekly_max = payload.weekly_max
+    schedule.window_start = payload.window_start
+    schedule.window_end = payload.window_end
+    if payload.schedule_mode == "flexible":
+        ensure_flexible_schedule_week(
+            schedule,
+            datetime.datetime.now(ZoneInfo(payload.timezone)),
+            force=True,
+        )
+    else:
+        schedule.generated_week = None
+        schedule.generated_slots = None
+    schedule.last_sent_slot = None
+    schedule.updated_at = int(time.time())
+    db.commit()
+    db.refresh(schedule)
+    return {"status": "success", "schedule": serialize_wallet_action_schedule(schedule)}
+
+@app.post("/api/wallets/{wallet_id}/schedules/{schedule_id}/reroll")
+async def reroll_wallet_action_schedule(
+    wallet_id: int,
+    schedule_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    wallet = get_owned_wallet_or_404(db, wallet_id, current_user)
+    if not wallet.proxy:
+        raise HTTPException(status_code=422, detail="A proxy is required before enabling a wallet schedule")
+    schedule = db.query(WalletActionSchedule).filter(
+        WalletActionSchedule.id == schedule_id,
+        WalletActionSchedule.wallet_id == wallet.id,
+        WalletActionSchedule.username == current_user.username,
+    ).first()
+    if not schedule:
+        raise HTTPException(status_code=404, detail="Wallet schedule not found")
+    if schedule.schedule_mode != "flexible":
+        raise HTTPException(status_code=422, detail="Only flexible schedules can be randomized")
+    ensure_flexible_schedule_week(
+        schedule,
+        datetime.datetime.now(ZoneInfo(schedule.timezone)),
+        force=True,
+    )
+    schedule.last_sent_slot = None
+    schedule.updated_at = int(time.time())
+    db.commit()
+    db.refresh(schedule)
+    return {"status": "success", "schedule": serialize_wallet_action_schedule(schedule)}
+
+@app.delete("/api/wallets/{wallet_id}/schedules/{schedule_id}")
+async def delete_wallet_action_schedule(
+    wallet_id: int,
+    schedule_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    wallet = get_owned_wallet_or_404(db, wallet_id, current_user)
+    schedule = db.query(WalletActionSchedule).filter(
+        WalletActionSchedule.id == schedule_id,
+        WalletActionSchedule.wallet_id == wallet.id,
+        WalletActionSchedule.username == current_user.username,
+    ).first()
+    if not schedule:
+        raise HTTPException(status_code=404, detail="Wallet schedule not found")
+    db.delete(schedule)
+    db.commit()
+    return {"status": "success"}
 
 @app.post("/api/action-reminder")
 async def save_action_reminder(
@@ -2901,44 +4747,8 @@ async def start_farming(req: StartFarmReq, db: Session = Depends(get_db), curren
     require_owned_username(req.username, current_user)
     raise HTTPException(
         status_code=503,
-        detail="Automated signing is disabled until non-custodial wallet signing is implemented.",
+        detail="Automated signing is unavailable. AIRDROP-X only prepares actions that you sign in your own wallet.",
     )
-    user = current_user
-    if user and user.balance < 1.50:
-        raise HTTPException(status_code=400, detail="Insufficient funds for gas ($1.50 required)")
-        
-    if user:
-        user.balance -= 1.50
-        date_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-        new_tx = Transaction(username=req.username, tx_type="gas_fee", amount=1.50, date_str=date_str, status="Success")
-        db.add(new_tx)
-        db.commit()
-
-    wallets = db.query(Wallet).filter(Wallet.username == req.username).all()
-    wallets_data = [{"id": w.id, "encrypted_pk": w.encrypted_pk, "proxy": w.proxy} for w in wallets]
-    
-    settings = USER_SETTINGS_DB.get(req.username, {})
-    chat_id = settings.get("telegram")
-    notify_start = settings.get("notifyStart", True)
-    notify_success = settings.get("notifySuccess", True)
-
-    telegram_sent = False
-    if chat_id and notify_start:
-        send_telegram_notification(chat_id, f"⚡ **Manual farm started**\n• Network: `{req.network}`\n• Status: Running...")
-
-    results = await run_real_farm(wallets_data, [], "master_password", target_network=req.network)
-    
-    if chat_id and notify_success:
-        telegram_sent = send_telegram_notification(chat_id, f"✅ **Farming session completed!**\n• Network: `{req.network}`\n• Workers processed: `{len(wallets_data)}`")
-
-    return {
-        "status": "success", 
-        "message": "Farming session completed!", 
-        "results": results, 
-        "new_balance": user.balance if user else 0,
-        "telegram_sent": telegram_sent,
-        "chat_id_configured": bool(chat_id)
-    }
 
 @app.post("/api/scan/{username}")
 async def scan_wallets(username: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -3095,7 +4905,7 @@ async def save_transfer_record(
         raise HTTPException(status_code=422, detail="Transaction hash is invalid")
     if db.query(WalletTransferRecord).filter(WalletTransferRecord.tx_hash == tx_hash).first():
         return {"status": "success", "already_saved": True}
-    db.add(WalletTransferRecord(
+    record = WalletTransferRecord(
         username=current_user.username,
         template_id=template.id,
         from_address=from_address,
@@ -3105,9 +4915,13 @@ async def save_transfer_record(
         network="Base",
         status="submitted",
         created_at=int(time.time()),
-    ))
+    )
+    db.add(record)
     db.commit()
-    return {"status": "success"}
+    telegram_sent = notify_base_transfer_submitted(
+        get_telegram_subscription(db, current_user.username), record.amount, tx_hash,
+    )
+    return {"status": "success", "telegram_sent": telegram_sent}
 
 @app.post("/api/transfer-records/direct")
 async def save_direct_transfer_record(
@@ -3138,7 +4952,7 @@ async def save_direct_transfer_record(
         raise HTTPException(status_code=422, detail="Transaction hash is invalid")
     if db.query(WalletTransferRecord).filter(WalletTransferRecord.tx_hash == tx_hash).first():
         return {"status": "success", "already_saved": True}
-    db.add(WalletTransferRecord(
+    record = WalletTransferRecord(
         username=current_user.username,
         template_id=None,
         from_address=from_address,
@@ -3148,9 +4962,13 @@ async def save_direct_transfer_record(
         network="Base",
         status="submitted",
         created_at=int(time.time()),
-    ))
+    )
+    db.add(record)
     db.commit()
-    return {"status": "success"}
+    telegram_sent = notify_base_transfer_submitted(
+        get_telegram_subscription(db, current_user.username), record.amount, tx_hash,
+    )
+    return {"status": "success", "telegram_sent": telegram_sent}
 
 @app.post("/api/base-swap/quote")
 async def get_base_swap_quote(
@@ -3528,8 +5346,260 @@ def get_platform_stats(db: Session = Depends(get_db)):
         "is_sold_out": total_users >= 300
     }
 
-app.mount("/", StaticFiles(directory=".", html=True), name="static")
+
+@app.get("/api/health")
+def get_service_health():
+    """Return a minimal, secret-free readiness report for local monitoring."""
+    database_ready = False
+    db = SessionLocal()
+    try:
+        db.execute(text("SELECT 1"))
+        database_ready = True
+    except Exception:
+        logging.exception("Health check could not reach the database")
+    finally:
+        db.close()
+
+    scheduler_ready = bool(getattr(scheduler, "running", False))
+    ready = database_ready and scheduler_ready
+    payload = {
+        "status": "ok" if ready else "degraded",
+        "database": "ok" if database_ready else "unavailable",
+        "scheduler": "running" if scheduler_ready else "stopped",
+        "capabilities": {
+            "walletconnect_configured": bool(WALLETCONNECT_PROJECT_ID),
+            "telegram_configured": bool(TELEGRAM_BOT_TOKEN and TELEGRAM_BOT_USERNAME),
+            "subscription_payments_enabled": SUBSCRIPTION_PAYMENTS_ENABLED,
+        },
+    }
+    if not ready:
+        raise HTTPException(status_code=503, detail=payload)
+    return payload
+
+
+# --- Action Center Unified Endpoints ---
+
+dex_quote_sessions = {}
+bridge_quote_sessions = {}
+
+class DexQuoteRequest(BaseModel):
+    wallet_address: str
+    from_token: str
+    to_token: str
+    amount: str
+    slippage: float = 0.5
+    provider: str
+
+class DexBuildRequest(BaseModel):
+    quote_id: str
+
+class BridgeQuoteRequest(BaseModel):
+    wallet_address: str
+    from_network: str
+    to_network: str
+    token_address: str
+    amount: str
+    provider: str
+
+class BridgeBuildRequest(BaseModel):
+    quote_id: str
+
+class LendingSupplyBuildRequest(BaseModel):
+    wallet_address: str
+    amount: str
+    network: str = "Base"
+    provider: str = "aave_v3"
+
+class LendingWithdrawBuildRequest(BaseModel):
+    wallet_address: str
+    amount: str
+    network: str = "Base"
+    provider: str = "aave_v3"
+
+class OperationSubmitRequest(BaseModel):
+    operation_id: int
+    tx_hash: str
+
+
+@app.get("/api/protocols")
+async def get_protocols(current_user: User = Depends(get_current_user)):
+    return {
+        "status": "success",
+        "protocols": [
+            {
+                "id": "uniswap",
+                "name": "Uniswap",
+                "category": "dex",
+                "networks": ["Base"],
+                "configured": bool(UNISWAP_API_KEY),
+                "execution_api": "/api/base-swap",
+            },
+            {
+                "id": "lifi",
+                "name": "LI.FI",
+                "category": "bridge",
+                "networks": list(LIFI_EVM_NETWORKS.keys()),
+                "configured": True,
+                "execution_api": "/api/universal-bridge",
+            },
+            {
+                "id": "aave_v3",
+                "name": "Aave V3",
+                "category": "lending",
+                "networks": ["Base"],
+                "configured": True,
+                "execution_api": "/api/defi/aave-base",
+            },
+        ]
+    }
+
+@app.get("/api/protocols/{category}/tokens")
+async def get_protocol_tokens(
+    category: str,
+    network: str = "Base",
+    current_user: User = Depends(get_current_user),
+):
+    normalized = category.strip().lower()
+    if normalized == "dex":
+        if network != "Base":
+            raise HTTPException(status_code=422, detail="The verified DEX route currently supports Base only")
+        tokens = [token for token in get_lifi_tokens("Base") if token.get("is_core")]
+    elif normalized == "bridge":
+        tokens = [token for token in get_lifi_tokens(network) if token.get("is_core")]
+    elif normalized == "lending":
+        if network != "Base":
+            raise HTTPException(status_code=422, detail="Aave V3 lending currently supports Base only")
+        tokens = [{
+            "symbol": "USDC",
+            "address": BASE_USDC_ADDRESS,
+            "decimals": BASE_USDC_DECIMALS,
+            "name": "USD Coin",
+            "is_core": True,
+        }]
+    else:
+        raise HTTPException(status_code=400, detail="Invalid protocol category")
+    return {"status": "success", "network": network, "tokens": tokens}
+
+@app.post("/api/dex/quote")
+async def get_dex_quote(
+    payload: DexQuoteRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    raise HTTPException(
+        status_code=410,
+        detail="This obsolete DEX endpoint is disabled. Use the verified /api/base-swap API.",
+    )
+@app.post("/api/dex/build")
+async def build_dex_transaction(
+    payload: DexBuildRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    raise HTTPException(
+        status_code=410,
+        detail="This obsolete DEX endpoint is disabled. Use the verified /api/base-swap API.",
+    )
+@app.post("/api/bridge/quote")
+async def get_bridge_quote(
+    payload: BridgeQuoteRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    raise HTTPException(
+        status_code=410,
+        detail="This obsolete bridge endpoint is disabled. Use the verified /api/universal-bridge API.",
+    )
+@app.post("/api/bridge/build")
+async def build_bridge_transaction(
+    payload: BridgeBuildRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    raise HTTPException(
+        status_code=410,
+        detail="This obsolete bridge endpoint is disabled. Use the verified /api/universal-bridge API.",
+    )
+@app.get("/api/lending/markets")
+async def get_lending_markets(current_user: User = Depends(get_current_user)):
+    return {
+        "status": "success",
+        "markets": [
+            {
+                "protocol": "Aave V3",
+                "network": "Base",
+                "asset": "USDC",
+                "decimals": BASE_USDC_DECIMALS,
+                "apy": None,
+                "annual_supply_rate_percent": None,
+                "warning": "The current variable rate is loaded only with a live Aave quote.",
+            }
+        ]
+    }
+
+@app.get("/api/lending/positions")
+async def get_lending_positions(
+    wallet_address: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    raise HTTPException(
+        status_code=410,
+        detail="This obsolete lending endpoint is disabled. Use /api/defi/aave-base-positions/{wallet_id}.",
+    )
+@app.post("/api/lending/supply/build")
+async def build_lending_supply_transaction(
+    payload: LendingSupplyBuildRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    raise HTTPException(
+        status_code=410,
+        detail="This obsolete lending endpoint is disabled. Use /api/defi/aave-base/usdc-supply-quote.",
+    )
+@app.post("/api/lending/withdraw/build")
+async def build_lending_withdraw_transaction(
+    payload: LendingWithdrawBuildRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    raise HTTPException(
+        status_code=410,
+        detail="This obsolete lending endpoint is disabled. Use /api/defi/aave-base/usdc-withdraw-quote.",
+    )
+@app.post("/api/operations/submit")
+async def submit_operation_tx(
+    payload: OperationSubmitRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    raise HTTPException(
+        status_code=410,
+        detail="Generic transaction submission is disabled. Use the provider-specific verified submission endpoint.",
+    )
+@app.get("/api/operations/{operation_id}/status")
+async def get_operation_status(
+    operation_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    raise HTTPException(
+        status_code=410,
+        detail="Generic operation status is disabled. Use the provider-specific receipt or status endpoint.",
+    )
+
+app.mount("/", RestrictedStaticFiles(directory=".", html=True), name="static")
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("server:app", host="127.0.0.1", port=8000, reload=True)
+    # Hot reload is useful only while developing.  Keep it opt-in so a normal
+    # `python server.py` run starts one predictable process for MVP testing.
+    reload_enabled = os.getenv("APP_RELOAD", "false").strip().lower() == "true"
+    if reload_enabled:
+        # Uvicorn needs an import string to create its reloader child process.
+        uvicorn.run("server:app", host="127.0.0.1", port=8000, reload=True)
+    else:
+        # Passing the already-created app prevents server.py from being
+        # imported twice in one process, which would duplicate SQLAlchemy
+        # model declarations such as the users table.
+        uvicorn.run(app, host="127.0.0.1", port=8000)
