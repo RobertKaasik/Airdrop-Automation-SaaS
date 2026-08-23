@@ -143,7 +143,7 @@ from fastapi import FastAPI, APIRouter, Depends, HTTPException, Header, Request
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Any, Dict, List, Optional
 from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, text
 from sqlalchemy.orm import Session
@@ -640,6 +640,9 @@ class WalletActionSchedule(Base):
     window_end = Column(String, nullable=False, default="21:00")
     generated_week = Column(String, nullable=True)
     generated_slots = Column(String, nullable=True)
+    # Manual calendar slots for a wallet. These are reminder timestamps only;
+    # they never contain transaction data, credentials, or signing authority.
+    custom_slots = Column(String, nullable=True)
     last_sent_slot = Column(String, nullable=True)
     created_at = Column(Integer, nullable=False)
     updated_at = Column(Integer, nullable=False)
@@ -713,6 +716,7 @@ def ensure_schema_columns():
             "window_end": "VARCHAR DEFAULT '21:00'",
             "generated_week": "VARCHAR",
             "generated_slots": "VARCHAR",
+            "custom_slots": "VARCHAR",
         }
         for column_name, column_type in wallet_schedule_additions.items():
             if wallet_schedule_columns and column_name not in wallet_schedule_columns:
@@ -752,8 +756,13 @@ def migrate_schedules() -> None:
             elif s.action_type == "bridge":
                 pass
             elif s.action_type not in ("dex", "lending", "bridge"):
-                logging.warning("Unknown action_type '%s' for schedule ID %s, disabling.", s.action_type, s.id)
-                s.enabled = False
+                # Retire legacy categories (for example, the former "quests"
+                # tab) once.  Keeping the record is safer than deleting user
+                # data, but an already-disabled legacy record is not an error
+                # on every subsequent server start.
+                if s.enabled:
+                    logging.warning("Unknown action_type '%s' for schedule ID %s, disabling.", s.action_type, s.id)
+                    s.enabled = False
         db.commit()
     except Exception as e:
         logging.error("Error migrating action schedules: %s", e)
@@ -1155,9 +1164,9 @@ async def run_scheduled_action_reminder_job():
             WalletActionSchedule.enabled.is_(True),
         ).all()
         action_labels = {
-            "ru": {"swap": "Обмен", "bridge": "Мост", "defi": "DeFi"},
-            "en": {"swap": "Swap", "bridge": "Bridge", "defi": "DeFi"},
-            "zh": {"swap": "兑换", "bridge": "跨链桥", "defi": "DeFi"},
+            "ru": {"dex": "DEX", "bridge": "Мост", "lending": "Кредитование"},
+            "en": {"dex": "DEX", "bridge": "Bridge", "lending": "Lending"},
+            "zh": {"dex": "DEX", "bridge": "跨链桥", "lending": "借贷"},
         }
         for schedule in wallet_schedules:
             try:
@@ -1168,7 +1177,19 @@ async def run_scheduled_action_reminder_job():
             local_day = current_day_map.get(local_now.weekday())
             local_time = local_now.strftime("%H:%M")
             local_slot = f"{local_now.strftime('%Y-%m-%d %H:%M')}|{schedule.timezone}"
-            if schedule.schedule_mode == "flexible":
+            if schedule.schedule_mode == "custom":
+                custom_slots = parse_custom_schedule_slots(schedule.custom_slots)
+                if not custom_slots:
+                    logging.warning("Invalid custom schedule id=%s", schedule.id)
+                    schedule.enabled = False
+                    schedule.updated_at = int(time.time())
+                    continue
+                if not any(
+                    item.get("day") == local_day and item.get("time") == local_time
+                    for item in custom_slots
+                ):
+                    continue
+            elif schedule.schedule_mode == "flexible":
                 try:
                     generated_slots = ensure_flexible_schedule_week(schedule, local_now)
                 except ValueError:
@@ -1557,6 +1578,7 @@ class WalletActionScheduleRequest(BaseModel):
     weekly_max: int = 4
     window_start: str = "10:00"
     window_end: str = "21:00"
+    custom_slots: List[Dict[str, str]] = Field(default_factory=list)
     reroll: bool = False
 
 class BridgePlanRequest(BaseModel):
@@ -4392,11 +4414,59 @@ async def get_action_reminder(db: Session = Depends(get_db), current_user: User 
         "telegram_linked": bool(subscription),
     }
 
+def normalize_custom_schedule_slots(raw_slots: Any) -> List[Dict[str, str]]:
+    """Validate and normalize user-chosen reminder day/time pairs.
+
+    A manual calendar is intentionally limited to one reminder per weekday.
+    It does not prepare, sign, or transmit an on-chain transaction.
+    """
+    if not isinstance(raw_slots, list) or not raw_slots:
+        raise HTTPException(status_code=422, detail="Choose at least one schedule day")
+    if len(raw_slots) > len(SCHEDULE_DAY_CODES):
+        raise HTTPException(status_code=422, detail="Invalid custom schedule slots")
+
+    normalized: List[Dict[str, str]] = []
+    seen_days = set()
+    for item in raw_slots:
+        if not isinstance(item, dict):
+            raise HTTPException(status_code=422, detail="Invalid custom schedule slots")
+        day = str(item.get("day_of_week", "")).strip()
+        time_of_day = str(item.get("time_of_day", "")).strip()
+        if day not in SCHEDULE_DAY_CODES or day in seen_days:
+            raise HTTPException(status_code=422, detail="Invalid custom schedule slots")
+        try:
+            parse_schedule_minutes(time_of_day)
+        except ValueError:
+            raise HTTPException(status_code=422, detail="Invalid schedule time")
+        seen_days.add(day)
+        normalized.append({"day": day, "time": time_of_day})
+
+    order = {day: index for index, day in enumerate(SCHEDULE_DAY_CODES)}
+    return sorted(normalized, key=lambda item: order[item["day"]])
+
+
+def parse_custom_schedule_slots(raw_slots: Any) -> List[Dict[str, str]]:
+    try:
+        slots = json.loads(raw_slots or "[]")
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return []
+    if not isinstance(slots, list):
+        return []
+    try:
+        return normalize_custom_schedule_slots([
+            {"day_of_week": item.get("day"), "time_of_day": item.get("time")}
+            for item in slots
+        ])
+    except (AttributeError, HTTPException):
+        return []
+
+
 def serialize_wallet_action_schedule(schedule: WalletActionSchedule) -> dict:
     try:
         generated_slots = json.loads(schedule.generated_slots or "[]")
     except (TypeError, ValueError, json.JSONDecodeError):
         generated_slots = []
+    custom_slots = parse_custom_schedule_slots(schedule.custom_slots)
     return {
         "id": schedule.id,
         "wallet_id": schedule.wallet_id,
@@ -4414,13 +4484,14 @@ def serialize_wallet_action_schedule(schedule: WalletActionSchedule) -> dict:
         "window_end": schedule.window_end or "21:00",
         "generated_week": schedule.generated_week,
         "generated_slots": generated_slots if isinstance(generated_slots, list) else [],
+        "custom_slots": custom_slots,
         "last_sent_slot": schedule.last_sent_slot,
     }
 
-def validate_wallet_schedule_payload(payload: WalletActionScheduleRequest) -> None:
+def validate_wallet_schedule_payload(payload: WalletActionScheduleRequest) -> List[Dict[str, str]]:
     if payload.action_type not in {"dex", "bridge", "lending"}:
         raise HTTPException(status_code=422, detail="Unsupported scheduled action")
-    if payload.schedule_mode not in {"fixed", "flexible"}:
+    if payload.schedule_mode not in {"fixed", "flexible", "custom"}:
         raise HTTPException(status_code=422, detail="Unsupported schedule mode")
     if payload.day_of_week not in set(SCHEDULE_DAY_CODES):
         raise HTTPException(status_code=422, detail="Unsupported schedule day")
@@ -4445,6 +4516,9 @@ def validate_wallet_schedule_payload(payload: WalletActionScheduleRequest) -> No
         raise HTTPException(status_code=422, detail="Invalid flexible schedule window")
     if payload.enabled and not payload.acknowledgement:
         raise HTTPException(status_code=422, detail="Schedule acknowledgement is required")
+    if payload.schedule_mode == "custom":
+        return normalize_custom_schedule_slots(payload.custom_slots)
+    return []
 
 def get_owned_wallet_or_404(db: Session, wallet_id: int, current_user: User) -> Wallet:
     wallet = db.query(Wallet).filter(
@@ -4500,7 +4574,7 @@ async def create_wallet_action_schedule(
     current_user: User = Depends(get_current_user),
 ):
     wallet = get_owned_wallet_or_404(db, wallet_id, current_user)
-    validate_wallet_schedule_payload(payload)
+    custom_slots = validate_wallet_schedule_payload(payload)
     if payload.enabled and not wallet.proxy:
         raise HTTPException(status_code=422, detail="A proxy is required before enabling a wallet schedule")
     now_ts = int(time.time())
@@ -4519,6 +4593,7 @@ async def create_wallet_action_schedule(
         weekly_max=payload.weekly_max,
         window_start=payload.window_start,
         window_end=payload.window_end,
+        custom_slots=(json.dumps(custom_slots, ensure_ascii=False, separators=(",", ":")) if custom_slots else None),
         created_at=now_ts,
         updated_at=now_ts,
     )
@@ -4542,7 +4617,7 @@ async def update_wallet_action_schedule(
     current_user: User = Depends(get_current_user),
 ):
     wallet = get_owned_wallet_or_404(db, wallet_id, current_user)
-    validate_wallet_schedule_payload(payload)
+    custom_slots = validate_wallet_schedule_payload(payload)
     if payload.enabled and not wallet.proxy:
         raise HTTPException(status_code=422, detail="A proxy is required before enabling a wallet schedule")
     schedule = db.query(WalletActionSchedule).filter(
@@ -4564,6 +4639,10 @@ async def update_wallet_action_schedule(
     schedule.weekly_max = payload.weekly_max
     schedule.window_start = payload.window_start
     schedule.window_end = payload.window_end
+    schedule.custom_slots = (
+        json.dumps(custom_slots, ensure_ascii=False, separators=(",", ":"))
+        if custom_slots else None
+    )
     if payload.schedule_mode == "flexible":
         ensure_flexible_schedule_week(
             schedule,

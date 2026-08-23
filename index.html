@@ -229,35 +229,39 @@
             </div>
             <div id="walletScheduleSafety" class="wallet-schedule-notice"></div>
             <div id="walletScheduleProxyNotice" class="wallet-schedule-proxy"></div>
-            <button type="button" id="walletScheduleFlexibleToggle" class="wallet-schedule-flex-toggle" onclick="toggleWalletScheduleFlexible()"></button>
 
             <div class="wallet-schedule-form">
                 <label><span id="walletScheduleActionLabel"></span>
                     <select id="walletScheduleAction" class="auth-input">
-                        <option value="swap" id="walletScheduleActionSwap"></option>
+                        <option value="dex" id="walletScheduleActionSwap"></option>
                         <option value="bridge" id="walletScheduleActionBridge"></option>
-                        <option value="defi" id="walletScheduleActionDefi"></option>
+                        <option value="lending" id="walletScheduleActionDefi"></option>
                     </select>
-                </label>
-                <label class="wallet-schedule-fixed-field"><span id="walletScheduleDayLabel"></span>
-                    <select id="walletScheduleDay" class="auth-input"></select>
-                </label>
-                <label class="wallet-schedule-fixed-field"><span id="walletScheduleTimeLabel"></span>
-                    <input id="walletScheduleTime" type="text" value="18:00" placeholder="15:32" maxlength="5" inputmode="numeric" pattern="[0-2][0-9]:[0-5][0-9]" oninput="format24HourTimeInput(this)" onblur="normalize24HourTimeInput(this)" class="auth-input">
                 </label>
                 <label><span id="walletScheduleTimezoneLabel"></span>
                     <input id="walletScheduleTimezone" type="text" value="UTC" readonly class="auth-input">
                 </label>
             </div>
-            <div id="walletScheduleFlexiblePanel" class="wallet-schedule-flex-panel" hidden>
+            <div id="walletScheduleFlexiblePanel" class="wallet-schedule-flex-panel">
                 <div id="walletScheduleFlexibleDescription" class="wallet-schedule-flex-description"></div>
+                <div class="wallet-schedule-mode-bar" role="group" aria-label="Schedule mode">
+                    <button type="button" id="walletScheduleAutoMode" class="wallet-schedule-mode is-active" onclick="setWalletScheduleMode('flexible')"></button>
+                    <button type="button" id="walletScheduleCustomMode" class="wallet-schedule-mode" onclick="setWalletScheduleMode('custom')"></button>
+                </div>
                 <div class="wallet-schedule-flex-grid">
                     <label><span id="walletScheduleWeeklyMinLabel"></span><input id="walletScheduleWeeklyMin" type="number" min="1" max="7" value="3" class="auth-input"></label>
                     <label><span id="walletScheduleWeeklyMaxLabel"></span><input id="walletScheduleWeeklyMax" type="number" min="1" max="7" value="4" class="auth-input"></label>
                     <label><span id="walletScheduleWindowStartLabel"></span><input id="walletScheduleWindowStart" type="text" value="10:00" placeholder="10:00" maxlength="5" inputmode="numeric" oninput="format24HourTimeInput(this)" onblur="normalize24HourTimeInput(this)" class="auth-input"></label>
                     <label><span id="walletScheduleWindowEndLabel"></span><input id="walletScheduleWindowEnd" type="text" value="21:00" placeholder="21:00" maxlength="5" inputmode="numeric" oninput="format24HourTimeInput(this)" onblur="normalize24HourTimeInput(this)" class="auth-input"></label>
                 </div>
-                <div id="walletScheduleGeneratedPreview" class="wallet-schedule-generated-preview"></div>
+                <div class="wallet-schedule-calendar-head">
+                    <div>
+                        <b id="walletSchedulePreviewTitle"></b>
+                        <span id="walletSchedulePreviewDesc"></span>
+                    </div>
+                    <button type="button" id="walletSchedulePreviewRefresh" class="wallet-schedule-preview-refresh" onclick="refreshWalletSchedulePreview()"></button>
+                </div>
+                <div id="walletScheduleGeneratedPreview" class="wallet-schedule-generated-preview" aria-live="polite"></div>
             </div>
             <label class="wallet-schedule-check"><input id="walletScheduleTelegram" type="checkbox" checked> <span id="walletScheduleTelegramLabel"></span></label>
             <label class="wallet-schedule-check wallet-schedule-consent"><input id="walletScheduleAcknowledgement" type="checkbox"> <span id="walletScheduleAcknowledgementLabel"></span></label>

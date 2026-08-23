@@ -375,7 +375,7 @@ function injectWalletSecurityBanner() {
     const existingBanner = document.getElementById('walletSecurityBanner');
     if (existingBanner) existingBanner.remove();
 
-    if (!areInterfaceHintsEnabled()) return;
+    if (!isInterfaceHintVisible('wallet-security')) return;
 
     const container = document.getElementById('walletsListContainer');
     if (!container || !container.parentElement) return;
@@ -383,6 +383,7 @@ function injectWalletSecurityBanner() {
     const banner = document.createElement('div');
     banner.id = 'walletSecurityBanner';
     banner.className = 'security-banner';
+    banner.dataset.interfaceHint = 'wallet-security';
     banner.innerHTML = `
         <div class="security-banner__content">
             <div class="security-banner__icon">🛡️</div>
@@ -393,7 +394,7 @@ function injectWalletSecurityBanner() {
         </div>
         <div class="security-banner__actions">
             <button type="button" class="security-banner__link" onclick="openAntiSybilModal();">Подробнее</button>
-            <button type="button" class="security-banner__close" aria-label="Закрыть" onclick="this.closest('.security-banner').remove();">✕</button>
+            <button type="button" class="security-banner__close" aria-label="${escapeHtml(t('interfaceHintClose'))}" onclick="dismissInterfaceHint('wallet-security');">✕</button>
         </div>
     `;
 
@@ -3490,7 +3491,9 @@ function initializeInterfaceHintsPreference() {
 
 let activeWalletScheduleId = null;
 let activeWalletScheduleHasProxy = false;
-let activeWalletScheduleFlexible = false;
+let walletSchedulePreviewVersion = 0;
+let walletScheduleMode = 'flexible';
+let walletScheduleCustomSlots = [];
 
 function walletScheduleDayOptions(locale) {
     return [
@@ -3501,11 +3504,45 @@ function walletScheduleDayOptions(locale) {
     ];
 }
 
+function renderWalletScheduleInlineHint(elementId, hintId, message, tone = 'info') {
+    const element = document.getElementById(elementId);
+    if (!element) return;
+
+    element.dataset.interfaceHint = hintId;
+    element.classList.toggle('missing', tone === 'warning');
+
+    if (!isInterfaceHintVisible(hintId)) {
+        element.hidden = true;
+        return;
+    }
+
+    element.hidden = false;
+    element.innerHTML = `
+        <span>${escapeHtml(message)}</span>
+        <button type="button" class="wallet-schedule-hint-close" onclick="dismissInterfaceHint('${hintId}')" aria-label="${escapeHtml(t('interfaceHintClose'))}" title="${escapeHtml(t('interfaceHintClose'))}">×</button>
+    `;
+}
+
+function renderWalletScheduleProxyNotice(message, hasProxy) {
+    const element = document.getElementById('walletScheduleProxyNotice');
+    if (!element) return;
+
+    // A missing proxy prevents a schedule from being saved, so that warning must remain visible.
+    if (!hasProxy) {
+        element.hidden = false;
+        element.removeAttribute('data-interface-hint');
+        element.classList.add('missing');
+        element.textContent = message;
+        return;
+    }
+
+    renderWalletScheduleInlineHint('walletScheduleProxyNotice', 'wallet-schedule-proxy-ready', message, 'success');
+}
+
 function populateWalletScheduleText() {
     const locale = translations[getActiveLang()];
     const textMap = {
         walletScheduleTitle: locale.walletScheduleTitle,
-        walletScheduleSafety: locale.walletScheduleSafety,
         walletScheduleActionLabel: locale.walletScheduleActionLabel,
         walletScheduleActionSwap: locale.walletScheduleActionSwap,
         walletScheduleActionBridge: locale.walletScheduleActionBridge,
@@ -3522,50 +3559,137 @@ function populateWalletScheduleText() {
         walletScheduleWeeklyMaxLabel: locale.walletScheduleWeeklyMaxLabel,
         walletScheduleWindowStartLabel: locale.walletScheduleWindowStartLabel,
         walletScheduleWindowEndLabel: locale.walletScheduleWindowEndLabel,
+        walletSchedulePreviewTitle: locale.walletSchedulePreviewTitle,
+        walletSchedulePreviewDesc: locale.walletSchedulePreviewDesc,
+        walletSchedulePreviewRefresh: locale.walletSchedulePreviewRefresh,
+        walletScheduleAutoMode: locale.walletScheduleAutoMode,
+        walletScheduleCustomMode: locale.walletScheduleCustomMode,
     };
     Object.entries(textMap).forEach(([id, value]) => {
         const element = document.getElementById(id);
         if (element) element.textContent = value;
     });
-    const daySelect = document.getElementById('walletScheduleDay');
-    if (daySelect) {
-        const selected = daySelect.value || 'Mon';
-        daySelect.innerHTML = walletScheduleDayOptions(locale)
-            .map(([value, label]) => `<option value="${value}">${escapeHtml(label)}</option>`).join('');
-        daySelect.value = selected;
-    }
-    updateWalletScheduleFlexibleUi();
+    renderWalletScheduleInlineHint('walletScheduleSafety', 'wallet-schedule-safety', locale.walletScheduleSafety);
+    renderWalletSchedulePreview();
 }
 
-function updateWalletScheduleFlexibleUi() {
-    const locale = translations[getActiveLang()];
-    const toggle = document.getElementById('walletScheduleFlexibleToggle');
-    const panel = document.getElementById('walletScheduleFlexiblePanel');
-    document.querySelectorAll('.wallet-schedule-fixed-field').forEach(element => {
-        element.style.display = activeWalletScheduleFlexible ? 'none' : '';
+function getWalletSchedulePreviewSlots() {
+    if (walletScheduleMode === 'custom') {
+        return walletScheduleCustomSlots.map(slot => ({
+            day: walletScheduleDayOptions(translations[getActiveLang()]).findIndex(([code]) => code === slot.day),
+            time: slot.time,
+        })).filter(slot => slot.day >= 0);
+    }
+    const weeklyMin = Number(document.getElementById('walletScheduleWeeklyMin')?.value || 3);
+    const weeklyMax = Number(document.getElementById('walletScheduleWeeklyMax')?.value || 4);
+    const start = normalize24HourTime(document.getElementById('walletScheduleWindowStart')?.value);
+    const end = normalize24HourTime(document.getElementById('walletScheduleWindowEnd')?.value);
+    if (!Number.isInteger(weeklyMin) || !Number.isInteger(weeklyMax) || weeklyMin < 1 || weeklyMax > 7 || weeklyMin > weeklyMax || !start || !end || start >= end) {
+        return [];
+    }
+    const [startHour, startMinute] = start.split(':').map(Number);
+    const [endHour, endMinute] = end.split(':').map(Number);
+    const startTotal = startHour * 60 + startMinute;
+    const duration = endHour * 60 + endMinute - startTotal;
+    const count = weeklyMin + (walletSchedulePreviewVersion % (weeklyMax - weeklyMin + 1));
+    const dayOrder = [0, 3, 5, 1, 6, 2, 4];
+    const offset = walletSchedulePreviewVersion % dayOrder.length;
+    return Array.from({ length: count }, (_, index) => {
+        const day = dayOrder[(index + offset) % dayOrder.length];
+        const fraction = (index + 1) / (count + 1);
+        const minuteOffset = Math.min(duration - 1, Math.max(0, Math.round(duration * fraction)));
+        const total = startTotal + minuteOffset;
+        return { day, time: `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}` };
     });
-    if (panel) panel.hidden = !activeWalletScheduleFlexible;
-    if (toggle) {
-        toggle.classList.toggle('active', activeWalletScheduleFlexible);
-        toggle.textContent = activeWalletScheduleFlexible
-            ? locale.walletScheduleFlexibleEnabled
-            : locale.walletScheduleFlexibleButton;
-    }
 }
 
-function toggleWalletScheduleFlexible() {
-    activeWalletScheduleFlexible = !activeWalletScheduleFlexible;
-    updateWalletScheduleFlexibleUi();
+function renderWalletSchedulePreview() {
+    const preview = document.getElementById('walletScheduleGeneratedPreview');
+    if (!preview) return;
+    const locale = translations[getActiveLang()];
+    const days = walletScheduleDayOptions(locale);
+    const slots = getWalletSchedulePreviewSlots();
+    const autoButton = document.getElementById('walletScheduleAutoMode');
+    const customButton = document.getElementById('walletScheduleCustomMode');
+    const description = document.getElementById('walletScheduleFlexibleDescription');
+    const refreshButton = document.getElementById('walletSchedulePreviewRefresh');
+    if (autoButton) autoButton.classList.toggle('is-active', walletScheduleMode === 'flexible');
+    if (customButton) customButton.classList.toggle('is-active', walletScheduleMode === 'custom');
+    if (description) description.textContent = walletScheduleMode === 'custom'
+        ? locale.walletScheduleCustomDescription
+        : locale.walletScheduleFlexibleDescription;
+    if (refreshButton) refreshButton.textContent = walletScheduleMode === 'custom'
+        ? locale.walletScheduleUseAuto
+        : locale.walletSchedulePreviewRefresh;
+    if (!slots.length && walletScheduleMode !== 'custom') {
+        preview.innerHTML = `<div class="wallet-schedule-preview-empty">${escapeHtml(walletScheduleMode === 'custom' ? locale.walletScheduleCustomEmpty : locale.walletScheduleFlexibleInvalid)}</div>`;
+        return;
+    }
+    const slotByDay = new Map(slots.map(slot => [slot.day, slot.time]));
+    const customHint = walletScheduleMode === 'custom' && !slots.length
+        ? `<div class="wallet-schedule-custom-hint">${escapeHtml(locale.walletScheduleCustomEmpty)}</div>`
+        : '';
+    preview.innerHTML = `${customHint}<div class="wallet-schedule-calendar">${days.map(([, label], day) => {
+        const time = slotByDay.get(day);
+        const code = days[day][0];
+        if (walletScheduleMode === 'custom') {
+            return `<button type="button" class="wallet-schedule-calendar-day wallet-schedule-calendar-button${time ? ' active' : ''}" onclick="toggleWalletScheduleCustomDay('${code}')" aria-pressed="${time ? 'true' : 'false'}"><span>${escapeHtml(label)}</span>${time ? `<input data-schedule-time="${code}" type="time" value="${escapeHtml(time)}" aria-label="${escapeHtml(label)}" onclick="event.stopPropagation()" onchange="setWalletScheduleCustomTime('${code}', this.value)">` : `<b>+</b>`}</button>`;
+        }
+        return `<div class="wallet-schedule-calendar-day${time ? ' active' : ''}"><span>${escapeHtml(label)}</span><b>${time ? escapeHtml(time) : '—'}</b></div>`;
+    }).join('')}</div>`;
+}
+
+function refreshWalletSchedulePreview() {
+    if (walletScheduleMode === 'custom') {
+        setWalletScheduleMode('flexible');
+        return;
+    }
+    walletSchedulePreviewVersion += 1;
+    renderWalletSchedulePreview();
+}
+
+function setWalletScheduleMode(mode) {
+    walletScheduleMode = mode === 'custom' ? 'custom' : 'flexible';
+    renderWalletSchedulePreview();
+}
+
+function toggleWalletScheduleCustomDay(day) {
+    const index = walletScheduleCustomSlots.findIndex(slot => slot.day === day);
+    if (index >= 0) {
+        walletScheduleCustomSlots.splice(index, 1);
+        renderWalletSchedulePreview();
+        return;
+    }
+    walletScheduleCustomSlots.push({ day, time: '18:00' });
+    walletScheduleCustomSlots.sort((a, b) => walletScheduleDayOptions(translations[getActiveLang()]).findIndex(([code]) => code === a.day) - walletScheduleDayOptions(translations[getActiveLang()]).findIndex(([code]) => code === b.day));
+    renderWalletSchedulePreview();
+    window.setTimeout(() => document.querySelector(`[data-schedule-time="${day}"]`)?.focus(), 0);
+}
+
+function setWalletScheduleCustomTime(day, value) {
+    const normalized = normalize24HourTime(value);
+    if (!normalized) return;
+    const slot = walletScheduleCustomSlots.find(item => item.day === day);
+    if (slot) slot.time = normalized;
 }
 
 async function openWalletScheduleModal(walletId) {
     activeWalletScheduleId = Number(walletId);
-    activeWalletScheduleFlexible = false;
+    walletSchedulePreviewVersion = 0;
+    walletScheduleMode = 'flexible';
+    walletScheduleCustomSlots = [];
     populateWalletScheduleText();
     const timezoneInput = document.getElementById('walletScheduleTimezone');
     if (timezoneInput) timezoneInput.value = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
     const acknowledgement = document.getElementById('walletScheduleAcknowledgement');
     if (acknowledgement) acknowledgement.checked = false;
+    ['walletScheduleWeeklyMin', 'walletScheduleWeeklyMax', 'walletScheduleWindowStart', 'walletScheduleWindowEnd'].forEach(id => {
+        const input = document.getElementById(id);
+        if (input && input.dataset.schedulePreviewBound !== 'true') {
+            input.addEventListener('input', renderWalletSchedulePreview);
+            input.dataset.schedulePreviewBound = 'true';
+        }
+    });
     const status = document.getElementById('walletScheduleStatus');
     if (status) status.textContent = '';
     showAppModal('walletScheduleModal');
@@ -3600,13 +3724,10 @@ async function loadWalletSchedules() {
             const address = data.wallet?.wallet_address || '';
             walletDisplay.textContent = `${label} · ${address.slice(0, 8)}…${address.slice(-6)}`;
         }
-        const proxyNotice = document.getElementById('walletScheduleProxyNotice');
-        if (proxyNotice) {
-            proxyNotice.textContent = activeWalletScheduleHasProxy
-                ? locale.walletScheduleProxyReady
-                : locale.walletScheduleProxyRequired;
-            proxyNotice.classList.toggle('missing', !activeWalletScheduleHasProxy);
-        }
+        renderWalletScheduleProxyNotice(
+            activeWalletScheduleHasProxy ? locale.walletScheduleProxyReady : locale.walletScheduleProxyRequired,
+            activeWalletScheduleHasProxy,
+        );
         const saveButton = document.getElementById('walletScheduleSave');
         if (saveButton) saveButton.disabled = !activeWalletScheduleHasProxy;
         renderWalletSchedules(data.schedules || []);
@@ -3626,17 +3747,20 @@ function renderWalletSchedules(schedules) {
         return;
     }
     const actionNames = {
-        swap: locale.walletScheduleActionSwap,
+        dex: locale.walletScheduleActionSwap,
         bridge: locale.walletScheduleActionBridge,
-        defi: locale.walletScheduleActionDefi,
+        lending: locale.walletScheduleActionDefi,
     };
     const dayNames = Object.fromEntries(walletScheduleDayOptions(locale));
     list.innerHTML = schedules.map(item => {
         const generatedSlots = Array.isArray(item.generated_slots) ? item.generated_slots : [];
+        const customSlots = Array.isArray(item.custom_slots) ? item.custom_slots : [];
         const flexibleSummary = item.schedule_mode === 'flexible'
             ? `${escapeHtml(locale.walletScheduleFlexibleShort
                 .replace('{min}', item.weekly_min)
                 .replace('{max}', item.weekly_max))} · ${escapeHtml(item.window_start)}–${escapeHtml(item.window_end)}`
+            : item.schedule_mode === 'custom'
+                ? customSlots.map(slot => `${escapeHtml(dayNames[slot.day] || slot.day)} ${escapeHtml(slot.time)}`).join(' · ')
             : `${escapeHtml(dayNames[item.day_of_week] || item.day_of_week)} · ${escapeHtml(item.time_of_day)}`;
         const preview = generatedSlots.length
             ? `<small>${escapeHtml(locale.walletScheduleGeneratedLabel)}: ${generatedSlots.map(slot => `${escapeHtml(dayNames[slot.day] || slot.day)} ${escapeHtml(slot.time)}`).join(' · ')}</small>`
@@ -3682,14 +3806,8 @@ async function saveWalletSchedule() {
     const locale = translations[getActiveLang()];
     const status = document.getElementById('walletScheduleStatus');
     const button = document.getElementById('walletScheduleSave');
-    const timeInput = document.getElementById('walletScheduleTime');
-    const timeValue = normalize24HourTime(timeInput?.value);
     if (!activeWalletScheduleHasProxy) {
         if (status) status.textContent = locale.walletScheduleProxyRequired;
-        return;
-    }
-    if (!activeWalletScheduleFlexible && !timeValue) {
-        if (status) status.textContent = locale.planReminderTimeInvalid;
         return;
     }
     const windowStartInput = document.getElementById('walletScheduleWindowStart');
@@ -3698,12 +3816,16 @@ async function saveWalletSchedule() {
     const windowEnd = normalize24HourTime(windowEndInput?.value);
     const weeklyMin = Number(document.getElementById('walletScheduleWeeklyMin')?.value || 3);
     const weeklyMax = Number(document.getElementById('walletScheduleWeeklyMax')?.value || 4);
-    if (activeWalletScheduleFlexible && (
+    if (walletScheduleMode === 'flexible' && (
         !windowStart || !windowEnd || windowStart >= windowEnd
         || !Number.isInteger(weeklyMin) || !Number.isInteger(weeklyMax)
         || weeklyMin < 1 || weeklyMax > 7 || weeklyMin > weeklyMax
     )) {
         if (status) status.textContent = locale.walletScheduleFlexibleInvalid;
+        return;
+    }
+    if (walletScheduleMode === 'custom' && !walletScheduleCustomSlots.length) {
+        if (status) status.textContent = locale.walletScheduleCustomEmpty;
         return;
     }
     const acknowledgement = Boolean(document.getElementById('walletScheduleAcknowledgement')?.checked);
@@ -3712,19 +3834,24 @@ async function saveWalletSchedule() {
         return;
     }
     const payload = {
-        action_type: document.getElementById('walletScheduleAction')?.value || 'swap',
-        day_of_week: document.getElementById('walletScheduleDay')?.value || 'Mon',
-        time_of_day: timeValue || '18:00',
+        action_type: document.getElementById('walletScheduleAction')?.value || 'dex',
+        // Legacy values keep the API compatible. Flexible plans use generated
+        // weekly slots; custom plans use the selected reminder slots below.
+        day_of_week: 'Mon',
+        time_of_day: '18:00',
         timezone: document.getElementById('walletScheduleTimezone')?.value || 'UTC',
         enabled: true,
         telegram_enabled: Boolean(document.getElementById('walletScheduleTelegram')?.checked),
         acknowledgement,
-        schedule_mode: activeWalletScheduleFlexible ? 'flexible' : 'fixed',
+        schedule_mode: walletScheduleMode,
         weekly_min: weeklyMin,
         weekly_max: weeklyMax,
         window_start: windowStart || '10:00',
         window_end: windowEnd || '21:00',
-        reroll: activeWalletScheduleFlexible,
+        custom_slots: walletScheduleMode === 'custom'
+            ? walletScheduleCustomSlots.map(slot => ({ day_of_week: slot.day, time_of_day: slot.time }))
+            : [],
+        reroll: true,
     };
     try {
         if (button) { button.disabled = true; button.textContent = locale.loading; }
@@ -3787,6 +3914,9 @@ function dismissInterfaceHint(hintId) {
     dismissed[hintId] = true;
     localStorage.setItem('ax_dismissed_interface_hints', JSON.stringify(dismissed));
     document.getElementById(`interfaceHint-${hintId}`)?.remove();
+    document.querySelectorAll(`[data-interface-hint="${hintId}"]`).forEach((element) => {
+        element.hidden = true;
+    });
 }
 
 function renderInterfaceHint(hintId, message, tone = 'info', contentId = '', icon = 'ℹ') {
@@ -5818,9 +5948,7 @@ async function loadPlatformStats() {
 }
 
 function hideProxyTip() {
-    localStorage.setItem('hideProxyTip', 'true');
-    const box = document.getElementById('proxyTipBox');
-    if (box) box.style.display = 'none';
+    dismissInterfaceHint('wallet-proxy-tip');
 }
 
 // --- DEX, Bridges, Lending Global Handlers ---
@@ -5922,6 +6050,83 @@ async function buildVerifiedLendingOperation() {
     if (!quoteResult.textContent.trim()) quoteResult.textContent = locale.errors_genericRequestFailed || 'Request failed';
 }
 
+async function loadAccountOverview() {
+    const locale = translations[getActiveLang()];
+    const username = localStorage.getItem('airdrop_username') || '';
+    const setText = (id, value) => {
+        const element = document.getElementById(id);
+        if (element) element.textContent = value;
+    };
+    const requestJson = async (url) => {
+        const response = await fetch(url);
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.detail || 'account_overview_unavailable');
+        return data;
+    };
+
+    try {
+        const [securityResult, walletsResult, telegramResult, historyResult] = await Promise.allSettled([
+            requestJson('/api/security/overview'),
+            username ? requestJson(`/api/wallets/${encodeURIComponent(username)}`) : Promise.resolve({ wallets: [] }),
+            requestJson('/api/telegram/status'),
+            requestJson('/api/operations/history'),
+        ]);
+        const security = securityResult.status === 'fulfilled' ? securityResult.value : {};
+        const walletData = walletsResult.status === 'fulfilled' ? walletsResult.value : { wallets: [] };
+        const telegram = telegramResult.status === 'fulfilled' ? telegramResult.value : { linked: false };
+        const history = historyResult.status === 'fulfilled' ? historyResult.value : { records: [] };
+        const wallets = Array.isArray(walletData.wallets) ? walletData.wallets : [];
+        const activeAddress = getActiveBaseWalletAddress().toLowerCase();
+        const activeWallet = wallets.find((wallet) => String(wallet.wallet_address || '').toLowerCase() === activeAddress);
+        const shortAddress = activeWallet ? getShortOperationAddress(activeWallet.wallet_address) : '';
+
+        setText('accountOverviewActiveWallet', activeWallet
+            ? `${activeWallet.label || locale.walletDefaultName} · ${shortAddress}`
+            : locale.accountOverviewNoActiveWallet);
+        setText('accountOverviewWalletCount', `${wallets.length} / ${walletData.max_slots || 0}`);
+        setText('accountOverviewTelegram', telegram.linked ? locale.accountOverviewConnected : locale.accountOverviewNotConnected);
+        setText('accountOverviewSession', security.session_active ? locale.accountOverviewProtected : locale.accountOverviewUnavailable);
+        setText('accountOverviewPlan', walletData.plan || userPlan || '—');
+
+        const activeWalletDetail = document.getElementById('accountOverviewActiveWalletDetail');
+        if (activeWalletDetail) {
+            activeWalletDetail.textContent = activeWallet
+                ? (activeWallet.has_proxy ? locale.walletProxyConfigured : locale.walletNoProxy)
+                : locale.accountOverviewSelectWallet;
+        }
+
+        const activityContainer = document.getElementById('accountOverviewActivity');
+        if (!activityContainer) return;
+        const records = Array.isArray(history.records) ? history.records.slice(0, 3) : [];
+        if (!records.length) {
+            activityContainer.innerHTML = `<div class="account-empty-state">${escapeHtml(locale.accountOverviewNoActivity)}</div>`;
+            return;
+        }
+        activityContainer.innerHTML = records.map((record) => {
+            const status = getOperationsJournalStatus(record);
+            const type = getOperationsJournalType(record);
+            const timestamp = Number(record.created_at) * 1000;
+            const date = Number.isFinite(timestamp) && timestamp > 0
+                ? new Date(timestamp).toLocaleDateString(currentLang === 'ru' ? 'ru-RU' : currentLang === 'zh' ? 'zh-CN' : 'en-US', { day: 'numeric', month: 'short' })
+                : '—';
+            const target = record.amount_out
+                ? ` → ${escapeHtml(record.amount_out)} ${escapeHtml(record.to_symbol || '')}`
+                : '';
+            return `<div class="account-activity-row">
+                <div class="account-activity-main"><span class="account-activity-type">${type.icon} ${escapeHtml(type.label)}</span><span class="account-activity-value">${escapeHtml(record.amount_in || '—')} ${escapeHtml(record.from_symbol || '')}${target}</span></div>
+                <div class="account-activity-meta"><span style="color:${status.color};">${escapeHtml(status.label)}</span><span>${escapeHtml(date)}</span></div>
+            </div>`;
+        }).join('');
+    } catch (_) {
+        setText('accountOverviewActiveWallet', locale.accountOverviewUnavailable);
+        setText('accountOverviewWalletCount', '—');
+        setText('accountOverviewTelegram', locale.accountOverviewUnavailable);
+        setText('accountOverviewSession', locale.accountOverviewUnavailable);
+        const activityContainer = document.getElementById('accountOverviewActivity');
+        if (activityContainer) activityContainer.innerHTML = `<div class="account-empty-state">${escapeHtml(locale.accountOverviewLoadError)}</div>`;
+    }
+}
+
 // --- Рендеринг Дашборда ---
 function renderDashboardContent(section) {
     currentSection = section;
@@ -5932,18 +6137,65 @@ function renderDashboardContent(section) {
     let centerHtml = '';
     
     if (section === 'Account') {
-        const guideHtml = renderInterfaceHint('account-welcome', `${t.accWelcome}, ${username}! ${t.accWelcomeDesc}`, 'purple', '', '👋');
+        const guideHtml = renderInterfaceHint('account-welcome', `${t.accWelcome}, ${username}! ${t.accountOverviewIntro}`, 'purple', '', '');
 
         centerHtml = `
             ${guideHtml}
+            <div class="account-overview-header dashboard-card">
+                <div>
+                    <div class="account-kicker">${t.accountOverviewKicker}</div>
+                    <h2>${t.accountOverviewTitle}</h2>
+                    <p>${t.accountOverviewDesc}</p>
+                </div>
+                <button type="button" onclick="loadAccountOverview()" class="btn-dark-sm">${t.accountOverviewRefresh}</button>
+            </div>
 
-            <div class="dashboard-card" style="margin-bottom: 16px;">
-                <h3 style="color: #fff; margin-top: 0; font-size: 16px;">${t.subTitle}</h3>
-                <p style="color: var(--text-muted); font-size: 13px; line-height: 1.5;">${t.subPlan}: <b>${userPlan}</b> | ${t.subActive} (${subscriptionDaysLeft} ${t.days})</p>
-                <p style="color: #93c5fd; font-size: 12px; line-height: 1.5; margin: 10px 0 0;">${t.subscriptionPaymentNote}</p>
-                <button type="button" onclick="openPricingModal()" class="btn-dark-sm" style="margin-top:12px;">${t.btnChangePlan}</button>
+            <div class="account-overview-grid">
+                <div class="account-overview-card account-overview-card-wide">
+                    <span class="account-overview-label">${t.accountOverviewActiveWallet}</span>
+                    <strong id="accountOverviewActiveWallet">${t.loading}</strong>
+                    <small id="accountOverviewActiveWalletDetail">${t.loading}</small>
+                </div>
+                <div class="account-overview-card">
+                    <span class="account-overview-label">${t.accountOverviewWallets}</span>
+                    <strong id="accountOverviewWalletCount">${t.loading}</strong>
+                    <small>${t.accountOverviewWalletsDesc}</small>
+                </div>
+                <div class="account-overview-card">
+                    <span class="account-overview-label">${t.accountOverviewTelegram}</span>
+                    <strong id="accountOverviewTelegram">${t.loading}</strong>
+                    <small>${t.accountOverviewTelegramDesc}</small>
+                </div>
+                <div class="account-overview-card">
+                    <span class="account-overview-label">${t.accountOverviewSession}</span>
+                    <strong id="accountOverviewSession">${t.loading}</strong>
+                    <small>${t.accountOverviewSessionDesc}</small>
+                </div>
+            </div>
+
+            <div class="account-overview-columns">
+                <div class="dashboard-card account-subscription-card">
+                    <div class="account-section-heading"><div><div class="account-kicker">${t.accountOverviewSubscription}</div><h3>${t.subTitle}</h3></div><span id="accountOverviewPlan" class="account-plan-badge">${escapeHtml(userPlan)}</span></div>
+                    <p>${t.subPlan}: <b>${escapeHtml(userPlan)}</b> · ${t.subActive} (${subscriptionDaysLeft} ${t.days})</p>
+                    <p class="account-subscription-note">${t.subscriptionPaymentNote}</p>
+                    <button type="button" onclick="openPricingModal()" class="btn-dark-sm">${t.btnChangePlan}</button>
+                </div>
+                <div class="dashboard-card account-quick-card">
+                    <div class="account-section-heading"><div><div class="account-kicker">${t.accountOverviewShortcuts}</div><h3>${t.accountOverviewQuickTitle}</h3></div></div>
+                    <div class="account-quick-actions">
+                        <button type="button" onclick="switchMenu(null, 'Wallets')">${t.accountOverviewGoWallets}</button>
+                        <button type="button" onclick="switchMenu(null, 'Farming')">${t.accountOverviewGoActions}</button>
+                        <button type="button" onclick="switchMenu(null, 'Settings')">${t.accountOverviewGoSettings}</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="dashboard-card account-activity-card">
+                <div class="account-section-heading"><div><div class="account-kicker">${t.accountOverviewActivityKicker}</div><h3>${t.accountOverviewActivityTitle}</h3></div><button type="button" onclick="switchActivityPane('journal')" class="btn-dark-sm">${t.accountOverviewOpenJournal}</button></div>
+                <div id="accountOverviewActivity" class="account-activity-list"><div class="account-empty-state">${t.loading}</div></div>
             </div>
         `;
+        setTimeout(loadAccountOverview, 50);
 
 } else if (section === 'Settings') {
         const notifTransactionSubmittedChecked = localStorage.getItem('ax_notify_transactions_submitted') === 'true' ? 'checked' : '';
@@ -6245,9 +6497,9 @@ function renderDashboardContent(section) {
         if (activityPane === 'lending') setTimeout(loadLendingPositions, 50);
         if (activityPane === 'journal') setTimeout(loadOperationsJournal, 50);
     } else if (section === 'Wallets') {
-        const isTipHidden = localStorage.getItem('hideProxyTip') === 'true' || !areInterfaceHintsEnabled();
+        const isTipHidden = !isInterfaceHintVisible('wallet-proxy-tip');
         const proxyTipHtml = isTipHidden ? '' : `
-            <div id="proxyTipBox" style="background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.2); padding: 12px 14px; border-radius: 10px; font-size: 12px; color: #93c5fd; display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; box-sizing: border-box; line-height: 1.4;">
+            <div id="proxyTipBox" data-interface-hint="wallet-proxy-tip" style="background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.2); padding: 12px 14px; border-radius: 10px; font-size: 12px; color: #93c5fd; display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; box-sizing: border-box; line-height: 1.4;">
                 <div style="display: flex; align-items: flex-start; gap: 8px;">
                     <span style="font-size: 14px; line-height: 1;">💡</span>
                     <div>
