@@ -2973,6 +2973,11 @@ input.auth-input {
 .wallet-schedule-proxy[hidden] { display:none !important; }
 .wallet-schedule-hint-close { appearance:none; border:0; background:transparent; color:inherit; cursor:pointer; font:inherit; font-size:18px; line-height:16px; padding:0 1px; opacity:.76; transition:opacity .18s ease, transform .18s ease; }
 .wallet-schedule-hint-close:hover { opacity:1; transform:scale(1.12); }
+.wallet-schedule-summary { display:flex; align-items:center; gap:6px; color:var(--text-muted); font-size:11px; line-height:1.4; margin-top:6px; }
+.wallet-schedule-summary.is-loading { opacity:.72; }
+.wallet-schedule-summary.is-active { color:#a7f3d0; }
+.wallet-schedule-summary.is-muted { color:var(--text-muted); }
+.wallet-schedule-summary-dot { width:6px; height:6px; flex:0 0 6px; border-radius:50%; background:#22c55e; box-shadow:0 0 9px rgba(34,197,94,.72); }
 .wallet-schedule-notice { color:#bfdbfe; border:1px solid rgba(59,130,246,.28); background:rgba(59,130,246,.08); }
 .wallet-schedule-proxy { color:#d1fae5; border:1px solid rgba(16,185,129,.3); background:rgba(16,185,129,.08); }
 .wallet-schedule-proxy.missing { color:#fecaca; border-color:rgba(239,68,68,.32); background:rgba(239,68,68,.08); }
@@ -3275,6 +3280,36 @@ input.auth-input {
 .account-activity-meta { color: var(--text-muted); display: grid; font-size: 11px; gap: 5px; justify-items: end; text-align: right; }
 .account-empty-state { color: var(--text-muted); font-size: 13px; padding: 13px 0; }
 
+/* Read-only EVM network overview */
+.network-monogram { align-items: center; background: linear-gradient(135deg, rgba(124, 58, 237, .95), rgba(34, 211, 238, .74)); border-radius: 50%; box-shadow: 0 0 16px rgba(139, 92, 246, .32); color: #fff; display: inline-flex; font-size: 10px; font-weight: 800; height: 32px; justify-content: center; letter-spacing: .02em; width: 32px; }
+.network-overview-title-row { align-items: flex-start; display: flex; gap: 14px; justify-content: space-between; margin-bottom: 14px; }
+.network-overview-title-row h3 { color: #fff; font-size: 16px; margin: 0 0 6px; }
+.network-overview-title-row p { color: var(--text-muted); font-size: 13px; line-height: 1.5; margin: 0; max-width: 760px; }
+.network-overview-toolbar { align-items: end; background: rgba(124, 58, 237, .07); border: 1px solid rgba(167, 139, 250, .20); border-radius: 12px; display: flex; gap: 12px; justify-content: space-between; margin-bottom: 10px; padding: 12px; }
+.network-overview-toolbar label { color: var(--text-muted); display: grid; font-size: 12px; gap: 5px; min-width: min(100%, 350px); }
+.network-overview-toolbar select { margin: 0; min-width: 260px; padding: 9px 11px; }
+.network-overview-toolbar > div { color: #c4b5fd; display: grid; font-size: 12px; gap: 5px; text-align: right; }
+.network-overview-toolbar > div span { color: var(--text-muted); }
+.network-overview-note { color: var(--text-muted); font-size: 12px; line-height: 1.45; margin: 0 0 14px; }
+.network-overview-grid { display: grid; gap: 10px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.network-overview-card { background: var(--bg-main); border: 1px solid var(--border-color); border-radius: 14px; display: grid; gap: 12px; min-width: 0; padding: 14px; transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease; }
+.network-overview-card:hover { border-color: rgba(167, 139, 250, .46); box-shadow: 0 14px 30px rgba(0, 0, 0, .18); transform: translateY(-2px); }
+.network-overview-head { align-items: flex-start; display: flex; gap: 9px; justify-content: space-between; }
+.network-overview-icon { align-items: center; display: grid; flex: 0 0 auto; height: 32px; place-items: center; width: 32px; }
+.network-overview-icon img { border-radius: 50%; height: 32px !important; object-fit: contain; width: 32px !important; }
+.network-overview-name { color: #fff; font-size: 14px; font-weight: 700; }
+.network-overview-symbol { color: var(--text-muted); font-size: 11px; margin-top: 3px; }
+.network-overview-status { background: rgba(34, 197, 94, .08); border: 1px solid rgba(134, 239, 172, .30); border-radius: 999px; color: #86efac; font-size: 10px; padding: 4px 6px; white-space: nowrap; }
+.network-overview-data { color: var(--text-muted); display: grid; font-size: 12px; gap: 7px; min-height: 49px; }
+.network-overview-balance { color: #fff; font-size: 17px; font-weight: 700; letter-spacing: -.02em; }
+.network-overview-assets { color: var(--text-muted); display: flex; flex-wrap: wrap; font-size: 11px; gap: 6px 10px; }
+.network-overview-gas { border-top: 1px solid var(--border-color); color: var(--text-muted); display: flex; font-size: 11px; gap: 8px; justify-content: space-between; padding-top: 10px; }
+.network-overview-gas b { font-weight: 600; text-align: right; }
+.network-overview-actions { align-items: center; display: flex; gap: 8px; }
+.network-overview-actions .btn-dark-sm { font-size: 11px; padding: 7px 9px; }
+.network-overview-actions a { color: #c4b5fd; font-size: 11px; margin-left: auto; text-decoration: none; }
+.network-overview-actions a:hover { color: #fff; }
+
 @media (max-width: 760px) {
     .account-overview-header { flex-direction: column; }
     .account-overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -3282,4 +3317,11 @@ input.auth-input {
     .account-overview-columns { grid-template-columns: 1fr; }
     .account-activity-row { align-items: flex-start; flex-direction: column; }
     .account-activity-meta { display: flex; gap: 10px; justify-items: start; text-align: left; }
+    .network-overview-title-row, .network-overview-toolbar { align-items: stretch; flex-direction: column; }
+    .network-overview-toolbar select { min-width: 0; width: 100%; }
+    .network-overview-toolbar > div { text-align: left; }
+    .network-overview-grid { grid-template-columns: 1fr; }
+}
+@media (min-width: 761px) and (max-width: 1100px) {
+    .network-overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

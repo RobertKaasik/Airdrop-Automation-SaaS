@@ -10,18 +10,18 @@ class MultiRouteRpcRouter:
     def __init__(self, network: str):
         self.network = network
         self.rpc_mapping = {
-            "Ethereum": ["https://eth.llamarpc.com", "https://rpc.ankr.com/eth"],
+            "Ethereum": ["https://ethereum-rpc.publicnode.com", "https://eth.llamarpc.com", "https://rpc.ankr.com/eth"],
             "Base": ["https://mainnet.base.org", "https://base.publicnode.com"],
             "Arbitrum": ["https://arb1.arbitrum.io/rpc", "https://rpc.ankr.com/arbitrum"],
-            "ZkSync": ["https://mainnet.era.zksync.io", "https://zksync.drpc.org"],
+            "zkSync Era": ["https://mainnet.era.zksync.io", "https://zksync.drpc.org"],
             "Scroll": ["https://rpc.scroll.io", "https://scroll-mainnet.public.blastapi.io"],
             "Linea": ["https://rpc.linea.build", "https://linea.drpc.org"],
-            "Blast": ["https://rpc.blast.io", "https://blast.din.dev"],
             "Mantle": ["https://rpc.mantle.xyz", "https://mantle-mainnet.public.blastapi.io"],
-            "Berachain": ["https://rpc.berachain.com", "https://berachain-rpc.publicnode.com"],
+            "Avalanche": ["https://api.avax.network/ext/bc/C/rpc"],
+            "Gnosis": ["https://rpc.gnosischain.com"],
             "Solana": ["https://api.mainnet-beta.solana.com", "https://solana-rpc.publicnode.com"],
             "BNB Chain": ["https://bsc-dataseed.binance.org", "https://rpc.ankr.com/bsc"],
-            "Polygon": ["https://polygon-rpc.com", "https://rpc.ankr.com/polygon"],
+            "Polygon": ["https://polygon-bor-rpc.publicnode.com", "https://polygon-rpc.com", "https://rpc.ankr.com/polygon"],
             "Optimism": ["https://mainnet.optimism.io", "https://rpc.ankr.com/optimism"],
             "Tron": ["https://api.trongrid.io", "https://rpc.ankr.com/tron"]
         }

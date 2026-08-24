@@ -186,6 +186,31 @@ const UNIVERSAL_BRIDGE_NETWORKS = {
         nativeCurrency: { name: 'BNB', symbol: 'BNB', decimals: 18 },
         rpcUrls: ['https://bsc-rpc.publicnode.com'], blockExplorerUrls: ['https://bscscan.com'],
     },
+    Avalanche: {
+        chainId: '0xa86a', chainName: 'Avalanche C-Chain',
+        nativeCurrency: { name: 'Avalanche', symbol: 'AVAX', decimals: 18 },
+        rpcUrls: ['https://api.avax.network/ext/bc/C/rpc'], blockExplorerUrls: ['https://snowtrace.io'],
+    },
+    'zkSync Era': {
+        chainId: '0x144', chainName: 'zkSync Era Mainnet',
+        nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+        rpcUrls: ['https://mainnet.era.zksync.io'], blockExplorerUrls: ['https://explorer.zksync.io'],
+    },
+    Scroll: {
+        chainId: '0x82750', chainName: 'Scroll',
+        nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+        rpcUrls: ['https://rpc.scroll.io'], blockExplorerUrls: ['https://scrollscan.com'],
+    },
+    Gnosis: {
+        chainId: '0x64', chainName: 'Gnosis Chain',
+        nativeCurrency: { name: 'xDAI', symbol: 'xDAI', decimals: 18 },
+        rpcUrls: ['https://rpc.gnosischain.com'], blockExplorerUrls: ['https://gnosisscan.io'],
+    },
+    Mantle: {
+        chainId: '0x1388', chainName: 'Mantle',
+        nativeCurrency: { name: 'Mantle', symbol: 'MNT', decimals: 18 },
+        rpcUrls: ['https://rpc.mantle.xyz'], blockExplorerUrls: ['https://mantlescan.xyz'],
+    },
 };
 const UNIVERSAL_BRIDGE_NATIVE_TOKEN = '0x0000000000000000000000000000000000000000';
 const BASE_SEPOLIA_CHAIN_ID = '0x14a34';
@@ -203,14 +228,18 @@ let walletConnectModulePromise = null;
 const NETWORKS_CONFIG = [
     { name: "Ethereum", symbol: "ETH", key: "Ethereum", icon: '<img src="https://cryptologos.cc/logos/ethereum-eth-logo.svg?v=032" style="width:32px; height:32px;">', explorer: "https://etherscan.io" },
     { name: "Base", symbol: "ETH", key: "Base", icon: '<img src="https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/base/info/logo.png" style="width:32px; height:32px; border-radius:50%;">', explorer: "https://basescan.org" },
-    { name: "Arbitrum", symbol: "ARB", key: "Arbitrum", icon: '<img src="https://cryptologos.cc/logos/arbitrum-arb-logo.svg?v=032" style="width:32px; height:32px;">', explorer: "https://arbiscan.io" },
-    { name: "Linea", symbol: "ETH", key: "Linea", icon: '<img src="https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/linea/info/logo.png" style="width:32px; height:32px; border-radius:50%;">', explorer: "https://lineascan.build" },
-    { name: "Solana", symbol: "SOL", key: "Solana", icon: '<img src="https://cryptologos.cc/logos/solana-sol-logo.svg?v=032" style="width:32px; height:32px;">', explorer: "https://solscan.io" },
-    { name: "BNB Chain", symbol: "BNB", key: "BNB Chain", icon: '<img src="https://cryptologos.cc/logos/bnb-bnb-logo.svg?v=032" style="width:32px; height:32px;">', explorer: "https://bscscan.com" },
+    { name: "Arbitrum", symbol: "ETH", key: "Arbitrum", icon: '<img src="https://cryptologos.cc/logos/arbitrum-arb-logo.svg?v=032" style="width:32px; height:32px;">', explorer: "https://arbiscan.io" },
+    { name: "Optimism", symbol: "ETH", key: "Optimism", icon: '<img src="https://cryptologos.cc/logos/optimism-ethereum-op-logo.svg?v=032" style="width:32px; height:32px;">', explorer: "https://optimistic.etherscan.io" },
     { name: "Polygon", symbol: "POL", key: "Polygon", icon: '<img src="https://cryptologos.cc/logos/polygon-matic-logo.svg?v=032" style="width:32px; height:32px;">', explorer: "https://polygonscan.com" },
-    { name: "Optimism", symbol: "OP", key: "Optimism", icon: '<img src="https://cryptologos.cc/logos/optimism-ethereum-op-logo.svg?v=032" style="width:32px; height:32px;">', explorer: "https://optimistic.etherscan.io" },
-    { name: "Tron", symbol: "TRX", key: "Tron", icon: '<img src="https://cryptologos.cc/logos/tron-trx-logo.svg?v=032" style="width:32px; height:32px;">', explorer: "https://tronscan.org" }
+    { name: "Linea", symbol: "ETH", key: "Linea", icon: '<img src="https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/linea/info/logo.png" style="width:32px; height:32px; border-radius:50%;">', explorer: "https://lineascan.build" },
+    { name: "BNB Chain", symbol: "BNB", key: "BNB Chain", icon: '<img src="https://cryptologos.cc/logos/bnb-bnb-logo.svg?v=032" style="width:32px; height:32px;">', explorer: "https://bscscan.com" },
+    { name: "Avalanche", symbol: "AVAX", key: "Avalanche", icon: '<span class="network-monogram">AV</span>', explorer: "https://snowtrace.io" },
+    { name: "zkSync Era", symbol: "ETH", key: "zkSync Era", icon: '<span class="network-monogram">ZK</span>', explorer: "https://explorer.zksync.io" },
+    { name: "Scroll", symbol: "ETH", key: "Scroll", icon: '<span class="network-monogram">SC</span>', explorer: "https://scrollscan.com" },
+    { name: "Gnosis", symbol: "xDAI", key: "Gnosis", icon: '<span class="network-monogram">GN</span>', explorer: "https://gnosisscan.io" },
+    { name: "Mantle", symbol: "MNT", key: "Mantle", icon: '<span class="network-monogram">MN</span>', explorer: "https://mantlescan.xyz" }
 ];
+let networksOverviewWallets = [];
 
 // --- Инициализация при загрузке ---
 document.getElementById('main-logo-btn').addEventListener('click', function(e) {
@@ -2200,6 +2229,120 @@ function switchMenu(element, sectionName) {
     renderDashboardContent(sectionName);
 }
 
+function networkDomId(network) {
+    return String(network || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+}
+
+function formatNetworkBalance(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return '—';
+    if (number === 0) return '0';
+    if (Math.abs(number) < 0.000001) return '< 0.000001';
+    return number.toLocaleString(undefined, { maximumFractionDigits: number < 1 ? 6 : 4 });
+}
+
+function setNetworkOverviewWallet(walletId) {
+    localStorage.setItem('ax_network_overview_wallet_id', String(walletId || ''));
+    loadNetworksOverview();
+}
+
+function openBridgeFromNetwork(network) {
+    if (!UNIVERSAL_BRIDGE_NETWORKS[network]) return;
+    localStorage.setItem('ax_activity_pane', 'bridges');
+    localStorage.setItem('ax_bridge_source_network', network);
+    switchMenu(null, 'Farming');
+}
+
+async function loadNetworksOverview() {
+    const locale = translations[getActiveLang()];
+    const selector = document.getElementById('networkOverviewWallet');
+    const status = document.getElementById('networkOverviewStatus');
+    if (!selector || !status) return;
+    const username = localStorage.getItem('airdrop_username') || 'Robert';
+    try {
+        const response = await fetch(`/api/wallets/${encodeURIComponent(username)}`);
+        const data = await response.json();
+        if (!response.ok || !Array.isArray(data.wallets)) throw new Error('wallets_unavailable');
+        networksOverviewWallets = data.wallets;
+        const activeAddress = getActiveBaseWalletAddress().toLowerCase();
+        const rememberedId = String(localStorage.getItem('ax_network_overview_wallet_id') || '');
+        const selected = data.wallets.find((wallet) => String(wallet.id) === rememberedId)
+            || data.wallets.find((wallet) => wallet.wallet_address?.toLowerCase() === activeAddress)
+            || data.wallets[0];
+        selector.replaceChildren();
+        if (!selected) {
+            const option = document.createElement('option');
+            option.value = '';
+            option.textContent = locale.networkOverviewNoWallet;
+            selector.append(option);
+            selector.disabled = true;
+            status.textContent = locale.networkOverviewNoWallet;
+            status.style.color = 'var(--text-muted)';
+            return;
+        }
+        data.wallets.forEach((wallet) => {
+            const option = document.createElement('option');
+            option.value = String(wallet.id);
+            const label = wallet.label || `${locale.walletDefaultName} ${wallet.id}`;
+            option.textContent = `${label} · ${String(wallet.wallet_address || '').slice(0, 6)}…${String(wallet.wallet_address || '').slice(-4)}`;
+            selector.append(option);
+        });
+        selector.disabled = false;
+        selector.value = String(selected.id);
+        localStorage.setItem('ax_network_overview_wallet_id', String(selected.id));
+        status.textContent = locale.networkOverviewLoading;
+        status.style.color = 'var(--text-muted)';
+        await Promise.all(NETWORKS_CONFIG.map((network) => loadNetworkOverviewCard(selected.id, network)));
+        status.textContent = locale.networkOverviewLive;
+        status.style.color = '#86efac';
+    } catch (_) {
+        status.textContent = locale.networkOverviewUnavailable;
+        status.style.color = '#fca5a5';
+        NETWORKS_CONFIG.forEach((network) => {
+            const element = document.getElementById(`networkOverview-${networkDomId(network.key)}`);
+            if (element) element.innerHTML = `<span style="color:#fca5a5;">${escapeHtml(locale.networkOverviewUnavailable)}</span>`;
+        });
+    }
+}
+
+async function loadNetworkOverviewCard(walletId, network) {
+    const locale = translations[getActiveLang()];
+    const id = networkDomId(network.key);
+    const balanceElement = document.getElementById(`networkOverview-${id}`);
+    const gasElement = document.getElementById(`networkGas-${id}`);
+    const statusElement = document.getElementById(`networkStatus-${id}`);
+    if (!balanceElement || !gasElement || !statusElement) return;
+    try {
+        const [balanceResponse, gasResponse] = await Promise.all([
+            fetch(`/api/wallets/${encodeURIComponent(walletId)}/network-balance/${encodeURIComponent(network.key)}`),
+            fetch(`/api/gas/${encodeURIComponent(network.key)}`),
+        ]);
+        const balanceData = await balanceResponse.json();
+        const gasData = await gasResponse.json();
+        if (!balanceResponse.ok) throw new Error(balanceData.detail || 'balance_unavailable');
+        const native = `${formatNetworkBalance(balanceData.native_balance)} ${escapeHtml(balanceData.native_symbol || network.symbol)}`;
+        const usdc = balanceData.usdc_balance === null || balanceData.usdc_balance === undefined
+            ? ''
+            : `<span>USDC: <b>${formatNetworkBalance(balanceData.usdc_balance)}</b></span>`;
+        const reserve = `${escapeHtml(locale.networkOverviewReserve)}: ${escapeHtml(String(balanceData.native_gas_reserve || '0'))} ${escapeHtml(balanceData.native_symbol || network.symbol)}`;
+        const reserveColor = balanceData.native_gas_reserve_met ? '#86efac' : '#fca5a5';
+        balanceElement.innerHTML = `<div class="network-overview-balance">${native}</div><div class="network-overview-assets">${usdc}<span style="color:${reserveColor};">${reserve}</span></div>`;
+        const level = gasData.gas_level || 'unavailable';
+        const levelKey = `gas${level.charAt(0).toUpperCase()}${level.slice(1)}`;
+        const color = { low: '#86efac', medium: '#facc15', high: '#fca5a5', unavailable: '#a3a3a3' }[level] || '#a3a3a3';
+        gasElement.textContent = gasResponse.ok && gasData.gas ? `${gasData.gas} · ${locale[levelKey] || locale.gasUnavailable}` : locale.gasUnavailable;
+        gasElement.style.color = color;
+        statusElement.textContent = locale.networkOverviewOnline;
+        statusElement.style.color = '#86efac';
+    } catch (_) {
+        balanceElement.innerHTML = `<span style="color:#fca5a5;">${escapeHtml(locale.networkOverviewBalanceUnavailable)}</span>`;
+        gasElement.textContent = locale.gasUnavailable;
+        gasElement.style.color = '#a3a3a3';
+        statusElement.textContent = locale.networkOverviewOffline;
+        statusElement.style.color = '#fca5a5';
+    }
+}
+
 function switchActivityPane(pane) {
     const allowedPanes = new Set(['dex', 'bridges', 'lending', 'journal']);
     localStorage.setItem('ax_activity_pane', allowedPanes.has(pane) ? pane : 'dex');
@@ -3036,6 +3179,144 @@ async function addNewWalletToDB() {
     }
 }
 
+function getWalletScheduleActionLabel(actionType, locale) {
+    return {
+        dex: locale.walletScheduleActionSwap,
+        bridge: locale.walletScheduleActionBridge,
+        lending: locale.walletScheduleActionDefi,
+    }[actionType] || actionType || '—';
+}
+
+function getScheduleClockInTimezone(timezone) {
+    try {
+        const parts = new Intl.DateTimeFormat('en-US', {
+            weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: timezone,
+        }).formatToParts(new Date());
+        const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+        return { day: values.weekday, minutes: (Number(values.hour) % 24) * 60 + Number(values.minute) };
+    } catch (_) {
+        const now = new Date();
+        return { day: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][now.getDay()], minutes: now.getHours() * 60 + now.getMinutes() };
+    }
+}
+
+function getWalletScheduleNextSlot(schedule) {
+    const source = schedule.schedule_mode === 'custom'
+        ? (Array.isArray(schedule.custom_slots) ? schedule.custom_slots : [])
+        : schedule.schedule_mode === 'flexible'
+            ? (Array.isArray(schedule.generated_slots) ? schedule.generated_slots : [])
+            : [{ day: schedule.day_of_week, time: schedule.time_of_day }];
+    const slots = source.map(slot => ({ day: slot.day || slot.day_of_week, time: slot.time || slot.time_of_day }))
+        .filter(slot => /^[A-Z][a-z]{2}$/.test(slot.day || '') && /^\d{2}:\d{2}$/.test(slot.time || ''));
+    if (!slots.length) return null;
+    const dayOrder = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+    const clock = getScheduleClockInTimezone(schedule.timezone || 'UTC');
+    const currentDay = dayOrder[clock.day] ?? 0;
+    return slots.map(slot => {
+        const [hour, minute] = slot.time.split(':').map(Number);
+        let daysAhead = (dayOrder[slot.day] - currentDay + 7) % 7;
+        if (daysAhead === 0 && hour * 60 + minute <= clock.minutes) daysAhead = 7;
+        return { ...slot, total: daysAhead * 1440 + hour * 60 + minute };
+    }).sort((a, b) => a.total - b.total)[0];
+}
+
+function renderWalletScheduleSummary(walletId, schedules) {
+    const element = document.getElementById(`walletScheduleSummary-${walletId}`);
+    if (!element) return;
+    const locale = translations[getActiveLang()];
+    const enabled = (schedules || []).filter(schedule => schedule.enabled);
+    if (!enabled.length) {
+        element.className = 'wallet-schedule-summary is-muted';
+        element.textContent = locale.walletScheduleStatusInactive;
+        return;
+    }
+    const candidates = enabled.map(schedule => ({ schedule, slot: getWalletScheduleNextSlot(schedule) })).filter(item => item.slot);
+    const next = candidates.sort((a, b) => a.slot.total - b.slot.total)[0];
+    const schedule = next?.schedule || enabled[0];
+    const slot = next?.slot;
+    const action = escapeHtml(getWalletScheduleActionLabel(schedule.action_type, locale));
+    const status = escapeHtml(locale.walletScheduleStatusActive);
+    const dayLabels = Object.fromEntries(walletScheduleDayOptions(locale));
+    const nextText = slot
+        ? `${escapeHtml(locale.walletScheduleNext)}: ${escapeHtml(dayLabels[slot.day] || slot.day)} ${escapeHtml(slot.time)}`
+        : escapeHtml(locale.walletScheduleNextUnavailable);
+    element.className = 'wallet-schedule-summary is-active';
+    element.innerHTML = `<span class="wallet-schedule-summary-dot" aria-hidden="true"></span><span>${status} · ${action} · ${nextText}</span>`;
+}
+
+async function loadWalletScheduleSummaries(wallets) {
+    await Promise.all((wallets || []).map(async wallet => {
+        const element = document.getElementById(`walletScheduleSummary-${wallet.id}`);
+        if (!element) return;
+        try {
+            const response = await fetch(`/api/wallets/${wallet.id}/schedules`);
+            const data = await response.json();
+            if (!response.ok) throw new Error('wallet_schedule_load_failed');
+            renderWalletScheduleSummary(wallet.id, data.schedules || []);
+        } catch (_) {
+            element.className = 'wallet-schedule-summary is-muted';
+            element.textContent = translations[getActiveLang()].walletScheduleStatusUnavailable;
+        }
+    }));
+}
+
+let accountOverviewActiveWalletId = null;
+
+function openAccountWalletSchedule() {
+    if (!accountOverviewActiveWalletId) {
+        showNotification(translations[getActiveLang()].accountOverviewNoActiveWallet, 'warning');
+        return;
+    }
+    openWalletScheduleModal(accountOverviewActiveWalletId);
+}
+
+async function loadAccountScheduleOverview(activeWallet) {
+    const locale = translations[getActiveLang()];
+    const setText = (id, value) => {
+        const element = document.getElementById(id);
+        if (element) element.textContent = value;
+    };
+
+    if (!activeWallet?.id) {
+        setText('accountOverviewSchedule', locale.accountOverviewScheduleNoWallet);
+        setText('accountOverviewScheduleDetail', locale.accountOverviewScheduleDesc);
+        return;
+    }
+
+    setText('accountOverviewSchedule', locale.loading);
+    setText('accountOverviewScheduleDetail', locale.accountOverviewScheduleDesc);
+    try {
+        const response = await fetch(`/api/wallets/${activeWallet.id}/schedules`);
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'wallet_schedule_load_failed');
+
+        const enabled = (data.schedules || []).filter(schedule => schedule.enabled);
+        if (!enabled.length) {
+            setText('accountOverviewSchedule', locale.accountOverviewScheduleNoRule);
+            setText('accountOverviewScheduleDetail', locale.accountOverviewScheduleDesc);
+            return;
+        }
+
+        const candidates = enabled
+            .map(schedule => ({ schedule, slot: getWalletScheduleNextSlot(schedule) }))
+            .filter(item => item.slot)
+            .sort((a, b) => a.slot.total - b.slot.total);
+        const next = candidates[0];
+        const schedule = next?.schedule || enabled[0];
+        const dayLabels = Object.fromEntries(walletScheduleDayOptions(locale));
+        const action = getWalletScheduleActionLabel(schedule.action_type, locale);
+        const slotText = next?.slot
+            ? `${dayLabels[next.slot.day] || next.slot.day} · ${next.slot.time}`
+            : locale.walletScheduleNextUnavailable;
+
+        setText('accountOverviewSchedule', `${action} · ${slotText}`);
+        setText('accountOverviewScheduleDetail', locale.accountOverviewScheduleDesc);
+    } catch (_) {
+        setText('accountOverviewSchedule', locale.accountOverviewScheduleUnavailable);
+        setText('accountOverviewScheduleDetail', locale.accountOverviewScheduleDesc);
+    }
+}
+
 async function loadWalletsFromDB() {
     const username = localStorage.getItem('airdrop_username') || "Robert";
     const container = document.getElementById('walletsListContainer');
@@ -3069,6 +3350,7 @@ async function loadWalletsFromDB() {
                         <div style="color: ${isActive ? '#86efac' : 'var(--text-muted)'}; font-size: 12px; margin-top:5px;">${isActive ? (isConnectedForActions ? t.walletSessionActive : t.walletActiveNeedsConnection) : t.walletBaseMonitoring}</div>
                         <div style="color: var(--text-muted); font-size: 12px; margin-top:3px;">${proxyStatus}</div>
                         <div style="color:${profileReady ? '#86efac' : '#fbbf24'}; font-size:12px; margin-top:3px;">${profileReady ? '✓' : '◌'} ${profileStatus}</div>
+                        <div id="walletScheduleSummary-${w.id}" class="wallet-schedule-summary is-loading">${t.walletScheduleStatusLoading}</div>
                         <div id="walletHealthResult-${w.id}" style="font-size:12px; line-height:1.45; margin-top:7px;"></div>
                         <div id="walletEditPanel-${w.id}" style="display:none; margin-top:9px; max-width:390px;">
                             <label for="walletEditLabel-${w.id}" style="display:block; margin-bottom:4px; color:var(--text-muted); font-size:11px;">${t.walletEditLabel}</label>
@@ -3094,6 +3376,7 @@ async function loadWalletsFromDB() {
     } else {
         container.innerHTML = `<div style="color: var(--text-muted); font-size: 13px;">${t.noWal}</div>`;
     }
+    loadWalletScheduleSummaries(data.wallets);
     } catch (_) {
         container.innerHTML = `<div style="color:#fca5a5; font-size:13px;">${t.walletLoadError}</div>`;
     }
@@ -3116,14 +3399,19 @@ async function saveWalletDetails(walletId) {
     const locale = translations[getActiveLang()];
     const label = document.getElementById(`walletEditLabel-${walletId}`)?.value.trim() || '';
     const proxyInput = document.getElementById(`walletEditProxy-${walletId}`);
-    const proxy = proxyInput?.value.trim() || null;
+    const proxy = proxyInput?.value.trim() || '';
     if (!label) {
         showNotification(locale.walletEditInvalid, 'error');
         return;
     }
+    // An empty proxy field means “keep the current proxy”. This prevents a
+    // harmless name edit from accidentally disabling the wallet's network
+    // isolation and invalidating its schedule.
+    const payload = { label };
+    if (proxy) payload.proxy = proxy;
     try {
         const response = await fetch(`/api/wallets/${walletId}`, {
-            method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ label, proxy }),
+            method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.detail || 'wallet_label_update_failed');
@@ -3263,7 +3551,7 @@ async function buyExtraSlot() {
     }
 }
 
-// --- Планировщик и Настройки ---
+// --- Общие настройки и уведомления ---
 function toggleSchedulerState(checkbox) {
     const wrapper = document.getElementById('schedulerSettingsWrapper');
     if (!wrapper) return;
@@ -3376,28 +3664,6 @@ const minDelay = Math.floor(getRandomDelay(15, 90));
 }
 
 async function saveGlobalProfileSettings() {
-    const isSchedulerEnabled = document.getElementById('bgSchedulerToggle')?.checked;
-    const activeDays = [];
-    document.querySelectorAll('#globalCalendarGrid .calendar-day.active').forEach(el => {
-        activeDays.push(el.getAttribute('data-raw-day'));
-    });
-
-    if (isSchedulerEnabled && activeDays.length === 0) return;
-
-    let hasError = false;
-    const dailySchedule = {};
-    document.querySelectorAll('#dailyTimeConfigsContainer > div[data-day]').forEach(row => {
-        const day = row.getAttribute('data-day');
-        const timeInput = row.querySelector('.day-time-val');
-        const time = normalize24HourTime(timeInput.value);
-        const minDelay = parseInt(row.querySelector('.day-min-delay-val').value);
-        const maxDelay = parseInt(row.querySelector('.day-max-delay-val').value);
-        if (!time || isNaN(minDelay) || isNaN(maxDelay) || minDelay < 15 || maxDelay > 7200 || minDelay >= maxDelay) hasError = true;
-        if (time) timeInput.value = time;
-        dailySchedule[day] = { time, minDelay, maxDelay };
-    });
-    if (hasError) return;
-
     let gwei = parseInt(document.getElementById('globalGweiInput')?.value || 30);
     if (isNaN(gwei) || gwei < 5 || gwei > 300) return;
 
@@ -3428,19 +3694,15 @@ async function saveGlobalProfileSettings() {
     localStorage.setItem('ax_notify_defi_final', notifyDefiFinal);
     localStorage.setItem('ax_notify_defi_errors', notifyDefiErrors);
 
-    document.querySelectorAll('#dailyTimeConfigsContainer > div[data-day]').forEach(row => {
-        const day = row.getAttribute('data-day');
-        localStorage.setItem(`day_time_${day}`, row.querySelector('.day-time-val').value);
-        localStorage.setItem(`day_min_delay_${day}`, parseInt(row.querySelector('.day-min-delay-val').value));
-        localStorage.setItem(`day_max_delay_${day}`, parseInt(row.querySelector('.day-max-delay-val').value));
-    });
-
     const username = localStorage.getItem('airdrop_username') || "Robert";
     const profileConfig = { 
         username,
-        schedulerEnabled: isSchedulerEnabled,
-        days: activeDays, 
-        schedule: dailySchedule, 
+        // Scheduling is configured per wallet in the Wallets section. Keep the
+        // legacy fields explicit for backwards-compatible API validation, but
+        // never let the profile settings page create or overwrite a schedule.
+        schedulerEnabled: false,
+        days: [],
+        schedule: {},
         gwei, 
         telegram: null,
         notifySettings,
@@ -3494,6 +3756,7 @@ let activeWalletScheduleHasProxy = false;
 let walletSchedulePreviewVersion = 0;
 let walletScheduleMode = 'flexible';
 let walletScheduleCustomSlots = [];
+let walletScheduleMutationInFlight = false;
 
 function walletScheduleDayOptions(locale) {
     return [
@@ -3673,6 +3936,39 @@ function setWalletScheduleCustomTime(day, value) {
     if (slot) slot.time = normalized;
 }
 
+function populateWalletScheduleForm(schedule) {
+    if (!schedule) return;
+    const action = document.getElementById('walletScheduleAction');
+    const timezone = document.getElementById('walletScheduleTimezone');
+    const telegram = document.getElementById('walletScheduleTelegram');
+    if (action && ['dex', 'bridge', 'lending'].includes(schedule.action_type)) action.value = schedule.action_type;
+    if (timezone && schedule.timezone) timezone.value = schedule.timezone;
+    if (telegram) telegram.checked = schedule.telegram_enabled !== false;
+
+    const mode = schedule.schedule_mode === 'custom' || schedule.schedule_mode === 'fixed' ? 'custom' : 'flexible';
+    walletScheduleMode = mode;
+    if (mode === 'flexible') {
+        const min = document.getElementById('walletScheduleWeeklyMin');
+        const max = document.getElementById('walletScheduleWeeklyMax');
+        const start = document.getElementById('walletScheduleWindowStart');
+        const end = document.getElementById('walletScheduleWindowEnd');
+        if (min && Number.isInteger(Number(schedule.weekly_min))) min.value = schedule.weekly_min;
+        if (max && Number.isInteger(Number(schedule.weekly_max))) max.value = schedule.weekly_max;
+        if (start && schedule.window_start) start.value = schedule.window_start;
+        if (end && schedule.window_end) end.value = schedule.window_end;
+        walletScheduleCustomSlots = [];
+        return;
+    }
+
+    const source = schedule.schedule_mode === 'custom'
+        ? (Array.isArray(schedule.custom_slots) ? schedule.custom_slots : [])
+        : [{ day_of_week: schedule.day_of_week, time_of_day: schedule.time_of_day }];
+    walletScheduleCustomSlots = source.map(slot => ({
+        day: slot.day || slot.day_of_week,
+        time: normalize24HourTime(slot.time || slot.time_of_day) || '18:00',
+    })).filter(slot => /^[A-Z][a-z]{2}$/.test(slot.day));
+}
+
 async function openWalletScheduleModal(walletId) {
     activeWalletScheduleId = Number(walletId);
     walletSchedulePreviewVersion = 0;
@@ -3718,6 +4014,8 @@ async function loadWalletSchedules() {
         const data = await response.json();
         if (!response.ok) throw new Error(data.detail || 'wallet_schedule_load_failed');
         activeWalletScheduleHasProxy = Boolean(data.wallet?.has_proxy);
+        const schedules = Array.isArray(data.schedules) ? data.schedules : [];
+        populateWalletScheduleForm(schedules.find(item => item.enabled) || schedules[0]);
         const walletDisplay = document.getElementById('walletScheduleWallet');
         if (walletDisplay) {
             const label = data.wallet?.label || `${locale.walletDefaultName} ${activeWalletScheduleId}`;
@@ -3730,7 +4028,9 @@ async function loadWalletSchedules() {
         );
         const saveButton = document.getElementById('walletScheduleSave');
         if (saveButton) saveButton.disabled = !activeWalletScheduleHasProxy;
-        renderWalletSchedules(data.schedules || []);
+        renderWalletSchedulePreview();
+        renderWalletSchedules(schedules);
+        loadWalletScheduleSummaries([{ id: activeWalletScheduleId }]);
         if (status && !data.telegram_linked) status.textContent = locale.walletScheduleTelegramMissing;
     } catch (error) {
         if (list) list.textContent = locale.walletScheduleLoadError;
@@ -3766,7 +4066,7 @@ function renderWalletSchedules(schedules) {
             ? `<small>${escapeHtml(locale.walletScheduleGeneratedLabel)}: ${generatedSlots.map(slot => `${escapeHtml(dayNames[slot.day] || slot.day)} ${escapeHtml(slot.time)}`).join(' · ')}</small>`
             : '';
         const rerollButton = item.schedule_mode === 'flexible'
-            ? `<button type="button" class="wallet-schedule-reroll" onclick="rerollWalletSchedule(${Number(item.id)})">${escapeHtml(locale.walletScheduleReroll)}</button>`
+            ? `<button type="button" class="wallet-schedule-reroll" onclick="rerollWalletSchedule(${Number(item.id)}, this)">${escapeHtml(locale.walletScheduleReroll)}</button>`
             : '';
         return `
         <div class="wallet-schedule-item">
@@ -3777,16 +4077,18 @@ function renderWalletSchedules(schedules) {
             </div>
             <div class="wallet-schedule-actions">
                 ${rerollButton}
-                <button type="button" class="wallet-schedule-delete" onclick="deleteWalletSchedule(${Number(item.id)})">${escapeHtml(locale.walletScheduleDelete)}</button>
+                <button type="button" class="wallet-schedule-delete" onclick="deleteWalletSchedule(${Number(item.id)}, this)">${escapeHtml(locale.walletScheduleDelete)}</button>
             </div>
         </div>`;
     }).join('');
 }
 
-async function rerollWalletSchedule(scheduleId) {
-    if (!activeWalletScheduleId) return;
+async function rerollWalletSchedule(scheduleId, button) {
+    if (!activeWalletScheduleId || walletScheduleMutationInFlight) return;
     const locale = translations[getActiveLang()];
     const status = document.getElementById('walletScheduleStatus');
+    walletScheduleMutationInFlight = true;
+    if (button) { button.disabled = true; button.textContent = locale.loading; }
     try {
         if (status) status.textContent = locale.walletScheduleRerolling;
         const response = await fetch(`/api/wallets/${activeWalletScheduleId}/schedules/${scheduleId}/reroll`, {
@@ -3798,11 +4100,14 @@ async function rerollWalletSchedule(scheduleId) {
         await loadWalletSchedules();
     } catch (error) {
         if (status) status.textContent = translateBackendDetail(error.message) || locale.walletScheduleSaveError;
+    } finally {
+        walletScheduleMutationInFlight = false;
+        if (button) { button.disabled = false; button.textContent = locale.walletScheduleReroll; }
     }
 }
 
 async function saveWalletSchedule() {
-    if (!activeWalletScheduleId) return;
+    if (!activeWalletScheduleId || walletScheduleMutationInFlight) return;
     const locale = translations[getActiveLang()];
     const status = document.getElementById('walletScheduleStatus');
     const button = document.getElementById('walletScheduleSave');
@@ -3854,6 +4159,7 @@ async function saveWalletSchedule() {
         reroll: true,
     };
     try {
+        walletScheduleMutationInFlight = true;
         if (button) { button.disabled = true; button.textContent = locale.loading; }
         const response = await fetch(`/api/wallets/${activeWalletScheduleId}/schedules`, {
             method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload),
@@ -3867,14 +4173,17 @@ async function saveWalletSchedule() {
     } catch (error) {
         if (status) status.textContent = translateBackendDetail(error.message) || locale.walletScheduleSaveError;
     } finally {
+        walletScheduleMutationInFlight = false;
         if (button) { button.disabled = !activeWalletScheduleHasProxy; button.textContent = locale.walletScheduleSave; }
     }
 }
 
-async function deleteWalletSchedule(scheduleId) {
-    if (!activeWalletScheduleId) return;
+async function deleteWalletSchedule(scheduleId, button) {
+    if (!activeWalletScheduleId || walletScheduleMutationInFlight) return;
     const locale = translations[getActiveLang()];
     const status = document.getElementById('walletScheduleStatus');
+    walletScheduleMutationInFlight = true;
+    if (button) { button.disabled = true; button.textContent = locale.loading; }
     try {
         const response = await fetch(`/api/wallets/${activeWalletScheduleId}/schedules/${scheduleId}`, {method: 'DELETE'});
         const data = await response.json();
@@ -3883,6 +4192,9 @@ async function deleteWalletSchedule(scheduleId) {
         await loadWalletSchedules();
     } catch (error) {
         if (status) status.textContent = translateBackendDetail(error.message) || locale.walletScheduleSaveError;
+    } finally {
+        walletScheduleMutationInFlight = false;
+        if (button) { button.disabled = false; button.textContent = locale.walletScheduleDelete; }
     }
 }
 
@@ -4727,6 +5039,7 @@ function getUniversalBridgeSelectedTokens() {
 function setUniversalBridgeResult(message, color = 'var(--text-muted)') {
     const result = document.getElementById('universalBridgeResult');
     if (!result) return;
+    result.style.display = message ? '' : 'none';
     result.textContent = message;
     result.style.color = color;
 }
@@ -5522,13 +5835,12 @@ async function refreshUniversalBridgeHistoryRecord(recordId, silent = false, but
         universalBridgeRefreshCooldowns.set(String(recordId), Date.now() + 12000);
         const record = data.record;
         const status = getUniversalBridgeRecordStatus(record);
-        const result = document.getElementById('universalBridgeResult');
-        if (result) {
-            result.textContent = data.provider_available
+        setUniversalBridgeResult(
+            data.provider_available
                 ? locale.universalBridgeStatus.replace('{status}', status.label)
-                : locale.universalBridgeProviderUnavailable;
-            result.style.color = data.provider_available ? status.color : '#fbbf24';
-        }
+                : locale.universalBridgeProviderUnavailable,
+            data.provider_available ? status.color : '#fbbf24',
+        );
         await loadUniversalBridgeHistory();
         return record;
     } catch (_) {
@@ -5611,6 +5923,7 @@ async function executeUniversalBridge() {
         const explorer = UNIVERSAL_BRIDGE_NETWORKS[quote.from_network]?.blockExplorerUrls?.[0];
         const result = document.getElementById('universalBridgeResult');
         if (result) {
+            result.style.display = '';
             result.replaceChildren();
             const message = document.createElement('span');
             message.textContent = locale.universalBridgeSubmitted;
@@ -6079,6 +6392,7 @@ async function loadAccountOverview() {
         const activeAddress = getActiveBaseWalletAddress().toLowerCase();
         const activeWallet = wallets.find((wallet) => String(wallet.wallet_address || '').toLowerCase() === activeAddress);
         const shortAddress = activeWallet ? getShortOperationAddress(activeWallet.wallet_address) : '';
+        accountOverviewActiveWalletId = activeWallet?.id || null;
 
         setText('accountOverviewActiveWallet', activeWallet
             ? `${activeWallet.label || locale.walletDefaultName} · ${shortAddress}`
@@ -6094,6 +6408,7 @@ async function loadAccountOverview() {
                 ? (activeWallet.has_proxy ? locale.walletProxyConfigured : locale.walletNoProxy)
                 : locale.accountOverviewSelectWallet;
         }
+        loadAccountScheduleOverview(activeWallet);
 
         const activityContainer = document.getElementById('accountOverviewActivity');
         if (!activityContainer) return;
@@ -6118,10 +6433,13 @@ async function loadAccountOverview() {
             </div>`;
         }).join('');
     } catch (_) {
+        accountOverviewActiveWalletId = null;
         setText('accountOverviewActiveWallet', locale.accountOverviewUnavailable);
         setText('accountOverviewWalletCount', '—');
         setText('accountOverviewTelegram', locale.accountOverviewUnavailable);
         setText('accountOverviewSession', locale.accountOverviewUnavailable);
+        setText('accountOverviewSchedule', locale.accountOverviewUnavailable);
+        setText('accountOverviewScheduleDetail', locale.accountOverviewScheduleDesc);
         const activityContainer = document.getElementById('accountOverviewActivity');
         if (activityContainer) activityContainer.innerHTML = `<div class="account-empty-state">${escapeHtml(locale.accountOverviewLoadError)}</div>`;
     }
@@ -6171,6 +6489,11 @@ function renderDashboardContent(section) {
                     <strong id="accountOverviewSession">${t.loading}</strong>
                     <small>${t.accountOverviewSessionDesc}</small>
                 </div>
+                <div class="account-overview-card account-overview-card-wide">
+                    <span class="account-overview-label">${t.accountOverviewSchedule}</span>
+                    <strong id="accountOverviewSchedule">${t.loading}</strong>
+                    <small id="accountOverviewScheduleDetail">${t.accountOverviewScheduleDesc}</small>
+                </div>
             </div>
 
             <div class="account-overview-columns">
@@ -6184,6 +6507,7 @@ function renderDashboardContent(section) {
                     <div class="account-section-heading"><div><div class="account-kicker">${t.accountOverviewShortcuts}</div><h3>${t.accountOverviewQuickTitle}</h3></div></div>
                     <div class="account-quick-actions">
                         <button type="button" onclick="switchMenu(null, 'Wallets')">${t.accountOverviewGoWallets}</button>
+                        <button type="button" onclick="openAccountWalletSchedule()">${t.accountOverviewOpenSchedule}</button>
                         <button type="button" onclick="switchMenu(null, 'Farming')">${t.accountOverviewGoActions}</button>
                         <button type="button" onclick="switchMenu(null, 'Settings')">${t.accountOverviewGoSettings}</button>
                     </div>
@@ -6329,6 +6653,9 @@ function renderDashboardContent(section) {
         } else if (section === 'Farming') {
         const storedActivityPane = localStorage.getItem('ax_activity_pane');
         const activityPane = ['dex', 'bridges', 'lending', 'journal'].includes(storedActivityPane) ? storedActivityPane : 'dex';
+        const rememberedBridgeSource = localStorage.getItem('ax_bridge_source_network');
+        const bridgeSourceNetwork = UNIVERSAL_BRIDGE_NETWORKS[rememberedBridgeSource] ? rememberedBridgeSource : 'Base';
+        const bridgeDestinationNetwork = bridgeSourceNetwork === 'Arbitrum' ? 'Base' : 'Arbitrum';
 
         const activityTabs = [
             ['dex', t.activityTabDex || 'DEX'],
@@ -6391,24 +6718,12 @@ function renderDashboardContent(section) {
                 <div style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px;">
                     <label style="color:var(--text-muted); font-size:12px;">${t.labelFromNetwork || 'From Network'}
                         <select id="operationSourceNetwork" onchange="handleOperationSourceNetworkChange()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;">
-                            <option value="Base">Base</option>
-                            <option value="Arbitrum">Arbitrum</option>
-                            <option value="Ethereum">Ethereum</option>
-                            <option value="Optimism">Optimism</option>
-                            <option value="Polygon">Polygon</option>
-                            <option value="Linea">Linea</option>
-                            <option value="BNB Chain">BNB Chain</option>
+                            ${Object.keys(UNIVERSAL_BRIDGE_NETWORKS).map((network) => `<option value="${escapeHtml(network)}"${network === bridgeSourceNetwork ? ' selected' : ''}>${escapeHtml(network)}</option>`).join('')}
                         </select>
                     </label>
                     <label style="color:var(--text-muted); font-size:12px;">${t.labelToNetwork || 'To Network'}
                         <select id="operationDestinationNetwork" onchange="handleOperationDestinationNetworkChange()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;">
-                            <option value="Arbitrum">Arbitrum</option>
-                            <option value="Base">Base</option>
-                            <option value="Ethereum">Ethereum</option>
-                            <option value="Optimism">Optimism</option>
-                            <option value="Polygon">Polygon</option>
-                            <option value="Linea">Linea</option>
-                            <option value="BNB Chain">BNB Chain</option>
+                            ${Object.keys(UNIVERSAL_BRIDGE_NETWORKS).map((network) => `<option value="${escapeHtml(network)}"${network === bridgeDestinationNetwork ? ' selected' : ''}>${escapeHtml(network)}</option>`).join('')}
                         </select>
                     </label>
                     <label style="color:var(--text-muted); font-size:12px;">${t.labelTokenIn || 'From Token'}
@@ -6429,7 +6744,7 @@ function renderDashboardContent(section) {
                 <div id="universalBridgeCatalogStatus" style="margin-top:6px; color:var(--text-muted); font-size:12px;"></div>
                 <button type="button" id="universalBridgeQuoteButton" onclick="requestUniversalBridgeQuote()" class="btn-purple-lg" style="margin-top:14px; width:100%; font-size:13px; padding:12px;">${t.bridgeGetQuote || 'Get Quote'}</button>
                 <button type="button" id="universalBridgeReviewButton" onclick="executeUniversalBridge()" class="btn-dark-sm" style="display:none; margin-top:9px; width:100%; padding:11px; border-color:#7c3aed;">${t.universalBridgeReview}</button>
-                <div id="universalBridgeResult" style="margin-top:12px; padding:12px; background:var(--bg-main); border:1px solid var(--border-color); border-radius:10px; font-size:12px;"></div>
+                <div id="universalBridgeResult" style="display:none; margin-top:12px; padding:12px; background:var(--bg-main); border:1px solid var(--border-color); border-radius:10px; font-size:12px;"></div>
             </div>
         `;
 
@@ -6552,70 +6867,35 @@ function renderDashboardContent(section) {
         }, 50);
     } else if (section === 'Networks') {
         const networksHtml = NETWORKS_CONFIG.map(net => `
-            <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-main); padding:16px 20px; border-radius:16px; margin-bottom:10px; border:1px solid var(--border-color);">
-                <div style="display:flex; align-items:center; gap:16px;">
-                    <div style="display:flex; align-items:center; justify-content:center; width:32px; height:32px;">${net.icon}</div>
-                    <div style="display: flex; flex-direction: column; gap: 4px;">
-                        <div style="color:#fff; font-weight:700; font-size:15px;">${net.name} <span style="font-size: 12px; color: var(--text-muted); font-weight: normal;">(${net.symbol})</span></div>
-                        <div style="font-size:13px; color: var(--text-muted);">${t.gasLabel} <span id="gas-${net.key}" style="color:#eab308; font-weight:bold;">${t.loading}</span> <span id="gas-status-${net.key}" style="font-size:11px; font-weight:700;"></span></div>
-                        <div style="color: #93c5fd; font-size: 12px; line-height:1.4;">${t.networkEligibilityStatus}</div>
+            <article class="network-overview-card">
+                <div class="network-overview-head">
+                    <div style="display:flex; align-items:center; gap:10px; min-width:0;">
+                        <div class="network-overview-icon">${net.icon}</div>
+                        <div style="min-width:0;"><div class="network-overview-name">${net.name}</div><div class="network-overview-symbol">${net.symbol} · EVM</div></div>
                     </div>
+                    <span id="networkStatus-${networkDomId(net.key)}" class="network-overview-status">${t.loading}</span>
                 </div>
-                <div>
-                    <a href="${net.explorer}" target="_blank" style="text-decoration:none; background:#1f1f1f; color:#fff; padding:8px 14px; border-radius:10px; font-size:13px; border:1px solid var(--border-color); transition: background 0.2s;" onmouseover="this.style.background='#333'" onmouseout="this.style.background='#1f1f1f'">${t.btnExp}</a>
+                <div id="networkOverview-${networkDomId(net.key)}" class="network-overview-data">${t.loading}</div>
+                <div class="network-overview-gas"><span>${t.gasLabel}</span><b id="networkGas-${networkDomId(net.key)}">${t.loading}</b></div>
+                <div class="network-overview-actions">
+                    <button type="button" onclick="openBridgeFromNetwork('${net.key.replace(/'/g, "\\'")}')" class="btn-dark-sm">${t.networkOverviewOpenBridge}</button>
+                    <a href="${net.explorer}" target="_blank" rel="noopener noreferrer">${t.btnExp}</a>
                 </div>
-            </div>
+            </article>
         `).join('');
-
-        const networkGuideHtml = !areInterfaceHintsEnabled() ? '' : `
-            <div id="guide-box" style="position: relative; background: rgba(157,78,221,0.08); border: 1px solid rgba(157,78,221,0.25); border-radius: 14px; padding: 16px 18px; margin-bottom: 18px; font-size: 13px; color: var(--text-muted); line-height: 1.5;">
-                <button onclick="document.getElementById('guide-box').style.display='none'" style="position: absolute; top: 14px; right: 16px; background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 16px; font-weight: bold;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--text-muted)'">✕</button>
-                <b style="color: #fff;">${t.guideTitle}</b><br>
-                • <b style="color: #c77dff;">Gwei</b> ${t.guideGwei}<br>
-                • <b style="color: #c77dff;">Sun</b> ${t.guideSun}<br>
-                • <b style="color: #c77dff;">Micro-lamports</b> ${t.guideLamports}<br>
-                • <b style="color: #c77dff;">N/A</b> ${t.guideNA}
-            </div>
-        `;
 
         centerHtml = `
             <div class="dashboard-card">
-                <h3 style="color: #fff; margin-top: 0; font-size: 16px; margin-bottom: 6px;">${t.netTitle}</h3>
-                <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 14px; line-height: 1.5;">${t.netDesc}</p>
-                <p style="color: var(--text-muted); font-size: 12px; margin: -6px 0 14px; line-height: 1.5;">${t.gasStatusNote}</p>
-                
-                ${networkGuideHtml}
-
-                <div>${networksHtml}</div>
+                <div class="network-overview-title-row"><div><h3>${t.networkOverviewTitle}</h3><p>${t.networkOverviewDesc}</p></div><button type="button" class="btn-dark-sm" onclick="loadNetworksOverview()">${t.networkOverviewRefresh}</button></div>
+                <div class="network-overview-toolbar">
+                    <label>${t.networkOverviewWallet}<select id="networkOverviewWallet" onchange="setNetworkOverviewWallet(this.value)" class="auth-input" disabled><option>${t.loading}</option></select></label>
+                    <div><b>${t.networkOverviewCount.replace('{count}', NETWORKS_CONFIG.length)}</b><span id="networkOverviewStatus">${t.loading}</span></div>
+                </div>
+                <p class="network-overview-note">${t.gasStatusNote}</p>
+                <div class="network-overview-grid">${networksHtml}</div>
             </div>
         `;
-
-        setTimeout(async () => {
-            for (let net of NETWORKS_CONFIG) {
-                try {
-                    const res = await fetch(`/api/gas/${net.key}`);
-                    const data = await res.json();
-                    const el = document.getElementById(`gas-${net.key}`);
-                    if (el) el.innerText = data.gas || "N/A";
-                    const statusEl = document.getElementById(`gas-status-${net.key}`);
-                    if (statusEl) {
-                        const level = data.gas_level || 'unavailable';
-                        const levelKey = `gas${level.charAt(0).toUpperCase()}${level.slice(1)}`;
-                        const colors = { low: '#22c55e', medium: '#eab308', high: '#ef4444', unavailable: '#a3a3a3' };
-                        statusEl.innerText = translations[currentLang][levelKey] || translations[currentLang].gasUnavailable;
-                        statusEl.style.color = colors[level] || colors.unavailable;
-                    }
-                } catch(e) {
-                    const el = document.getElementById(`gas-${net.key}`);
-                    if (el) el.innerText = "N/A";
-                    const statusEl = document.getElementById(`gas-status-${net.key}`);
-                    if (statusEl) {
-                        statusEl.innerText = translations[currentLang].gasUnavailable;
-                        statusEl.style.color = '#a3a3a3';
-                    }
-                }
-            }
-        }, 100);
+        setTimeout(loadNetworksOverview, 50);
     }
 
     // Общий вывод дашборда

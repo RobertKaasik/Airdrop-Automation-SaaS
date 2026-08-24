@@ -311,6 +311,10 @@ LIFI_API_URL = "https://li.quest/v1"
 LIFI_CATALOG_CACHE_TTL_SECONDS = 5 * 60
 LIFI_QUOTE_TTL_SECONDS = 55
 LIFI_TOKEN_CATALOG_CACHE = {}
+# These are only convenience symbols for the default bridge picker.  The
+# address still comes from LI.FI's per-chain catalogue and every route is
+# revalidated by LI.FI before the wallet is asked to sign anything.
+LIFI_POPULAR_TOKEN_SYMBOLS = {"USDC", "USDT", "DAI", "WETH", "WBTC", "USDE", "USDS", "EURC"}
 LIFI_EVM_NETWORKS = {
     "Ethereum": {"chain_id": 1, "native_symbol": "ETH", "rpc_url": "https://ethereum-rpc.publicnode.com"},
     "Base": {"chain_id": 8453, "native_symbol": "ETH", "rpc_url": BASE_RPC_URL},
@@ -319,6 +323,13 @@ LIFI_EVM_NETWORKS = {
     "Polygon": {"chain_id": 137, "native_symbol": "POL", "rpc_url": "https://polygon-bor-rpc.publicnode.com"},
     "Linea": {"chain_id": 59144, "native_symbol": "ETH", "rpc_url": "https://rpc.linea.build"},
     "BNB Chain": {"chain_id": 56, "native_symbol": "BNB", "rpc_url": "https://bsc-rpc.publicnode.com"},
+    # Additional EVM routes. LI.FI still decides at quote time whether a
+    # particular pair and amount has an executable route.
+    "Avalanche": {"chain_id": 43114, "native_symbol": "AVAX", "rpc_url": "https://api.avax.network/ext/bc/C/rpc"},
+    "zkSync Era": {"chain_id": 324, "native_symbol": "ETH", "rpc_url": "https://mainnet.era.zksync.io"},
+    "Scroll": {"chain_id": 534352, "native_symbol": "ETH", "rpc_url": "https://rpc.scroll.io"},
+    "Gnosis": {"chain_id": 100, "native_symbol": "xDAI", "rpc_url": "https://rpc.gnosischain.com"},
+    "Mantle": {"chain_id": 5000, "native_symbol": "MNT", "rpc_url": "https://rpc.mantle.xyz"},
 }
 LIFI_NATIVE_TOKEN_ADDRESS = "0x0000000000000000000000000000000000000000"
 
@@ -372,13 +383,41 @@ PUBLIC_NETWORK_BALANCE_CONFIG = {
         "native_symbol": "BNB",
         "gas_reserve": "0.003",
     },
+    "Avalanche": {
+        "rpc_url": "https://api.avax.network/ext/bc/C/rpc",
+        "native_symbol": "AVAX",
+        "gas_reserve": "0.02",
+    },
+    "zkSync Era": {
+        "rpc_url": "https://mainnet.era.zksync.io",
+        "native_symbol": "ETH",
+        "gas_reserve": "0.001",
+    },
+    "Scroll": {
+        "rpc_url": "https://rpc.scroll.io",
+        "native_symbol": "ETH",
+        "gas_reserve": "0.001",
+    },
+    "Gnosis": {
+        "rpc_url": "https://rpc.gnosischain.com",
+        "native_symbol": "xDAI",
+        "gas_reserve": "1",
+    },
+    "Mantle": {
+        "rpc_url": "https://rpc.mantle.xyz",
+        "native_symbol": "MNT",
+        "gas_reserve": "0.05",
+    },
 }
 UNISWAP_TRADE_API_URL = "https://trade-api.gateway.uniswap.org/v1"
 SWAP_QUOTE_TTL_SECONDS = 45
 swap_quote_sessions = {}
 SWAP_SUBMISSION_TTL_SECONDS = 10 * 60
 swap_submission_sessions = {}
-BRIDGE_PLAN_DESTINATIONS = {"Ethereum", "Arbitrum", "Optimism", "Polygon", "Linea", "BNB Chain"}
+BRIDGE_PLAN_DESTINATIONS = {
+    "Ethereum", "Base", "Arbitrum", "Optimism", "Polygon", "Linea", "BNB Chain",
+    "Avalanche", "zkSync Era", "Scroll", "Gnosis", "Mantle",
+}
 
 class User(Base):
     __tablename__ = "users"
@@ -888,6 +927,12 @@ def classify_gas_level(network: str, gas: str) -> str:
         "Optimism": (0.05, 0.15),
         "Polygon": (50, 150),
         "BNB Chain": (3, 6),
+        "Avalanche": (20, 50),
+        "zkSync Era": (0.05, 0.15),
+        "Scroll": (0.05, 0.15),
+        "Linea": (0.05, 0.15),
+        "Gnosis": (1, 3),
+        "Mantle": (0.05, 0.15),
         "Solana": (1000, 5000),
         "Tron": (20, 50),
     }
@@ -2523,7 +2568,10 @@ def get_lifi_tokens(network: str) -> list[dict]:
             "name": name,
             "decimals": decimals,
             "price_usd": price_usd,
-            "is_core": address.lower() in core_addresses,
+            "is_core": (
+                address.lower() in core_addresses
+                or symbol.upper() in LIFI_POPULAR_TOKEN_SYMBOLS
+            ),
         }
     tokens = sorted(unique_tokens.values(), key=lambda token: (
         not token["is_core"],
