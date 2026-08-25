@@ -1986,6 +1986,7 @@ def serialize_opportunity_source(source: OfficialOpportunitySource) -> dict:
         "claim_url": source.claim_url,
         "status": source.status,
         "is_system": source.is_system,
+        "updated_at": source.updated_at,
         "summaries": {
             "ru": source.summary_ru,
             "en": source.summary_en,
@@ -5325,13 +5326,14 @@ async def get_operations_history(
     current_user: User = Depends(get_current_user),
 ):
     allowed_statuses = {"all", "submitted", "in_progress", "completed", "failed"}
-    allowed_types = {"all", "bridge", "swap", "transfer"}
+    allowed_types = {"all", "bridge", "swap", "lending", "transfer"}
     if status not in allowed_statuses or operation_type not in allowed_types:
         raise HTTPException(status_code=422, detail="Invalid operation history filter")
 
     operations = []
     bridge_records: List[UniversalBridgeRecord] = []
     swap_records: List[BaseSwapRecord] = []
+    lending_records: List[DefiOperationRecord] = []
     transfer_records: List[WalletTransferRecord] = []
     if operation_type in {"all", "bridge"}:
         bridge_records = db.query(UniversalBridgeRecord).filter(
@@ -5341,12 +5343,17 @@ async def get_operations_history(
         swap_records = db.query(BaseSwapRecord).filter(
             BaseSwapRecord.username == current_user.username,
         ).order_by(BaseSwapRecord.created_at.desc()).limit(100).all()
+    if operation_type in {"all", "lending"}:
+        lending_records = db.query(DefiOperationRecord).filter(
+            DefiOperationRecord.username == current_user.username,
+        ).order_by(DefiOperationRecord.created_at.desc()).limit(100).all()
     if operation_type in {"all", "transfer"}:
         transfer_records = db.query(WalletTransferRecord).filter(
             WalletTransferRecord.username == current_user.username,
         ).order_by(WalletTransferRecord.created_at.desc()).limit(100).all()
 
     refresh_base_operation_statuses(db, swap_records, transfer_records)
+    refresh_defi_operation_statuses(db, lending_records)
 
     for record in bridge_records:
         operations.append({
@@ -5379,6 +5386,25 @@ async def get_operations_history(
             "amount_out": format_journal_token_amount(record.amount_out, BASE_USDC_DECIMALS),
             "estimated_usd": estimate_operation_value_usd(record.amount_in, "ETH"),
             "provider": "Uniswap",
+            "tx_hash": record.tx_hash,
+            "created_at": record.created_at,
+        })
+    for record in lending_records:
+        is_withdrawal = record.operation_type == "withdraw"
+        operations.append({
+            "id": f"lending-{record.id}",
+            "type": "lending",
+            "operation_action": "withdraw" if is_withdrawal else "supply",
+            "status": record.status or "submitted",
+            "provider_status": None,
+            "from_network": record.network or "Base",
+            "to_network": record.network or "Base",
+            "from_symbol": "Aave V3" if is_withdrawal else record.asset_symbol,
+            "to_symbol": record.asset_symbol if is_withdrawal else "Aave V3",
+            "amount_in": record.amount,
+            "amount_out": None,
+            "estimated_usd": estimate_operation_value_usd(record.amount, record.asset_symbol),
+            "provider": record.protocol or "Aave V3",
             "tx_hash": record.tx_hash,
             "created_at": record.created_at,
         })

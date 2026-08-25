@@ -2977,15 +2977,9 @@ async function requestBaseSwapQuote() {
         if (result) result.innerHTML = `<span style="color:#fca5a5;">${locale.baseSwapInvalidAmount}</span>`;
         return;
     }
-    const provider = walletConnectProvider?.session ? walletConnectProvider : window.ethereum;
-    try {
-        const accounts = provider?.request ? await provider.request({ method: 'eth_accounts' }) : [];
-        if (!Array.isArray(accounts) || !accounts[0] || accounts[0].toLowerCase() !== connectedAddress.toLowerCase()) {
-            if (result) result.innerHTML = `<span style="color:#fca5a5;">${locale.baseSwapActiveWalletMismatch}</span>`;
-            return;
-        }
-    } catch (_) {
-        if (result) result.innerHTML = `<span style="color:#fca5a5;">${locale.baseSwapActiveWalletMismatch}</span>`;
+    const connectionState = await getActiveWalletSessionState(connectedAddress);
+    if (!connectionState.matches) {
+        if (result) result.innerHTML = `<span style="color:#fca5a5;">${escapeHtml(activeWalletConnectionMessage(connectionState, locale, connectedAddress))}</span>`;
         return;
     }
     try {
@@ -3179,6 +3173,157 @@ async function addNewWalletToDB() {
     }
 }
 
+async function getActiveWalletSessionState(address = getActiveBaseWalletAddress()) {
+    const expectedAddress = String(address || '').trim().toLowerCase();
+    if (!/^0x[0-9a-f]{40}$/.test(expectedAddress)) return { matches: false, reason: 'missing-active-address' };
+    const provider = walletConnectProvider?.session ? walletConnectProvider : window.ethereum;
+    if (!provider || typeof provider.request !== 'function') return { matches: false, reason: 'provider-unavailable' };
+    try {
+        const accounts = await provider.request({ method: 'eth_accounts' });
+        const selectedAccounts = selectedEvmWalletAddresses(accounts);
+        if (!selectedAccounts.length) return { matches: false, reason: 'no-account' };
+        return {
+            matches: selectedAccounts.some((account) => account.toLowerCase() === expectedAddress),
+            reason: selectedAccounts.some((account) => account.toLowerCase() === expectedAddress) ? 'connected' : 'different-account',
+        };
+    } catch (_) {
+        return { matches: false, reason: 'request-failed' };
+    }
+}
+
+async function activeWalletSessionMatches(address = getActiveBaseWalletAddress()) {
+    return (await getActiveWalletSessionState(address)).matches;
+}
+
+function activeWalletConnectionMessage(state, locale, address = getActiveBaseWalletAddress()) {
+    const shortAddress = /^0x[0-9a-fA-F]{40}$/.test(address || '')
+        ? `${address.slice(0, 6)}…${address.slice(-4)}`
+        : '';
+    if (state?.reason === 'different-account') {
+        return locale.operationWalletWrongAccount.replace('{address}', shortAddress);
+    }
+    if (state?.reason === 'no-account') return locale.operationWalletNoAccount;
+    return locale.baseSwapActiveWalletMismatch;
+}
+
+async function refreshActiveWalletConnectionUi() {
+    updateBaseWalletConnectionState();
+    if (document.getElementById('walletsListContainer')) await loadWalletsFromDB();
+    await loadOperationBuilderWalletStatus();
+    await loadLendingWalletConnectionStatus();
+}
+
+async function connectActiveWalletForActions(button) {
+    const locale = translations[getActiveLang()];
+    const expectedAddress = getActiveBaseWalletAddress();
+    const provider = window.ethereum;
+    if (!/^0x[0-9a-fA-F]{40}$/.test(expectedAddress)) {
+        showNotification(locale.baseSwapWalletRequired, 'error');
+        return;
+    }
+    if (!provider || typeof provider.request !== 'function') {
+        showNotification(locale.walletConnectUnsupported, 'error');
+        return;
+    }
+    try {
+        if (button) setButtonLoading(button, true, locale.operationWalletConnecting);
+        if (provider.isMetaMask) {
+            try {
+                await provider.request({ method: 'wallet_requestPermissions', params: [{ eth_accounts: {} }] });
+            } catch (permissionError) {
+                if (permissionError?.code === 4001) throw permissionError;
+                if (permissionError?.code !== -32601) throw permissionError;
+            }
+        }
+        const accounts = await provider.request({ method: 'eth_requestAccounts' });
+        const selectedAccounts = selectedEvmWalletAddresses(accounts);
+        if (!selectedAccounts.length) {
+            const error = new Error('active_wallet_no_account');
+            error.code = 'active_wallet_no_account';
+            throw error;
+        }
+        const selectedAddress = selectedAccounts.find((address) => address.toLowerCase() === expectedAddress.toLowerCase());
+        if (!selectedAddress) {
+            const error = new Error('active_wallet_wrong_account');
+            error.code = 'active_wallet_wrong_account';
+            throw error;
+        }
+        await switchToBaseMainnet(provider);
+        setConnectedBaseWalletAddress(selectedAddress);
+        updateBaseWalletConnectionState(selectedAddress);
+        await refreshActiveWalletConnectionUi();
+        showNotification(locale.operationWalletConnected);
+    } catch (error) {
+        const message = error?.code === 4001
+            ? locale.walletConnectRejected
+            : error?.code === 'active_wallet_no_account'
+                ? locale.operationWalletNoAccount
+                : error?.code === 'active_wallet_wrong_account'
+                    ? locale.operationWalletWrongAccount.replace('{address}', `${expectedAddress.slice(0, 6)}…${expectedAddress.slice(-4)}`)
+                    : String(error?.message || '').includes('base_mainnet_not_selected')
+                        ? locale.operationWalletNetworkRequired
+                        : locale.operationWalletConnectionFailed;
+        console.warn('Active wallet connection failed', error);
+        showNotification(message, 'error');
+    } finally {
+        if (button) setButtonLoading(button, false, locale.operationConnectActiveWallet);
+    }
+}
+
+async function connectSavedWalletForActions(walletAddress, button) {
+    if (!/^0x[0-9a-fA-F]{40}$/.test(walletAddress || '')) return;
+    // This only chooses an already saved public address for the current session.
+    // It never creates another wallet record or imports a private key.
+    sessionStorage.setItem('ax_active_wallet_address', walletAddress);
+    await connectActiveWalletForActions(button);
+}
+
+async function connectActiveWalletWithWalletConnect(button) {
+    const locale = translations[getActiveLang()];
+    const expectedAddress = getActiveBaseWalletAddress();
+    if (!/^0x[0-9a-fA-F]{40}$/.test(expectedAddress)) {
+        showNotification(locale.baseSwapWalletRequired, 'error');
+        return;
+    }
+    try {
+        if (button) setButtonLoading(button, true, locale.operationWalletConnecting);
+        const provider = await getWalletConnectProvider();
+        const accounts = await provider.enable();
+        const selectedAccounts = selectedEvmWalletAddresses(accounts);
+        if (!selectedAccounts.length) {
+            const error = new Error('active_wallet_no_account');
+            error.code = 'active_wallet_no_account';
+            throw error;
+        }
+        const selectedAddress = selectedAccounts.find((address) => address.toLowerCase() === expectedAddress.toLowerCase());
+        if (!selectedAddress) {
+            try { await provider.disconnect(); } catch (_) { /* No session to close. */ }
+            walletConnectProvider = null;
+            const error = new Error('active_wallet_wrong_account');
+            error.code = 'active_wallet_wrong_account';
+            throw error;
+        }
+        await switchToBaseMainnet(provider);
+        setConnectedBaseWalletAddress(selectedAddress);
+        updateBaseWalletConnectionState(selectedAddress);
+        await refreshActiveWalletConnectionUi();
+        showNotification(locale.operationWalletConnected);
+    } catch (error) {
+        closeWalletConnectModal();
+        const message = error?.code === 'active_wallet_no_account'
+            ? locale.operationWalletNoAccount
+            : error?.code === 'active_wallet_wrong_account'
+                ? locale.operationWalletWrongAccount.replace('{address}', `${expectedAddress.slice(0, 6)}…${expectedAddress.slice(-4)}`)
+                : error?.code === 4001
+                    ? locale.walletConnectRejected
+                    : locale.operationWalletConnectionFailed;
+        console.warn('WalletConnect active wallet connection failed', error);
+        showNotification(message, 'error');
+    } finally {
+        if (button) setButtonLoading(button, false, locale.btnConnectWalletConnect);
+    }
+}
+
 function getWalletScheduleActionLabel(actionType, locale) {
     return {
         dex: locale.walletScheduleActionSwap,
@@ -3317,6 +3462,102 @@ async function loadAccountScheduleOverview(activeWallet) {
     }
 }
 
+function accountReadinessRow({ title, detail, tone = 'muted', actionLabel = '', action = '' }) {
+    const actionButton = action && actionLabel
+        ? `<button type="button" class="account-readiness-action" onclick="${action}">${escapeHtml(actionLabel)}</button>`
+        : '';
+    return `<div class="account-readiness-row">
+        <span class="account-readiness-dot is-${tone}" aria-hidden="true"></span>
+        <div class="account-readiness-copy"><strong>${escapeHtml(title)}</strong><span>${escapeHtml(detail)}</span></div>
+        ${actionButton}
+    </div>`;
+}
+
+async function loadAccountReadiness(activeWallet, security, telegram) {
+    const container = document.getElementById('accountReadinessContent');
+    const summary = document.getElementById('accountReadinessSummary');
+    if (!container || !summary) return;
+    const locale = translations[getActiveLang()];
+    container.innerHTML = `<div class="account-empty-state">${escapeHtml(locale.accountReadinessLoading)}</div>`;
+
+    let schedules = [];
+    let scheduleAvailable = Boolean(activeWallet?.id);
+    const network = await getWalletSecurityNetwork();
+    if (activeWallet?.id) {
+        try {
+            const response = await fetch(`/api/wallets/${activeWallet.id}/schedules`);
+            const data = await response.json();
+            if (!response.ok || !Array.isArray(data.schedules)) throw new Error('schedule_unavailable');
+            schedules = data.schedules;
+        } catch (_) {
+            scheduleAvailable = false;
+        }
+    }
+
+    const hasActiveWallet = Boolean(activeWallet?.id);
+    const hasProxy = Boolean(activeWallet?.has_proxy);
+    const enabledSchedules = schedules.filter((schedule) => schedule.enabled);
+    const networkReady = network.tone === 'success';
+    const readyRequired = [hasActiveWallet, hasProxy, networkReady].filter(Boolean).length;
+    summary.textContent = readyRequired === 3
+        ? locale.accountReadinessReady
+        : locale.accountReadinessAttention.replace('{ready}', String(readyRequired));
+
+    const rows = [
+        accountReadinessRow({
+            title: locale.accountReadinessWallet,
+            detail: hasActiveWallet ? locale.accountReadinessWalletReady : locale.accountReadinessWalletMissing,
+            tone: hasActiveWallet ? 'ready' : 'attention',
+            actionLabel: hasActiveWallet ? locale.accountReadinessOpen : locale.accountReadinessConfigure,
+            action: "switchMenu(null, 'Wallets')",
+        }),
+        accountReadinessRow({
+            title: locale.accountReadinessProxy,
+            detail: hasActiveWallet
+                ? (hasProxy ? locale.accountReadinessProxyReady : locale.accountReadinessProxyMissing)
+                : locale.accountReadinessProxyNoWallet,
+            tone: hasProxy ? 'ready' : 'attention',
+            actionLabel: locale.accountReadinessConfigure,
+            action: "switchMenu(null, 'Wallets')",
+        }),
+        accountReadinessRow({
+            title: locale.accountReadinessSchedule,
+            detail: !hasActiveWallet
+                ? locale.accountReadinessScheduleNoWallet
+                : !scheduleAvailable
+                    ? locale.accountOverviewScheduleUnavailable
+                    : enabledSchedules.length
+                        ? locale.accountReadinessScheduleReady.replace('{count}', String(enabledSchedules.length))
+                        : locale.accountReadinessScheduleMissing,
+            tone: enabledSchedules.length ? 'ready' : 'muted',
+            actionLabel: hasActiveWallet ? locale.accountReadinessOpen : locale.accountReadinessConfigure,
+            action: hasActiveWallet ? 'openAccountWalletSchedule()' : "switchMenu(null, 'Wallets')",
+        }),
+        accountReadinessRow({
+            title: locale.accountReadinessTelegram,
+            detail: telegram?.linked ? locale.accountReadinessTelegramReady : locale.accountReadinessTelegramMissing,
+            tone: telegram?.linked ? 'ready' : 'muted',
+            actionLabel: telegram?.linked ? locale.accountReadinessOpen : locale.accountReadinessConfigure,
+            action: "switchMenu(null, 'Settings')",
+        }),
+        accountReadinessRow({
+            title: locale.accountReadinessNetwork,
+            detail: network.text,
+            tone: networkReady ? 'ready' : network.tone === 'warning' ? 'attention' : 'muted',
+            actionLabel: locale.accountReadinessOpen,
+            action: "switchMenu(null, 'Farming')",
+        }),
+        accountReadinessRow({
+            title: locale.accountReadinessSession,
+            detail: security?.session_active ? locale.accountReadinessSessionReady : locale.securityUnavailable,
+            tone: security?.session_active ? 'ready' : 'attention',
+            actionLabel: locale.accountReadinessOpen,
+            action: "switchMenu(null, 'Settings')",
+        }),
+    ];
+    container.innerHTML = rows.join('');
+}
+
 async function loadWalletsFromDB() {
     const username = localStorage.getItem('airdrop_username') || "Robert";
     const container = document.getElementById('walletsListContainer');
@@ -3339,6 +3580,7 @@ async function loadWalletsFromDB() {
             const isConnectedForActions = isActive && connectedAddress === w.wallet_address.toLowerCase();
             const walletName = escapeHtml(w.label || `${t.walletDefaultName} ${w.id}`);
             const address = escapeHtml(w.wallet_address);
+            const shortAddress = `${w.wallet_address.slice(0, 6)}…${w.wallet_address.slice(-4)}`;
             const proxyStatus = w.has_proxy ? t.walletProxyConfigured : t.walletNoProxy;
             const profileReady = Boolean(w.profile_id && w.profile_status === 'active');
             const profileStatus = profileReady ? t.walletProfileReady : t.walletProfilePending;
@@ -3363,6 +3605,7 @@ async function loadWalletsFromDB() {
                     </div>
                     <div style="display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end;">
                         <button type="button" onclick="activateSavedWallet(${w.id}, '${w.wallet_address}')" ${isActive ? 'disabled' : ''} style="background:${isActive ? 'rgba(34,197,94,0.12)' : 'rgba(124,58,237,0.12)'}; color:${isActive ? '#86efac' : '#c4b5fd'}; border:1px solid ${isActive ? 'rgba(34,197,94,0.28)' : 'rgba(124,58,237,0.32)'}; padding:6px 10px; border-radius:8px; font-size:12px; cursor:${isActive ? 'default' : 'pointer'};">${isActive ? t.walletActive : t.walletActivate}</button>
+                        ${isActive && !isConnectedForActions ? `<button type="button" onclick="connectSavedWalletForActions('${w.wallet_address}', this)" style="background:rgba(34,197,94,.10); color:#86efac; border:1px solid rgba(34,197,94,.30); padding:6px 10px; border-radius:8px; font-size:12px; cursor:pointer;">${t.walletConnectActive.replace('{address}', shortAddress)}</button>` : ''}
                         <button type="button" onclick="toggleWalletEditor(${w.id})" style="background:rgba(255,255,255,.06); color:#e5e7eb; border:1px solid var(--border-color); padding:6px 10px; border-radius:8px; font-size:12px; cursor:pointer;">${t.walletEdit}</button>
                         <button type="button" onclick="openWalletScheduleModal(${w.id})" style="background:rgba(124,58,237,.12); color:#ddd6fe; border:1px solid rgba(139,92,246,.38); padding:6px 10px; border-radius:8px; font-size:12px; cursor:pointer;">${t.walletScheduleButton}</button>
                         <button type="button" onclick="checkWalletHealth(${w.id}, this)" style="background:rgba(59,130,246,0.1); color:#93c5fd; border:1px solid rgba(59,130,246,0.28); padding:6px 10px; border-radius:8px; font-size:12px; cursor:pointer;">${t.walletHealthCheck}</button>
@@ -4978,10 +5221,13 @@ async function loadOperationBuilderWalletStatus() {
         const wallet = walletsData.wallets?.find((item) => item.wallet_address?.toLowerCase() === activeAddress.toLowerCase());
         if (!wallet || !walletsResponse.ok) throw new Error('wallet_not_saved');
         activeOperationWalletId = wallet.id;
-        status.textContent = locale.operationBalanceNetwork
-            .replace('{address}', `${activeAddress.slice(0, 6)}…${activeAddress.slice(-4)}`)
-            .replace('{network}', getOperationBuilderSource());
-        status.style.color = '#86efac';
+        const sessionState = await getActiveWalletSessionState(activeAddress);
+        status.textContent = sessionState.matches
+            ? locale.operationWalletSessionReady
+                .replace('{address}', `${activeAddress.slice(0, 6)}…${activeAddress.slice(-4)}`)
+                .replace('{network}', getOperationBuilderSource())
+            : activeWalletConnectionMessage(sessionState, locale, activeAddress);
+        status.style.color = sessionState.matches ? '#86efac' : '#fbbf24';
         await loadUniversalBridgeTokenSelectors();
     } catch (error) {
         activeOperationWalletId = null;
@@ -5762,10 +6008,19 @@ function getOperationsJournalType(record) {
     const labels = {
         bridge: locale.operationsJournalTypeBridge,
         swap: locale.operationsJournalTypeSwap,
+        lending: locale.operationsJournalTypeLending,
         transfer: locale.operationsJournalTypeTransfer,
     };
-    const icons = { bridge: '🌉', swap: '🔄', transfer: '↗' };
+    const icons = { bridge: '🌉', swap: '🔄', lending: '◈', transfer: '↗' };
     return { label: labels[type] || type, icon: icons[type] || '•' };
+}
+
+function getOperationsJournalAction(record) {
+    const locale = translations[getActiveLang()];
+    if (record?.type !== 'lending') return '';
+    return record.operation_action === 'withdraw'
+        ? (locale.defiHistoryWithdraw || 'Withdraw')
+        : (locale.defiHistorySupply || 'Supply');
 }
 
 function getOperationsJournalExplorerUrl(record) {
@@ -5805,6 +6060,7 @@ async function loadOperationsJournal() {
         container.innerHTML = records.map((record) => {
             const status = getOperationsJournalStatus(record);
             const type = getOperationsJournalType(record);
+            const action = getOperationsJournalAction(record);
             const txUrl = getOperationsJournalExplorerUrl(record);
             const date = new Date(Number(record.created_at) * 1000).toLocaleString();
             const output = record.amount_out ? ` → ≈ ${escapeHtml(record.amount_out)} ${escapeHtml(record.to_symbol)}` : '';
@@ -5814,8 +6070,8 @@ async function loadOperationsJournal() {
             const provider = record.provider ? ` · ${escapeHtml(record.provider)}` : '';
             const providerStatus = record.provider_status ? ` · ${escapeHtml(record.provider_status)}` : '';
             const usd = formatOperationsJournalUsd(record.estimated_usd);
-            return `<div style="background:var(--bg-main); border:1px solid var(--border-color); border-radius:11px; padding:11px 12px; margin-top:8px; display:flex; justify-content:space-between; gap:12px; align-items:flex-start;">
-                <div style="min-width:0;"><div style="display:flex; flex-wrap:wrap; align-items:center; gap:7px;"><span style="font-size:12px; color:#c4b5fd;">${type.icon} ${escapeHtml(type.label)}</span><span style="font-size:11px; color:${status.color}; border:1px solid ${status.color}; border-radius:999px; padding:2px 6px;">${escapeHtml(status.label)}</span></div><div style="color:#fff; font-size:13px; font-weight:600; margin-top:7px;">${escapeHtml(record.amount_in)} ${escapeHtml(record.from_symbol)}${output}</div><div style="color:var(--text-muted); font-size:11px; line-height:1.45; margin-top:4px;">${escapeHtml(record.from_network)} → ${escapeHtml(record.to_network)} · ${escapeHtml(date)}${provider}${recipient}${providerStatus}</div></div>
+            return `<div class="operations-journal-row">
+                <div style="min-width:0;"><div style="display:flex; flex-wrap:wrap; align-items:center; gap:7px;"><span style="font-size:12px; color:#c4b5fd;">${type.icon} ${escapeHtml(type.label)}${action ? ` · ${escapeHtml(action)}` : ''}</span><span style="font-size:11px; color:${status.color}; border:1px solid ${status.color}; border-radius:999px; padding:2px 6px;">${escapeHtml(status.label)}</span></div><div style="color:#fff; font-size:13px; font-weight:600; margin-top:7px;">${escapeHtml(record.amount_in)} ${escapeHtml(record.from_symbol)}${output}</div><div style="color:var(--text-muted); font-size:11px; line-height:1.45; margin-top:4px;">${escapeHtml(record.from_network)} → ${escapeHtml(record.to_network)} · ${escapeHtml(date)}${provider}${recipient}${providerStatus}</div></div>
                 <div style="text-align:right; flex:0 0 auto;">${usd ? `<div style="color:#c4b5fd; font-size:12px; font-weight:600; white-space:nowrap;">${usd}</div>` : ''}${txUrl ? `<a href="${txUrl}" target="_blank" rel="noopener noreferrer" style="display:block; margin-top:7px; color:#c4b5fd; font-size:12px; white-space:nowrap;">${locale.universalBridgeOpenTx}</a>` : ''}</div>
             </div>`;
         }).join('');
@@ -6102,34 +6358,63 @@ async function loadOfficialOpportunities() {
     const container = document.getElementById('officialOpportunitiesContainer');
     if (!container) return;
     const t = translations[currentLang];
+    const sourceCount = document.getElementById('officialOpportunitiesCount');
     try {
         const response = await fetch('/api/opportunities');
         const data = await response.json();
         if (!response.ok || !Array.isArray(data.sources)) throw new Error('opportunities_unavailable');
+        if (sourceCount) sourceCount.textContent = t.opportunityCount.replace('{count}', String(data.sources.length));
         container.innerHTML = data.sources.map((source) => {
             const summary = source.summaries?.[getActiveLang()] || source.summaries?.en || t[`opportunity_${source.summary_key}`] || t.opportunitySummaryFallback;
             const status = source.status === 'official_updates' ? t.opportunityStatusOfficial : t.opportunityStatusPending;
+            const dateLocale = { ru: 'ru-RU', en: 'en-US', zh: 'zh-CN' }[getActiveLang()] || 'en-US';
+            const updatedAt = Number(source.updated_at) > 0
+                ? new Date(Number(source.updated_at) * 1000).toLocaleDateString(dateLocale, { year: 'numeric', month: 'short', day: 'numeric' })
+                : t.opportunityDateUnknown;
             const deleteButton = data.can_manage && !source.is_system
                 ? `<button type="button" class="btn-dark-sm" onclick="deleteOfficialOpportunity(${Number(source.id)})" style="white-space:nowrap; padding:8px 11px; color:#fca5a5;">${t.opportunityDelete}</button>`
                 : '';
             return `
-                <div style="background:var(--bg-main); border:1px solid var(--border-color); border-radius:12px; padding:14px; display:flex; justify-content:space-between; gap:12px; align-items:center;">
-                    <div>
-                        <div style="color:#fff; font-weight:700; font-size:14px;">${escapeHtml(source.name)} <span style="color:var(--text-muted); font-weight:400;">(${escapeHtml(source.network)})</span></div>
-                        <div style="color:#93c5fd; font-size:12px; margin-top:5px;">${status}</div>
-                        <div style="color:var(--text-muted); font-size:12px; line-height:1.45; margin-top:4px;">${escapeHtml(summary)}</div>
+                <article class="opportunity-source-card">
+                    <div class="opportunity-source-main">
+                        <div class="opportunity-source-topline">
+                            <div class="opportunity-source-name">${escapeHtml(source.name)} <span>${escapeHtml(source.network)}</span></div>
+                            <span class="opportunity-source-status">${escapeHtml(status)}</span>
+                        </div>
+                        <div class="opportunity-source-summary">${escapeHtml(summary)}</div>
+                        <div class="opportunity-source-updated">${t.opportunityUpdated}: ${escapeHtml(updatedAt)}</div>
                     </div>
-                    <div style="display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end;">
+                    <div class="opportunity-source-actions">
                         <a href="${escapeHtml(source.official_url)}" target="_blank" rel="noopener noreferrer" class="btn-dark-sm" style="white-space:nowrap; padding:8px 11px; text-decoration:none;">${t.opportunityOfficialLink}</a>
                         ${deleteButton}
                     </div>
-                </div>
+                </article>
             `;
         }).join('') || `<div style="color:var(--text-muted); font-size:13px;">${t.opportunityEmpty}</div>`;
         renderOpportunityAdminControls(Boolean(data.can_manage));
     } catch (error) {
+        if (sourceCount) sourceCount.textContent = '';
         container.innerHTML = `<div style="color:#fca5a5; font-size:13px;">${t.opportunityLoadError}</div>`;
     }
+}
+
+async function loadLendingWalletConnectionStatus() {
+    const status = document.getElementById('lendingWalletStatus');
+    if (!status) return;
+    const locale = translations[getActiveLang()];
+    const activeAddress = getActiveBaseWalletAddress();
+    if (!/^0x[0-9a-fA-F]{40}$/.test(activeAddress)) {
+        status.textContent = locale.baseSwapWalletRequired;
+        status.style.color = '#fbbf24';
+        return;
+    }
+    const sessionState = await getActiveWalletSessionState(activeAddress);
+    status.textContent = sessionState.matches
+        ? locale.operationWalletSessionReady
+            .replace('{address}', `${activeAddress.slice(0, 6)}…${activeAddress.slice(-4)}`)
+            .replace('{network}', 'Base')
+        : activeWalletConnectionMessage(sessionState, locale, activeAddress);
+    status.style.color = sessionState.matches ? '#86efac' : '#fbbf24';
 }
 
 async function loadAirdropEligibility() {
@@ -6344,6 +6629,11 @@ async function buildVerifiedLendingOperation() {
     const amount = document.getElementById('lendingAmount')?.value || '';
     const result = document.getElementById('lendingResultContainer');
     if (!result) return;
+    const connectionState = await getActiveWalletSessionState();
+    if (!connectionState.matches) {
+        result.innerHTML = `<span style="color:#fca5a5;">${escapeHtml(activeWalletConnectionMessage(connectionState, locale))}</span>`;
+        return;
+    }
     result.replaceChildren();
     const hiddenAmount = document.createElement('input');
     hiddenAmount.type = 'hidden';
@@ -6409,6 +6699,7 @@ async function loadAccountOverview() {
                 : locale.accountOverviewSelectWallet;
         }
         loadAccountScheduleOverview(activeWallet);
+        loadAccountReadiness(activeWallet, security, telegram);
 
         const activityContainer = document.getElementById('accountOverviewActivity');
         if (!activityContainer) return;
@@ -6442,6 +6733,10 @@ async function loadAccountOverview() {
         setText('accountOverviewScheduleDetail', locale.accountOverviewScheduleDesc);
         const activityContainer = document.getElementById('accountOverviewActivity');
         if (activityContainer) activityContainer.innerHTML = `<div class="account-empty-state">${escapeHtml(locale.accountOverviewLoadError)}</div>`;
+        const readinessContainer = document.getElementById('accountReadinessContent');
+        const readinessSummary = document.getElementById('accountReadinessSummary');
+        if (readinessContainer) readinessContainer.innerHTML = `<div class="account-empty-state">${escapeHtml(locale.accountOverviewLoadError)}</div>`;
+        if (readinessSummary) readinessSummary.textContent = locale.accountOverviewUnavailable;
     }
 }
 
@@ -6512,6 +6807,15 @@ function renderDashboardContent(section) {
                         <button type="button" onclick="switchMenu(null, 'Settings')">${t.accountOverviewGoSettings}</button>
                     </div>
                 </div>
+            </div>
+
+            <div class="dashboard-card account-readiness-card">
+                <div class="account-section-heading">
+                    <div><div class="account-kicker">${t.accountReadinessKicker}</div><h3>${t.accountReadinessTitle}</h3></div>
+                    <span id="accountReadinessSummary" class="account-readiness-summary">${t.loading}</span>
+                </div>
+                <p class="account-readiness-desc">${t.accountReadinessDesc}</p>
+                <div id="accountReadinessContent" class="account-readiness-grid"><div class="account-empty-state">${t.loading}</div></div>
             </div>
 
             <div class="dashboard-card account-activity-card">
@@ -6629,10 +6933,16 @@ function renderDashboardContent(section) {
     } else if (section === 'Looter') {
         centerHtml = `
             <div class="dashboard-card">
-                <h3 style="color: #fff; margin-top: 0; font-size: 16px;">🚀 ${t.lootTitle}</h3>
+                <div class="opportunity-monitor-heading">
+                    <div>
+                        <span class="account-kicker">OFFICIAL SOURCES</span>
+                        <h3>${t.lootTitle}</h3>
+                    </div>
+                    <button type="button" onclick="loadOfficialOpportunities(); loadAirdropEligibility();" class="btn-dark-sm opportunity-refresh">${t.opportunityRefresh}</button>
+                </div>
                 <p style="color: var(--text-muted); font-size: 13px; line-height: 1.5;">${t.lootDesc}</p>
                 <button type="button" onclick="startScanningDrops()" class="btn-purple-lg" style="font-size: 13px; padding: 12px 20px; width:auto; margin-top: 4px;">${t.btnScan}</button>
-                <div id="drop-logs" style="margin-top: 16px; background: var(--bg-main); padding: 16px; border-radius: 12px; font-family: monospace; font-size: 13px; line-height: 1.5; color: var(--text-muted); min-height: 250px; max-height: 380px; overflow-y: auto; border: 1px solid var(--border-color);">${t.logInitLoot}</div>
+                <div id="drop-logs" class="opportunity-scan-log">${t.logInitLoot}</div>
             </div>
             <div class="dashboard-card">
                 <h3 style="color:#fff; margin-top:0; font-size:16px;">${t.eligibilityTitle}</h3>
@@ -6640,8 +6950,14 @@ function renderDashboardContent(section) {
                 <div id="airdropEligibilityContainer" style="display:flex; flex-direction:column; gap:10px;">${t.loading}</div>
             </div>
             <div class="dashboard-card">
-                <h3 style="color:#fff; margin-top:0; font-size:16px;">${t.opportunitiesTitle}</h3>
+                <div class="opportunity-monitor-heading">
+                    <div>
+                        <h3>${t.opportunitiesTitle}</h3>
+                        <span id="officialOpportunitiesCount" class="opportunity-count"></span>
+                    </div>
+                </div>
                 <p style="color:var(--text-muted); font-size:13px; line-height:1.5;">${t.opportunitiesDesc}</p>
+                <div class="opportunity-safety-note">${t.opportunitySafetyNotice}</div>
                 <div id="officialOpportunitiesContainer" style="display:flex; flex-direction:column; gap:10px;">${t.loading}</div>
                 <div id="officialOpportunityAdminContainer"></div>
             </div>
@@ -6663,6 +6979,12 @@ function renderDashboardContent(section) {
             ['lending', t.activityTabLending || 'Lending'],
             ['journal', t.activityTabJournal || 'Journal'],
         ].map(([key, label]) => `<button type="button" onclick="switchActivityPane('${key}')" style="background:${activityPane === key ? 'rgba(124,58,237,.22)' : 'var(--bg-main)'}; color:${activityPane === key ? '#e9d5ff' : 'var(--text-muted)'}; border:1px solid ${activityPane === key ? '#7c3aed' : 'var(--border-color)'}; padding:9px 11px; border-radius:9px; cursor:pointer; font-size:12px; white-space:nowrap;">${label}</button>`).join('');
+        const activeWalletConnectControls = `
+            <div class="operation-wallet-connect">
+                <button type="button" onclick="connectActiveWalletForActions(this)" class="btn-dark-sm operation-wallet-connect-button">${t.operationConnectActiveWallet}</button>
+                <button type="button" onclick="connectActiveWalletWithWalletConnect(this)" class="btn-dark-sm operation-wallet-connect-button operation-wallet-connect-wc">${t.btnConnectWalletConnect}</button>
+            </div>
+        `;
 
         const dexPane = `
             <div class="dashboard-card" style="margin-bottom:16px;">
@@ -6698,6 +7020,7 @@ function renderDashboardContent(section) {
                     <button type="button" class="btn-dark-sm" onclick="useOperationMaxAmount()" style="padding:4px 8px; font-size:11px;">${t.maxShort || 'MAX'}</button>
                 </div>
                 <div id="operationWalletStatus" style="margin-top:8px; color:var(--text-muted); font-size:12px;">${t.loading}</div>
+                ${activeWalletConnectControls}
                 <div style="margin-top:10px;">
                     <label style="color:var(--text-muted); font-size:12px;">${t.labelSlippage || 'Slippage'}:
                         <select id="dexSlippage" class="auth-input" style="margin-top:5px; font-size:13px; padding:6px 12px;">
@@ -6741,6 +7064,7 @@ function renderDashboardContent(section) {
                     <button type="button" class="btn-dark-sm" onclick="useOperationMaxAmount()" style="padding:4px 8px; font-size:11px;">${t.maxShort || 'MAX'}</button>
                 </div>
                 <div id="operationWalletStatus" style="margin-top:8px; color:var(--text-muted); font-size:12px;">${t.loading}</div>
+                ${activeWalletConnectControls}
                 <div id="universalBridgeCatalogStatus" style="margin-top:6px; color:var(--text-muted); font-size:12px;"></div>
                 <button type="button" id="universalBridgeQuoteButton" onclick="requestUniversalBridgeQuote()" class="btn-purple-lg" style="margin-top:14px; width:100%; font-size:13px; padding:12px;">${t.bridgeGetQuote || 'Get Quote'}</button>
                 <button type="button" id="universalBridgeReviewButton" onclick="executeUniversalBridge()" class="btn-dark-sm" style="display:none; margin-top:9px; width:100%; padding:11px; border-color:#7c3aed;">${t.universalBridgeReview}</button>
@@ -6778,6 +7102,8 @@ function renderDashboardContent(section) {
                         <input id="lendingAmount" inputmode="decimal" placeholder="10.0" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;">
                     </label>
                 </div>
+                <div id="lendingWalletStatus" style="margin-top:10px; color:var(--text-muted); font-size:12px;">${t.loading}</div>
+                ${activeWalletConnectControls}
                 <div style="margin-top:10px; font-size:12px; color:var(--text-muted);">${t.lendingLiveRateNote || 'The live variable rate and available balance are checked before wallet confirmation.'}</div>
                 <button type="button" id="lendingBuildButton" onclick="buildVerifiedLendingOperation()" class="btn-purple-lg" style="margin-top:14px; width:100%; font-size:13px; padding:12px;">${t.lendingSubmit || 'Supply / Withdraw'}</button>
                 <div id="lendingResultContainer" style="margin-top:12px; padding:12px; background:var(--bg-main); border:1px solid var(--border-color); border-radius:10px; font-size:12px;"></div>
@@ -6809,7 +7135,10 @@ function renderDashboardContent(section) {
         
         if (activityPane === 'dex') setTimeout(loadOperationBuilderWalletStatus, 50);
         if (activityPane === 'bridges') setTimeout(loadOperationBuilderWalletStatus, 50);
-        if (activityPane === 'lending') setTimeout(loadLendingPositions, 50);
+        if (activityPane === 'lending') setTimeout(() => {
+            loadLendingPositions();
+            loadLendingWalletConnectionStatus();
+        }, 50);
         if (activityPane === 'journal') setTimeout(loadOperationsJournal, 50);
     } else if (section === 'Wallets') {
         const isTipHidden = !isInterfaceHintVisible('wallet-proxy-tip');
