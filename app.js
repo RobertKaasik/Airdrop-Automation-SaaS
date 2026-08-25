@@ -116,6 +116,8 @@ const universalBridgeRefreshCooldowns = new Map();
 let directTransferWallets = [];
 let directTransferBalanceData = null;
 let operationsJournalFilter = 'all';
+let operationsJournalTypeFilter = 'all';
+let operationsJournalWalletFilter = 'all';
 let operationsJournalCheckCooldownUntil = 0;
 let lastSaveTimestamp = 0; 
 let lastRandomizeTimestamp = 0; 
@@ -2497,7 +2499,7 @@ async function disconnectBaseWalletSession() {
     }
 }
 
-async function connectBaseWallet() {
+async function connectBaseWallet(requestAccountPicker = true) {
     const t = translations[currentLang];
     const provider = window.ethereum;
     if (!provider || typeof provider.request !== 'function') {
@@ -2505,9 +2507,20 @@ async function connectBaseWallet() {
         return;
     }
     try {
-        // `eth_requestAccounts` is the standard MetaMask connection flow. Do not
-        // request a second permissions dialog here: some extension versions reject
-        // it before the account picker is even shown.
+        // When the site is already connected, MetaMask otherwise returns the last
+        // permitted account without showing a picker. This explicit request lets
+        // the user decide which public addresses may be configured in AIRDROP-X.
+        if (requestAccountPicker && provider.isMetaMask) {
+            try {
+                await provider.request({ method: 'wallet_requestPermissions', params: [{ eth_accounts: {} }] });
+            } catch (permissionError) {
+                const error = new Error('wallet_account_picker_unavailable');
+                error.code = permissionError?.code === 4001
+                    ? 'wallet_account_picker_cancelled'
+                    : 'wallet_account_picker_unavailable';
+                throw error;
+            }
+        }
         const accounts = await provider.request({ method: 'eth_requestAccounts' });
         const selectedAccounts = selectedEvmWalletAddresses(accounts);
         if (!selectedAccounts[0]) {
@@ -2523,6 +2536,10 @@ async function connectBaseWallet() {
     } catch (error) {
         const message = error?.code === 4001
             ? t.walletConnectRejected
+            : error?.code === 'wallet_account_picker_cancelled'
+                ? t.walletAccountPickerCancelled
+                : error?.code === 'wallet_account_picker_unavailable'
+                    ? t.walletAccountPickerUnavailable
             : error?.code === 'wallet_add_no_account'
                 ? t.operationWalletNoAccount
                 : String(error?.message || '').includes('base_mainnet_not_selected')
@@ -2917,6 +2934,16 @@ let activeBaseSwapQuote = null;
 let activeAaveSupplyQuote = null;
 let activeAaveWithdrawQuote = null;
 
+function setAaveQuoteExpiry(quote) {
+    if (!quote || typeof quote !== 'object') return quote;
+    quote.expires_at = Date.now() + Math.max(1, Number(quote.expires_in || 0)) * 1000;
+    return quote;
+}
+
+function isAaveQuoteFresh(quote) {
+    return Boolean(quote && Number(quote.expires_at || 0) > Date.now());
+}
+
 function formatUsdcAmount(rawAmount) {
     try {
         const raw = BigInt(String(rawAmount || '0'));
@@ -3141,39 +3168,6 @@ async function connectWalletConnectBase() {
     }
 }
 
-async function addNewWalletToDB() {
-    const username = getCurrentUsername();
-    const address = document.getElementById('newWalletAddress').value.trim();
-    const label = document.getElementById('newWalletLabel').value.trim();
-    const proxy = document.getElementById('newWalletProxy').value.trim();
-    const msg = document.getElementById('walletResponseMsg');
-
-    if (!username) {
-        showNotification(translations[currentLang].walletSessionRequired, 'error');
-        return;
-    }
-    try {
-        const res = await fetch('/api/wallets/add', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, wallet_address: address, label, proxy })
-        });
-        const data = await res.json();
-        if(res.ok) {
-            showNotification(translations[currentLang].walletAddSuccess);
-            document.getElementById('newWalletAddress').value = '';
-            document.getElementById('newWalletLabel').value = '';
-            document.getElementById('newWalletProxy').value = '';
-            loadWalletsFromDB();
-        } else {
-            const errText = translateBackendDetail(data.detail);
-            if (msg) msg.innerHTML = `<span style="color: #ef4444;">${escapeHtml(errText)}</span>`;
-        }
-    } catch (_) {
-        if (msg) msg.innerHTML = `<span style="color: #ef4444;">${escapeHtml(translations[currentLang].walletAddConnectionFailed)}</span>`;
-    }
-}
-
 async function getActiveWalletSessionState(address = getActiveBaseWalletAddress()) {
     const expectedAddress = String(address || '').trim().toLowerCase();
     if (!/^0x[0-9a-f]{40}$/.test(expectedAddress)) return { matches: false, reason: 'missing-active-address' };
@@ -3190,6 +3184,13 @@ async function getActiveWalletSessionState(address = getActiveBaseWalletAddress(
     } catch (_) {
         return { matches: false, reason: 'request-failed' };
     }
+}
+
+async function switchToOperationNetwork(provider, network = 'Base') {
+    // DEX and lending operate on Base; Bridges must connect on the selected
+    // source network so the wallet is ready for the final, user-confirmed step.
+    if (network === 'Base') return switchToBaseMainnet(provider);
+    return switchToUniversalBridgeNetwork(provider, network);
 }
 
 async function activeWalletSessionMatches(address = getActiveBaseWalletAddress()) {
@@ -3214,7 +3215,7 @@ async function refreshActiveWalletConnectionUi() {
     await loadLendingWalletConnectionStatus();
 }
 
-async function connectActiveWalletForActions(button) {
+async function connectActiveWalletForActions(button, network = 'Base') {
     const locale = translations[getActiveLang()];
     const expectedAddress = getActiveBaseWalletAddress();
     const provider = window.ethereum;
@@ -3249,7 +3250,7 @@ async function connectActiveWalletForActions(button) {
             error.code = 'active_wallet_wrong_account';
             throw error;
         }
-        await switchToBaseMainnet(provider);
+        await switchToOperationNetwork(provider, network);
         setConnectedBaseWalletAddress(selectedAddress);
         updateBaseWalletConnectionState(selectedAddress);
         await refreshActiveWalletConnectionUi();
@@ -3261,7 +3262,7 @@ async function connectActiveWalletForActions(button) {
                 ? locale.operationWalletNoAccount
                 : error?.code === 'active_wallet_wrong_account'
                     ? locale.operationWalletWrongAccount.replace('{address}', `${expectedAddress.slice(0, 6)}…${expectedAddress.slice(-4)}`)
-                    : String(error?.message || '').includes('base_mainnet_not_selected')
+                    : /(?:base_mainnet_not_selected|universal_bridge_network_not_selected)/.test(String(error?.message || ''))
                         ? locale.operationWalletNetworkRequired
                         : locale.operationWalletConnectionFailed;
         console.warn('Active wallet connection failed', error);
@@ -3279,7 +3280,7 @@ async function connectSavedWalletForActions(walletAddress, button) {
     await connectActiveWalletForActions(button);
 }
 
-async function connectActiveWalletWithWalletConnect(button) {
+async function connectActiveWalletWithWalletConnect(button, network = 'Base') {
     const locale = translations[getActiveLang()];
     const expectedAddress = getActiveBaseWalletAddress();
     if (!/^0x[0-9a-fA-F]{40}$/.test(expectedAddress)) {
@@ -3304,7 +3305,7 @@ async function connectActiveWalletWithWalletConnect(button) {
             error.code = 'active_wallet_wrong_account';
             throw error;
         }
-        await switchToBaseMainnet(provider);
+        await switchToOperationNetwork(provider, network);
         setConnectedBaseWalletAddress(selectedAddress);
         updateBaseWalletConnectionState(selectedAddress);
         await refreshActiveWalletConnectionUi();
@@ -3317,6 +3318,8 @@ async function connectActiveWalletWithWalletConnect(button) {
                 ? locale.operationWalletWrongAccount.replace('{address}', `${expectedAddress.slice(0, 6)}…${expectedAddress.slice(-4)}`)
                 : error?.code === 4001
                     ? locale.walletConnectRejected
+                    : /(?:base_mainnet_not_selected|universal_bridge_network_not_selected)/.test(String(error?.message || ''))
+                        ? locale.operationWalletNetworkRequired
                     : locale.operationWalletConnectionFailed;
         console.warn('WalletConnect active wallet connection failed', error);
         showNotification(message, 'error');
@@ -5326,6 +5329,17 @@ async function requestUniversalBridgeQuote() {
         setUniversalBridgeResult(locale.universalBridgeInvalid, '#fca5a5');
         return;
     }
+    const connectionState = await getActiveWalletSessionState(activeAddress);
+    if (!connectionState.matches) {
+        const message = activeWalletConnectionMessage(connectionState, locale, activeAddress);
+        const status = document.getElementById('operationWalletStatus');
+        if (status) {
+            status.textContent = message;
+            status.style.color = '#fbbf24';
+        }
+        setUniversalBridgeResult(message, '#fca5a5');
+        return;
+    }
     try {
         setButtonLoading(button, true, locale.universalBridgeQuoteLoading);
         setUniversalBridgeResult(locale.universalBridgeQuoteLoading, '#bfdbfe');
@@ -5555,9 +5569,53 @@ async function loadUniversalBridgeHistory() {
 }
 
 function setOperationsJournalFilter(filter) {
-    if (!['all', 'pending', 'completed'].includes(filter)) return;
+    if (!['all', 'pending', 'completed', 'failed'].includes(filter)) return;
     operationsJournalFilter = filter;
     renderDashboardContent('Farming');
+}
+
+function setOperationsJournalTypeFilter(value) {
+    if (!['all', 'bridge', 'swap', 'lending', 'transfer'].includes(value)) return;
+    operationsJournalTypeFilter = value;
+    loadOperationsJournal();
+}
+
+function setOperationsJournalWalletFilter(value) {
+    if (value !== 'all' && !/^0x[0-9a-fA-F]{40}$/.test(value || '')) return;
+    operationsJournalWalletFilter = value;
+    loadOperationsJournal();
+}
+
+async function loadOperationsJournalWalletOptions() {
+    const select = document.getElementById('operationsJournalWalletFilter');
+    if (!select) return;
+    const locale = translations[getActiveLang()];
+    const username = getCurrentUsername();
+    if (!username) return;
+    try {
+        const response = await fetch(`/api/wallets/${encodeURIComponent(username)}`);
+        const data = await response.json();
+        if (!response.ok || !Array.isArray(data.wallets)) throw new Error('wallets_unavailable');
+        select.replaceChildren();
+        const allOption = document.createElement('option');
+        allOption.value = 'all';
+        allOption.textContent = locale.operationsJournalWalletAll;
+        select.append(allOption);
+        data.wallets.forEach((wallet) => {
+            const address = String(wallet.wallet_address || '');
+            if (!/^0x[0-9a-fA-F]{40}$/.test(address)) return;
+            const option = document.createElement('option');
+            option.value = address;
+            const fallback = `${address.slice(0, 6)}…${address.slice(-4)}`;
+            option.textContent = wallet.label ? `${wallet.label} · ${fallback}` : fallback;
+            select.append(option);
+        });
+        const canKeep = [...select.options].some((option) => option.value.toLowerCase() === String(operationsJournalWalletFilter).toLowerCase());
+        select.value = canKeep ? operationsJournalWalletFilter : 'all';
+        operationsJournalWalletFilter = select.value;
+    } catch (_) {
+        select.style.display = 'none';
+    }
 }
 
 function setOperationsJournalCheckButtonLoading(button, loading) {
@@ -5724,6 +5782,11 @@ async function requestAaveUsdcSupplyQuote() {
         aaveSupplyResult(locale.defiSupplyWalletRequired, '#fca5a5');
         return;
     }
+    const connectionState = await getActiveWalletSessionState(activeAddress);
+    if (!connectionState.matches) {
+        aaveSupplyResult(activeWalletConnectionMessage(connectionState, locale, activeAddress), '#fca5a5');
+        return;
+    }
     try {
         setButtonLoading(button, true, locale.defiSupplyLoading);
         const response = await fetch('/api/defi/aave-base/usdc-supply-quote', {
@@ -5733,7 +5796,7 @@ async function requestAaveUsdcSupplyQuote() {
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.detail || 'aave_supply_quote_failed');
-        activeAaveSupplyQuote = data;
+        activeAaveSupplyQuote = setAaveQuoteExpiry(data);
         const ratePercent = Number(data.annual_supply_rate_percent || 0);
         const rate = ratePercent.toLocaleString(undefined, { maximumFractionDigits: 4 });
         const suppliedAmount = Number(data.amount);
@@ -5804,6 +5867,11 @@ async function submitAaveUsdcSupply() {
         aaveSupplyResult(locale.defiSupplyExpired, '#fca5a5');
         return;
     }
+    if (!isAaveQuoteFresh(quote)) {
+        activeAaveSupplyQuote = null;
+        aaveSupplyResult(locale.defiSupplyExpired, '#fbbf24');
+        return;
+    }
     try {
         let accounts = await provider.request({ method: 'eth_accounts' });
         if (!Array.isArray(accounts) || !accounts.length) accounts = await provider.request({ method: 'eth_requestAccounts' });
@@ -5827,8 +5895,18 @@ async function submitAaveUsdcSupply() {
             });
             aaveSupplyResult(locale.defiSupplyApprovalWaiting, '#bfdbfe');
             await waitForAaveSupplyApproval(provider, approvalHash);
+            if (!isAaveQuoteFresh(quote)) {
+                activeAaveSupplyQuote = null;
+                aaveSupplyResult(locale.defiSupplyExpired, '#fbbf24');
+                return;
+            }
         }
         if (!await openAaveSupplyConfirmation(quote, false)) return;
+        if (!isAaveQuoteFresh(quote)) {
+            activeAaveSupplyQuote = null;
+            aaveSupplyResult(locale.defiSupplyExpired, '#fbbf24');
+            return;
+        }
         setButtonLoading(button, true, locale.defiSupplySigning);
         const txHash = await provider.request({
             method: 'eth_sendTransaction',
@@ -5854,7 +5932,9 @@ async function submitAaveUsdcSupply() {
         const message = String(error?.message || '');
         const display = message.includes('approval_pending')
             ? locale.defiSupplyApprovalPending
-            : (message.includes('wallet_mismatch') ? locale.defiSupplyWalletRequired : locale.defiSupplyFailed);
+            : (message.includes('quote_expired')
+                ? locale.defiSupplyExpired
+                : (message.includes('wallet_mismatch') ? locale.defiSupplyWalletRequired : locale.defiSupplyFailed));
         aaveSupplyResult(rejected ? locale.defiSupplyRejected : display, '#fca5a5');
     } finally {
         setButtonLoading(button, false, locale.defiSupplyReview);
@@ -5889,6 +5969,11 @@ async function requestAaveUsdcWithdrawQuote() {
         aaveWithdrawResult(locale.defiWithdrawWalletRequired, '#fca5a5');
         return;
     }
+    const connectionState = await getActiveWalletSessionState(activeAddress);
+    if (!connectionState.matches) {
+        aaveWithdrawResult(activeWalletConnectionMessage(connectionState, locale, activeAddress), '#fca5a5');
+        return;
+    }
     try {
         setButtonLoading(button, true, locale.defiWithdrawLoading);
         const response = await fetch('/api/defi/aave-base/usdc-withdraw-quote', {
@@ -5898,7 +5983,7 @@ async function requestAaveUsdcWithdrawQuote() {
         });
         const data = await response.json();
         if (!response.ok) throw new Error(data.detail || 'aave_withdraw_quote_failed');
-        activeAaveWithdrawQuote = data;
+        activeAaveWithdrawQuote = setAaveQuoteExpiry(data);
         const gasWarning = data.gas_reserve_met ? '' : `<div style="color:#fca5a5; margin-top:5px;">${escapeHtml(locale.defiWithdrawNoGas.replace('{amount}', data.gas_reserve || ''))}</div>`;
         if (result) {
             result.innerHTML = `<div style="color:#86efac; font-weight:600;">${escapeHtml(locale.defiWithdrawReady.replace('{amount}', data.amount))}</div><div style="color:var(--text-muted); margin-top:5px;">${escapeHtml(locale.defiWithdrawAvailable.replace('{amount}', data.position_balance))}</div>${gasWarning}${data.gas_reserve_met ? `<button type="button" id="aaveWithdrawReviewButton" onclick="submitAaveUsdcWithdraw()" class="btn-purple-lg" style="font-size:12px; padding:9px 12px; width:auto; margin-top:10px;">${escapeHtml(locale.defiWithdrawReview)}</button>` : ''}`;
@@ -5946,6 +6031,11 @@ async function submitAaveUsdcWithdraw() {
         aaveWithdrawResult(locale.defiWithdrawExpired, '#fca5a5');
         return;
     }
+    if (!isAaveQuoteFresh(quote)) {
+        activeAaveWithdrawQuote = null;
+        aaveWithdrawResult(locale.defiWithdrawExpired, '#fbbf24');
+        return;
+    }
     try {
         let accounts = await provider.request({ method: 'eth_accounts' });
         if (!Array.isArray(accounts) || !accounts.length) accounts = await provider.request({ method: 'eth_requestAccounts' });
@@ -5955,6 +6045,11 @@ async function submitAaveUsdcWithdraw() {
         if (!validateAaveWithdrawTransaction(quote, fromAddress)) throw new Error('aave_withdraw_transaction_invalid');
         await switchToBaseMainnet(provider);
         if (!await openAaveWithdrawConfirmation(quote)) return;
+        if (!isAaveQuoteFresh(quote)) {
+            activeAaveWithdrawQuote = null;
+            aaveWithdrawResult(locale.defiWithdrawExpired, '#fbbf24');
+            return;
+        }
         setButtonLoading(button, true, locale.defiWithdrawSigning);
         const txHash = await provider.request({
             method: 'eth_sendTransaction',
@@ -5978,7 +6073,9 @@ async function submitAaveUsdcWithdraw() {
     } catch (error) {
         const rejected = error?.code === 4001 || error?.code === 'ACTION_REJECTED';
         const message = String(error?.message || '');
-        const display = message.includes('wallet_mismatch') ? locale.defiWithdrawWalletRequired : locale.defiWithdrawFailed;
+        const display = message.includes('quote_expired')
+            ? locale.defiWithdrawExpired
+            : (message.includes('wallet_mismatch') ? locale.defiWithdrawWalletRequired : locale.defiWithdrawFailed);
         aaveWithdrawResult(rejected ? locale.defiWithdrawRejected : display, '#fca5a5');
     } finally {
         setButtonLoading(button, false, locale.defiWithdrawReview);
@@ -6042,18 +6139,44 @@ function formatOperationsJournalUsd(value) {
     return `≈ $${number.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+function renderOperationsJournalSummary(records) {
+    const summary = document.getElementById('operationsJournalSummary');
+    if (!summary) return;
+    const locale = translations[getActiveLang()];
+    const total = records.length;
+    const pending = records.filter((record) => ['submitted', 'in_progress'].includes(record.status)).length;
+    const completed = records.filter((record) => record.status === 'completed').length;
+    const review = records.filter((record) => record.status === 'failed').length;
+    const items = [
+        [locale.operationsJournalSummaryTotal, total, '#e9d5ff'],
+        [locale.operationsJournalSummaryPending, pending, '#fde68a'],
+        [locale.operationsJournalSummaryCompleted, completed, '#86efac'],
+        [locale.operationsJournalSummaryReview, review, '#fca5a5'],
+    ];
+    summary.innerHTML = items.map(([label, value, color]) => `
+        <div class="operations-journal-summary-card">
+            <span>${escapeHtml(label)}</span><b style="color:${color};">${Number(value)}</b>
+        </div>`).join('');
+}
+
 async function loadOperationsJournal() {
     const locale = translations[getActiveLang()];
     const container = document.getElementById('operationsJournalList');
     if (!container) return;
     try {
-        const response = await fetch('/api/operations/history');
+        const params = new URLSearchParams();
+        if (operationsJournalTypeFilter !== 'all') params.set('operation_type', operationsJournalTypeFilter);
+        if (operationsJournalWalletFilter !== 'all') params.set('wallet_address', operationsJournalWalletFilter);
+        if (['completed', 'failed'].includes(operationsJournalFilter)) params.set('status', operationsJournalFilter);
+        const query = params.toString();
+        const response = await fetch(`/api/operations/history${query ? `?${query}` : ''}`);
         const data = await response.json();
         if (!response.ok || !Array.isArray(data.records)) throw new Error('operations_history_unavailable');
         const records = data.records.filter((record) => {
             if (operationsJournalFilter === 'pending') return ['submitted', 'in_progress'].includes(record.status);
             return operationsJournalFilter === 'all' || record.status === operationsJournalFilter;
         });
+        renderOperationsJournalSummary(data.records);
         if (!records.length) {
             container.innerHTML = `<div style="padding:14px 0; color:var(--text-muted); font-size:13px;">${locale.operationsJournalEmpty}</div>`;
             return;
@@ -6077,6 +6200,7 @@ async function loadOperationsJournal() {
             </div>`;
         }).join('');
     } catch (_) {
+        renderOperationsJournalSummary([]);
         container.innerHTML = `<div style="padding:14px 0; color:#fca5a5; font-size:13px;">${locale.operationsJournalLoadError}</div>`;
     }
 }
@@ -6164,11 +6288,18 @@ async function executeUniversalBridge() {
         return;
     }
     try {
+        const activeAddress = getActiveBaseWalletAddress();
+        const connectionState = await getActiveWalletSessionState(activeAddress);
+        if (!connectionState.matches) {
+            setUniversalBridgeResult(activeWalletConnectionMessage(connectionState, locale, activeAddress), '#fca5a5');
+            return;
+        }
         let accounts = await provider.request({ method: 'eth_accounts' });
         if (!Array.isArray(accounts) || !accounts[0]) accounts = await provider.request({ method: 'eth_requestAccounts' });
-        const fromAddress = accounts?.[0];
-        const activeAddress = getActiveBaseWalletAddress();
-        if (!/^0x[0-9a-fA-F]{40}$/.test(fromAddress || '') || fromAddress.toLowerCase() !== activeAddress.toLowerCase()) {
+        const fromAddress = selectedEvmWalletAddresses(accounts).find(
+            (address) => address.toLowerCase() === activeAddress.toLowerCase(),
+        );
+        if (!/^0x[0-9a-fA-F]{40}$/.test(fromAddress || '')) {
             throw new Error('universal_bridge_wallet_mismatch');
         }
         setButtonLoading(button, true, locale.universalBridgeSigning);
@@ -6212,7 +6343,11 @@ async function executeUniversalBridge() {
         const message = String(error?.message || '');
         const display = message.includes('universal_bridge_approval_pending')
             ? locale.universalBridgeApprovalPending
-            : (rejected ? locale.universalBridgeRejected : (translateBackendDetail(message) || locale.universalBridgeFailed));
+            : message.includes('universal_bridge_wallet_mismatch')
+                ? locale.baseSwapActiveWalletMismatch
+                : message.includes('universal_bridge_network_not_selected')
+                    ? locale.operationWalletNetworkRequired
+                    : (rejected ? locale.universalBridgeRejected : (translateBackendDetail(message) || locale.universalBridgeFailed));
         setUniversalBridgeResult(display, '#fca5a5');
     } finally {
         setButtonLoading(button, false, locale.universalBridgeReview);
@@ -6980,10 +7115,10 @@ function renderDashboardContent(section) {
             ['lending', t.activityTabLending || 'Lending'],
             ['journal', t.activityTabJournal || 'Journal'],
         ].map(([key, label]) => `<button type="button" onclick="switchActivityPane('${key}')" style="background:${activityPane === key ? 'rgba(124,58,237,.22)' : 'var(--bg-main)'}; color:${activityPane === key ? '#e9d5ff' : 'var(--text-muted)'}; border:1px solid ${activityPane === key ? '#7c3aed' : 'var(--border-color)'}; padding:9px 11px; border-radius:9px; cursor:pointer; font-size:12px; white-space:nowrap;">${label}</button>`).join('');
-        const activeWalletConnectControls = `
+        const activeWalletConnectControls = (networkExpression = "'Base'") => `
             <div class="operation-wallet-connect">
-                <button type="button" onclick="connectActiveWalletForActions(this)" class="btn-dark-sm operation-wallet-connect-button">${t.operationConnectActiveWallet}</button>
-                <button type="button" onclick="connectActiveWalletWithWalletConnect(this)" class="btn-dark-sm operation-wallet-connect-button operation-wallet-connect-wc">${t.btnConnectWalletConnect}</button>
+                <button type="button" onclick="connectActiveWalletForActions(this, ${networkExpression})" class="btn-dark-sm operation-wallet-connect-button">${t.operationConnectActiveWallet}</button>
+                <button type="button" onclick="connectActiveWalletWithWalletConnect(this, ${networkExpression})" class="btn-dark-sm operation-wallet-connect-button operation-wallet-connect-wc">${t.btnConnectWalletConnect}</button>
             </div>
         `;
 
@@ -7021,7 +7156,7 @@ function renderDashboardContent(section) {
                     <button type="button" class="btn-dark-sm" onclick="useOperationMaxAmount()" style="padding:4px 8px; font-size:11px;">${t.maxShort || 'MAX'}</button>
                 </div>
                 <div id="operationWalletStatus" style="margin-top:8px; color:var(--text-muted); font-size:12px;">${t.loading}</div>
-                ${activeWalletConnectControls}
+                ${activeWalletConnectControls()}
                 <div style="margin-top:10px;">
                     <label style="color:var(--text-muted); font-size:12px;">${t.labelSlippage || 'Slippage'}:
                         <select id="dexSlippage" class="auth-input" style="margin-top:5px; font-size:13px; padding:6px 12px;">
@@ -7065,7 +7200,7 @@ function renderDashboardContent(section) {
                     <button type="button" class="btn-dark-sm" onclick="useOperationMaxAmount()" style="padding:4px 8px; font-size:11px;">${t.maxShort || 'MAX'}</button>
                 </div>
                 <div id="operationWalletStatus" style="margin-top:8px; color:var(--text-muted); font-size:12px;">${t.loading}</div>
-                ${activeWalletConnectControls}
+                ${activeWalletConnectControls('getOperationBuilderSource()')}
                 <div id="universalBridgeCatalogStatus" style="margin-top:6px; color:var(--text-muted); font-size:12px;"></div>
                 <button type="button" id="universalBridgeQuoteButton" onclick="requestUniversalBridgeQuote()" class="btn-purple-lg" style="margin-top:14px; width:100%; font-size:13px; padding:12px;">${t.bridgeGetQuote || 'Get Quote'}</button>
                 <button type="button" id="universalBridgeReviewButton" onclick="executeUniversalBridge()" class="btn-dark-sm" style="display:none; margin-top:9px; width:100%; padding:11px; border-color:#7c3aed;">${t.universalBridgeReview}</button>
@@ -7104,7 +7239,7 @@ function renderDashboardContent(section) {
                     </label>
                 </div>
                 <div id="lendingWalletStatus" style="margin-top:10px; color:var(--text-muted); font-size:12px;">${t.loading}</div>
-                ${activeWalletConnectControls}
+                ${activeWalletConnectControls()}
                 <div style="margin-top:10px; font-size:12px; color:var(--text-muted);">${t.lendingLiveRateNote || 'The live variable rate and available balance are checked before wallet confirmation.'}</div>
                 <button type="button" id="lendingBuildButton" onclick="buildVerifiedLendingOperation()" class="btn-purple-lg" style="margin-top:14px; width:100%; font-size:13px; padding:12px;">${t.lendingSubmit || 'Supply / Withdraw'}</button>
                 <div id="lendingResultContainer" style="margin-top:12px; padding:12px; background:var(--bg-main); border:1px solid var(--border-color); border-radius:10px; font-size:12px;"></div>
@@ -7116,12 +7251,10 @@ function renderDashboardContent(section) {
         `;
 
         const journalFilters = [
-            ['all', t.operationsJournalAll], ['pending', t.operationsJournalPending], ['completed', t.operationsJournalCompleted],
+            ['all', t.operationsJournalAll], ['pending', t.operationsJournalPending], ['completed', t.operationsJournalCompleted], ['failed', t.operationsJournalIssues],
         ].map(([key, label]) => `<button type="button" onclick="setOperationsJournalFilter('${key}')" style="background:${operationsJournalFilter === key ? 'rgba(124,58,237,.22)' : 'var(--bg-main)'}; color:${operationsJournalFilter === key ? '#e9d5ff' : 'var(--text-muted)'}; border:1px solid ${operationsJournalFilter === key ? '#7c3aed' : 'var(--border-color)'}; padding:7px 10px; border-radius:8px; cursor:pointer; font-size:12px;">${label}</button>`).join('');
-        const journalAction = operationsJournalFilter === 'pending'
-            ? `<button type="button" id="operationsJournalCheckButton" onclick="checkPendingOperations(this)" class="btn-dark-sm" style="padding:7px 10px; font-size:12px; white-space:nowrap; border-color:#7c3aed;">${t.operationsJournalCheckPending}</button>`
-            : `<button type="button" onclick="loadOperationsJournal()" class="btn-dark-sm" style="padding:7px 10px; font-size:12px; white-space:nowrap;">${t.operationsJournalRefresh}</button>`;
-        const journalPane = `<div class="dashboard-card"><div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px;"><div><h3 style="color:#fff; margin:0 0 5px; font-size:16px;">${t.operationsJournalTitle}</h3><p style="color:var(--text-muted); font-size:13px; line-height:1.5; margin:0;">${t.operationsJournalDesc}</p></div>${journalAction}</div><div style="display:flex; flex-wrap:wrap; gap:7px; margin-top:14px;">${journalFilters}</div><div id="operationsJournalList" style="margin-top:12px;"><span style="color:var(--text-muted); font-size:13px;">${t.loading}</span></div></div>`;
+        const journalAction = `<div style="display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end;"><button type="button" onclick="loadOperationsJournal()" class="btn-dark-sm" style="padding:7px 10px; font-size:12px; white-space:nowrap;">${t.operationsJournalRefresh}</button>${operationsJournalFilter === 'pending' ? `<button type="button" id="operationsJournalCheckButton" onclick="checkPendingOperations(this)" class="btn-dark-sm" style="padding:7px 10px; font-size:12px; white-space:nowrap; border-color:#7c3aed;">${t.operationsJournalCheckPending}</button>` : ''}</div>`;
+        const journalPane = `<div class="dashboard-card operations-journal-card"><div class="operations-journal-heading"><div><h3>${t.operationsJournalTitle}</h3><p>${t.operationsJournalDesc}</p></div>${journalAction}</div><div class="operations-journal-summary" id="operationsJournalSummary"><span style="color:var(--text-muted); font-size:12px;">${t.loading}</span></div><div class="operations-journal-toolbar"><div class="operations-journal-filter-group">${journalFilters}</div><label>${t.operationsJournalTypeLabel}<select id="operationsJournalTypeFilter" onchange="setOperationsJournalTypeFilter(this.value)" class="auth-input"><option value="all"${operationsJournalTypeFilter === 'all' ? ' selected' : ''}>${t.operationsJournalTypeAll}</option><option value="bridge"${operationsJournalTypeFilter === 'bridge' ? ' selected' : ''}>${t.operationsJournalTypeBridge}</option><option value="swap"${operationsJournalTypeFilter === 'swap' ? ' selected' : ''}>${t.operationsJournalTypeSwap}</option><option value="lending"${operationsJournalTypeFilter === 'lending' ? ' selected' : ''}>${t.operationsJournalTypeLending}</option><option value="transfer"${operationsJournalTypeFilter === 'transfer' ? ' selected' : ''}>${t.operationsJournalTypeTransfer}</option></select></label><label>${t.operationsJournalWalletLabel}<select id="operationsJournalWalletFilter" onchange="setOperationsJournalWalletFilter(this.value)" class="auth-input"><option value="all">${t.operationsJournalWalletAll}</option></select></label></div><div id="operationsJournalList" style="margin-top:12px;"><span style="color:var(--text-muted); font-size:13px;">${t.loading}</span></div></div>`;
 
         const activePane = { dex: dexPane, bridges: bridgesPane, lending: lendingPane, journal: journalPane }[activityPane];
         
@@ -7140,21 +7273,11 @@ function renderDashboardContent(section) {
             loadLendingPositions();
             loadLendingWalletConnectionStatus();
         }, 50);
-        if (activityPane === 'journal') setTimeout(loadOperationsJournal, 50);
+        if (activityPane === 'journal') setTimeout(() => {
+            loadOperationsJournalWalletOptions();
+            loadOperationsJournal();
+        }, 50);
     } else if (section === 'Wallets') {
-        const isTipHidden = !isInterfaceHintVisible('wallet-proxy-tip');
-        const proxyTipHtml = isTipHidden ? '' : `
-            <div id="proxyTipBox" data-interface-hint="wallet-proxy-tip" style="background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.2); padding: 12px 14px; border-radius: 10px; font-size: 12px; color: #93c5fd; display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; box-sizing: border-box; line-height: 1.4;">
-                <div style="display: flex; align-items: flex-start; gap: 8px;">
-                    <span style="font-size: 14px; line-height: 1;">💡</span>
-                    <div>
-                        <b style="color: #bfdbfe;">${t.proxyTipTitle}</b> ${t.proxyTipDesc}
-                    </div>
-                </div>
-                <button type="button" onclick="hideProxyTip()" style="background: none; border: none; color: #93c5fd; cursor: pointer; font-size: 16px; padding: 0; line-height: 1; opacity: 0.7;" title="X">×</button>
-            </div>
-        `;
-
         centerHtml = `
             <div class="dashboard-card" style="margin-bottom: 16px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
@@ -7169,25 +7292,11 @@ function renderDashboardContent(section) {
                 <h3 style="color: #fff; margin-top: 0; font-size: 16px;">${t.walletConnectTitle}</h3>
                 <p style="color: var(--text-muted); font-size: 13px; line-height: 1.5; margin-bottom: 10px;">${t.walletConnectDesc}</p>
                 <div style="display:flex; flex-wrap:wrap; gap:8px;">
-                    <button type="button" onclick="connectBaseWallet()" class="btn-dark-sm" style="width:auto; padding:10px 14px;">${t.btnConnectBase}</button>
+                    <button type="button" onclick="connectBaseWallet(true)" class="btn-dark-sm" style="width:auto; padding:10px 14px;">${t.btnConnectBase}</button>
                     <button type="button" onclick="connectWalletConnectBase()" class="btn-dark-sm" style="width:auto; padding:10px 14px; border-color:#7c3aed;">${t.btnConnectWalletConnect}</button>
                     <button type="button" id="disconnectBaseWalletButton" onclick="disconnectBaseWalletSession()" class="btn-dark-sm" style="display:none; width:auto; padding:10px 14px; border-color:#ef4444; color:#fca5a5;">${t.walletDisconnect}</button>
                 </div>
                 <div id="baseWalletConnectionStatus" style="display:none; color:#86efac; font-size:12px; margin-top:8px;"></div>
-            </div>
-            <div class="dashboard-card">
-                <h3 style="color: #fff; margin-top: 0; font-size: 16px;">${t.walAddTitle}</h3>
-                <div style="display: flex; flex-direction: column; gap: 10px;">
-                    <input type="text" id="newWalletLabel" maxlength="40" placeholder="${t.walletLabelPlaceholder}" class="auth-input" style="font-size: 13px; padding: 10px 12px;">
-                    <input type="text" id="newWalletAddress" placeholder="${t.phAddr}" class="auth-input" style="font-size: 13px; padding: 10px 12px;">
-                    ${proxyTipHtml}
-                    <input type="text" id="newWalletProxy" placeholder="${t.phProxy}" class="auth-input" style="font-size: 13px; padding: 10px 12px;">
-                    <div style="display:flex; gap:8px; align-items:flex-start; padding:9px 10px; border:1px solid rgba(124,58,237,.28); background:rgba(124,58,237,.08); border-radius:9px; color:#d8b4fe; font-size:12px; line-height:1.4;">
-                        <span aria-hidden="true">✓</span><span>${t.walletProfileHint}</span>
-                    </div>
-                    <button type="button" onclick="addNewWalletToDB()" class="btn-modal-primary" style="margin-top:4px; padding: 12px; font-size: 14px;">${t.btnAddWal}</button>
-                </div>
-                <div id="walletResponseMsg" style="margin-top: 8px; font-size:12px;"></div>
             </div>
         `;
         setTimeout(() => {

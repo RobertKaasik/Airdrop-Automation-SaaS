@@ -3992,6 +3992,8 @@ async def get_universal_bridge_quote(
     to_config = LIFI_EVM_NETWORKS.get(to_network)
     if not from_config or not to_config:
         raise HTTPException(status_code=422, detail="Choose supported EVM networks")
+    if from_network == to_network:
+        raise HTTPException(status_code=422, detail="Choose two different networks for a bridge")
     wallet_address = get_saved_base_wallet(db, current_user.username, payload.wallet_address)
     from_token = get_lifi_token(from_network, payload.from_token_address)
     to_token = get_lifi_token(to_network, payload.to_token_address)
@@ -5322,6 +5324,7 @@ async def get_base_swap_history(
 async def get_operations_history(
     status: str = "all",
     operation_type: str = "all",
+    wallet_address: str = "",
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -5329,6 +5332,9 @@ async def get_operations_history(
     allowed_types = {"all", "bridge", "swap", "lending", "transfer"}
     if status not in allowed_statuses or operation_type not in allowed_types:
         raise HTTPException(status_code=422, detail="Invalid operation history filter")
+    wallet_address = wallet_address.strip()
+    if wallet_address and not is_valid_evm_address(wallet_address):
+        raise HTTPException(status_code=422, detail="Invalid operation wallet filter")
 
     operations = []
     bridge_records: List[UniversalBridgeRecord] = []
@@ -5336,21 +5342,25 @@ async def get_operations_history(
     lending_records: List[DefiOperationRecord] = []
     transfer_records: List[WalletTransferRecord] = []
     if operation_type in {"all", "bridge"}:
-        bridge_records = db.query(UniversalBridgeRecord).filter(
-            UniversalBridgeRecord.username == current_user.username,
-        ).order_by(UniversalBridgeRecord.created_at.desc()).limit(100).all()
+        bridge_query = db.query(UniversalBridgeRecord).filter(UniversalBridgeRecord.username == current_user.username)
+        if wallet_address:
+            bridge_query = bridge_query.filter(UniversalBridgeRecord.wallet_address.ilike(wallet_address))
+        bridge_records = bridge_query.order_by(UniversalBridgeRecord.created_at.desc()).limit(100).all()
     if operation_type in {"all", "swap"}:
-        swap_records = db.query(BaseSwapRecord).filter(
-            BaseSwapRecord.username == current_user.username,
-        ).order_by(BaseSwapRecord.created_at.desc()).limit(100).all()
+        swap_query = db.query(BaseSwapRecord).filter(BaseSwapRecord.username == current_user.username)
+        if wallet_address:
+            swap_query = swap_query.filter(BaseSwapRecord.wallet_address.ilike(wallet_address))
+        swap_records = swap_query.order_by(BaseSwapRecord.created_at.desc()).limit(100).all()
     if operation_type in {"all", "lending"}:
-        lending_records = db.query(DefiOperationRecord).filter(
-            DefiOperationRecord.username == current_user.username,
-        ).order_by(DefiOperationRecord.created_at.desc()).limit(100).all()
+        lending_query = db.query(DefiOperationRecord).filter(DefiOperationRecord.username == current_user.username)
+        if wallet_address:
+            lending_query = lending_query.filter(DefiOperationRecord.wallet_address.ilike(wallet_address))
+        lending_records = lending_query.order_by(DefiOperationRecord.created_at.desc()).limit(100).all()
     if operation_type in {"all", "transfer"}:
-        transfer_records = db.query(WalletTransferRecord).filter(
-            WalletTransferRecord.username == current_user.username,
-        ).order_by(WalletTransferRecord.created_at.desc()).limit(100).all()
+        transfer_query = db.query(WalletTransferRecord).filter(WalletTransferRecord.username == current_user.username)
+        if wallet_address:
+            transfer_query = transfer_query.filter(WalletTransferRecord.from_address.ilike(wallet_address))
+        transfer_records = transfer_query.order_by(WalletTransferRecord.created_at.desc()).limit(100).all()
 
     refresh_base_operation_statuses(db, swap_records, transfer_records)
     refresh_defi_operation_statuses(db, lending_records)
@@ -5359,6 +5369,7 @@ async def get_operations_history(
         operations.append({
             "id": f"bridge-{record.id}",
             "type": "bridge",
+            "wallet_address": record.wallet_address,
             "status": record.status or "submitted",
             "provider_status": record.provider_status,
             "from_network": record.from_network,
@@ -5376,6 +5387,7 @@ async def get_operations_history(
         operations.append({
             "id": f"swap-{record.id}",
             "type": "swap",
+            "wallet_address": record.wallet_address,
             "status": record.status or "submitted",
             "provider_status": None,
             "from_network": "Base",
@@ -5394,6 +5406,7 @@ async def get_operations_history(
         operations.append({
             "id": f"lending-{record.id}",
             "type": "lending",
+            "wallet_address": record.wallet_address,
             "operation_action": "withdraw" if is_withdrawal else "supply",
             "status": record.status or "submitted",
             "provider_status": None,
@@ -5412,6 +5425,7 @@ async def get_operations_history(
         operations.append({
             "id": f"transfer-{record.id}",
             "type": "transfer",
+            "wallet_address": record.from_address,
             "status": record.status or "submitted",
             "provider_status": None,
             "from_network": record.network,
