@@ -767,6 +767,8 @@ window.AIRDROP_LOCALES.en = {
   walletDefaultName: 'Wallet',
   walletActivate: 'Activate',
   walletConnectActive: 'Open MetaMask for {address}',
+  walletAddConnectionFailed: 'Unable to get an address from MetaMask. Unlock the extension and try again.',
+  walletSessionRequired: 'No user session was found. Sign in again.',
   walletActive: 'Active',
   walletActivated: 'Active wallet selected.',
   walletEdit: 'Edit',

@@ -767,6 +767,8 @@ window.AIRDROP_LOCALES.zh = {
   walletDefaultName: '钱包',
   walletActivate: '设为活跃',
   walletConnectActive: '为 {address} 打开 MetaMask',
+  walletAddConnectionFailed: '无法从 MetaMask 获取地址。请解锁扩展后重试。',
+  walletSessionRequired: '未找到用户会话。请重新登录。',
   walletActive: '活跃',
   walletActivated: '已选择活跃钱包。',
   walletEdit: '编辑',

@@ -767,6 +767,8 @@ window.AIRDROP_LOCALES.ru = {
   walletDefaultName: 'Кошелёк',
   walletActivate: 'Активировать',
   walletConnectActive: 'Открыть MetaMask для {address}',
+  walletAddConnectionFailed: 'Не удалось получить адрес из MetaMask. Проверьте, что расширение разблокировано, и повторите.',
+  walletSessionRequired: 'Сессия пользователя не найдена. Войдите в аккаунт заново.',
   walletActive: 'Активный',
   walletActivated: 'Активный кошелёк выбран.',
   walletEdit: 'Редактировать',

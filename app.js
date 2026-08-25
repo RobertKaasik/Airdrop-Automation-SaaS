@@ -289,6 +289,10 @@ window.addEventListener('DOMContentLoaded', () => {
 });
 
 // --- Вспомогательные функции ---
+function getCurrentUsername() {
+    return String(localStorage.getItem('airdrop_username') || '').trim();
+}
+
 function getOrCreateClientSessionId() {
     let existing = sessionStorage.getItem('ax_client_session_id') || localStorage.getItem('ax_client_session_id');
     if (existing) {
@@ -2258,7 +2262,7 @@ async function loadNetworksOverview() {
     const selector = document.getElementById('networkOverviewWallet');
     const status = document.getElementById('networkOverviewStatus');
     if (!selector || !status) return;
-    const username = localStorage.getItem('airdrop_username') || 'Robert';
+    const username = getCurrentUsername();
     try {
         const response = await fetch(`/api/wallets/${encodeURIComponent(username)}`);
         const data = await response.json();
@@ -2423,7 +2427,8 @@ async function saveWalletConfigModal() {
     if (saveBtn) setButtonLoading(saveBtn, true, 'Сохранение...');
 
     try {
-        const username = localStorage.getItem('airdrop_username') || "Robert";
+        const username = getCurrentUsername();
+        if (!username) throw new Error('wallet_session_missing');
         const res = await fetch('/api/wallets/add', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -2500,43 +2505,31 @@ async function connectBaseWallet() {
         return;
     }
     try {
-        // MetaMask keeps the previously permitted account by default. Requesting the
-        // eth_accounts permission again opens its account chooser when supported.
-        if (provider.isMetaMask) {
-            try {
-                await provider.request({
-                    method: 'wallet_requestPermissions',
-                    params: [{ eth_accounts: {} }],
-                });
-            } catch (permissionError) {
-                if (permissionError?.code === 4001) throw permissionError;
-                // Some injected wallets do not implement the MetaMask permission API.
-                if (permissionError?.code !== -32601) throw permissionError;
-            }
-        }
+        // `eth_requestAccounts` is the standard MetaMask connection flow. Do not
+        // request a second permissions dialog here: some extension versions reject
+        // it before the account picker is even shown.
         const accounts = await provider.request({ method: 'eth_requestAccounts' });
         const selectedAccounts = selectedEvmWalletAddresses(accounts);
-        if (!selectedAccounts[0]) throw new Error('No account returned');
-        let chainId = await provider.request({ method: 'eth_chainId' });
-        if (chainId !== BASE_MAINNET_CHAIN_ID) {
-            try {
-                await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: BASE_MAINNET_CHAIN_ID }] });
-            } catch (switchError) {
-                if (switchError?.code !== 4902) throw switchError;
-                await provider.request({ method: 'wallet_addEthereumChain', params: [BASE_MAINNET_CONFIG] });
-            }
-            chainId = await provider.request({ method: 'eth_chainId' });
+        if (!selectedAccounts[0]) {
+            const error = new Error('wallet_add_no_account');
+            error.code = 'wallet_add_no_account';
+            throw error;
         }
-        if (chainId !== BASE_MAINNET_CHAIN_ID) {
-            showNotification(t.walletBaseRequired, 'error');
-            return;
-        }
+        await switchToBaseMainnet(provider);
         const address = selectedAccounts[0];
         setConnectedBaseWalletAddress(address);
         updateBaseWalletConnectionState(address);
         await saveSelectedWalletAccounts(selectedAccounts);
     } catch (error) {
-        showNotification(t.walletConnectRejected, 'error');
+        const message = error?.code === 4001
+            ? t.walletConnectRejected
+            : error?.code === 'wallet_add_no_account'
+                ? t.operationWalletNoAccount
+                : String(error?.message || '').includes('base_mainnet_not_selected')
+                    ? t.walletBaseRequired
+                    : t.walletAddConnectionFailed;
+        console.warn('Wallet add connection failed', error);
+        showNotification(message, 'error');
     }
 }
 
@@ -3149,27 +3142,35 @@ async function connectWalletConnectBase() {
 }
 
 async function addNewWalletToDB() {
-    const username = localStorage.getItem('airdrop_username') || "Robert";
+    const username = getCurrentUsername();
     const address = document.getElementById('newWalletAddress').value.trim();
     const label = document.getElementById('newWalletLabel').value.trim();
     const proxy = document.getElementById('newWalletProxy').value.trim();
     const msg = document.getElementById('walletResponseMsg');
 
-    const res = await fetch('/api/wallets/add', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, wallet_address: address, label, proxy })
-    });
-    const data = await res.json();
-    if(res.ok) {
-        showNotification(translations[currentLang].walletAddSuccess);
-        document.getElementById('newWalletAddress').value = '';
-        document.getElementById('newWalletLabel').value = '';
-        document.getElementById('newWalletProxy').value = '';
-        loadWalletsFromDB();
-    } else {
-        const errText = translateBackendDetail(data.detail);
-        msg.innerHTML = `<span style="color: #ef4444;">${errText}</span>`;
+    if (!username) {
+        showNotification(translations[currentLang].walletSessionRequired, 'error');
+        return;
+    }
+    try {
+        const res = await fetch('/api/wallets/add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, wallet_address: address, label, proxy })
+        });
+        const data = await res.json();
+        if(res.ok) {
+            showNotification(translations[currentLang].walletAddSuccess);
+            document.getElementById('newWalletAddress').value = '';
+            document.getElementById('newWalletLabel').value = '';
+            document.getElementById('newWalletProxy').value = '';
+            loadWalletsFromDB();
+        } else {
+            const errText = translateBackendDetail(data.detail);
+            if (msg) msg.innerHTML = `<span style="color: #ef4444;">${escapeHtml(errText)}</span>`;
+        }
+    } catch (_) {
+        if (msg) msg.innerHTML = `<span style="color: #ef4444;">${escapeHtml(translations[currentLang].walletAddConnectionFailed)}</span>`;
     }
 }
 
@@ -3559,7 +3560,7 @@ async function loadAccountReadiness(activeWallet, security, telegram) {
 }
 
 async function loadWalletsFromDB() {
-    const username = localStorage.getItem('airdrop_username') || "Robert";
+    const username = getCurrentUsername();
     const container = document.getElementById('walletsListContainer');
     const t = translations[currentLang];
     if(!container) return;
@@ -3777,7 +3778,7 @@ async function deleteWallet(id) {
 }
 
 async function buyExtraSlot() {
-    const username = localStorage.getItem('airdrop_username') || "Robert";
+    const username = getCurrentUsername();
     const res = await fetch('/api/wallets/buy-slot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -3937,7 +3938,7 @@ async function saveGlobalProfileSettings() {
     localStorage.setItem('ax_notify_defi_final', notifyDefiFinal);
     localStorage.setItem('ax_notify_defi_errors', notifyDefiErrors);
 
-    const username = localStorage.getItem('airdrop_username') || "Robert";
+    const username = getCurrentUsername();
     const profileConfig = { 
         username,
         // Scheduling is configured per wallet in the Wallets section. Keep the
@@ -6335,7 +6336,7 @@ async function loadBridgePlans() {
 
 async function startScanningDrops() {
     const log = document.getElementById('drop-logs');
-    const username = localStorage.getItem('airdrop_username') || "Robert";
+    const username = getCurrentUsername();
     const t = translations[currentLang];
     if (log) log.innerHTML += `<br><span style="color: var(--text-muted);">${t.lootChecking}</span>`;
     try {
@@ -6745,7 +6746,7 @@ function renderDashboardContent(section) {
     currentSection = section;
     const t = translations[currentLang] || translations['ru'];
     const content = document.getElementById('dashboard-content');
-    const username = localStorage.getItem('airdrop_username') || "Robert";
+    const username = getCurrentUsername();
 
     let centerHtml = '';
     
