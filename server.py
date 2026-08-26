@@ -164,6 +164,7 @@ except ImportError:
 USER_SETTINGS_DB = {}
 verification_codes = {}
 SUBSCRIPTION_DURATION_SECONDS = 30 * 24 * 60 * 60
+SUBSCRIPTION_GRACE_PERIOD_SECONDS = 7 * 24 * 60 * 60
 PLAN_PRICES = {"Standard": 29, "Pro": 49, "Premium": 89}
 BASE_SLOT_LIMITS = {"Standard": 5, "Pro": 15, "Premium": 30}
 request_rate_limits = {}
@@ -469,6 +470,8 @@ class PaymentCheckoutSession(Base):
     __tablename__ = "payment_checkout_sessions"
     id = Column(String, primary_key=True)
     client_session_id = Column(String, index=True, nullable=False)
+    username = Column(String, index=True, nullable=True)
+    purpose = Column(String, nullable=False, default="registration")
     plan = Column(String, nullable=False)
     amount_usdc = Column(String, nullable=False)
     amount_atomic = Column(String, nullable=False)
@@ -712,6 +715,20 @@ def ensure_schema_columns():
         if "onboarding_purchased" not in columns:
             conn.execute(text("ALTER TABLE users ADD COLUMN onboarding_purchased BOOLEAN DEFAULT 0"))
             conn.commit()
+        payment_checkout_columns = {
+            row[1] for row in conn.execute(text("PRAGMA table_info(payment_checkout_sessions)"))
+        }
+        if payment_checkout_columns and "username" not in payment_checkout_columns:
+            conn.execute(text("ALTER TABLE payment_checkout_sessions ADD COLUMN username VARCHAR"))
+            conn.commit()
+        if payment_checkout_columns and "purpose" not in payment_checkout_columns:
+            conn.execute(
+                text(
+                    "ALTER TABLE payment_checkout_sessions "
+                    "ADD COLUMN purpose VARCHAR NOT NULL DEFAULT 'registration'"
+                )
+            )
+            conn.commit()
         wallet_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(wallets)"))}
         if wallet_columns and "label" not in wallet_columns:
             conn.execute(text("ALTER TABLE wallets ADD COLUMN label VARCHAR"))
@@ -821,14 +838,6 @@ PUBLIC_STATIC_PATHS = {
     "index.html",
     "app.js",
     "style.css",
-    "autofarm.gif",
-    "wallets.gif",
-    "looter.gif",
-    "support.gif",
-    "demo-gas.gif",
-    "demo-wallets.gif",
-    "demo-checks.gif",
-    "demo-telegram.gif",
     "demo-gas-ru.gif",
     "demo-wallets-ru.gif",
     "demo-checks-ru.gif",
@@ -880,6 +889,25 @@ async def add_security_headers(request, call_next):
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    # The UI intentionally loads Telegram, WalletConnect, public RPC endpoints,
+    # network icons, and Google Fonts. Keep those integrations working while
+    # blocking plugins, foreign forms, base-tag injection, and framing.
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "base-uri 'self'; "
+        "object-src 'none'; "
+        "frame-ancestors 'none'; "
+        "form-action 'self'; "
+        "script-src 'self' 'unsafe-inline' https://telegram.org "
+        "https://cdnjs.cloudflare.com https://esm.sh; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' data: https://fonts.gstatic.com; "
+        "img-src 'self' data: blob: https:; "
+        "connect-src 'self' https: wss:; "
+        "frame-src https:; "
+        "worker-src 'self' blob:; "
+        "manifest-src 'self'"
+    )
     # API responses can carry session-scoped state, account data, or payment
     # progress. Never let a browser or an intermediate proxy reuse them.
     if request.url.path.startswith("/api/"):
@@ -1172,12 +1200,24 @@ async def run_scheduled_action_reminder_job():
     current_slot = now.strftime("%Y-%m-%d %H:%M")
     db = SessionLocal()
     try:
+        subscription_access_cache: dict[str, bool] = {}
+
+        def subscription_allows_reminders(username: str) -> bool:
+            if username not in subscription_access_cache:
+                account = db.query(User).filter(User.username == username).first()
+                subscription_access_cache[username] = bool(
+                    account and get_subscription_state(account)["status"] != "expired"
+                )
+            return subscription_access_cache[username]
+
         reminders = db.query(ActionReminder).filter(
             ActionReminder.enabled.is_(True),
             ActionReminder.day_of_week == current_day_str,
             ActionReminder.time_of_day == current_time_str,
         ).all()
         for reminder in reminders:
+            if not subscription_allows_reminders(reminder.username):
+                continue
             if reminder.last_sent_slot == current_slot:
                 continue
             subscription = get_telegram_subscription(db, reminder.username)
@@ -1214,6 +1254,8 @@ async def run_scheduled_action_reminder_job():
             "zh": {"dex": "DEX", "bridge": "跨链桥", "lending": "借贷"},
         }
         for schedule in wallet_schedules:
+            if not subscription_allows_reminders(schedule.username):
+                continue
             try:
                 local_now = datetime.datetime.now(ZoneInfo(schedule.timezone))
             except (ZoneInfoNotFoundError, ValueError):
@@ -1834,7 +1876,35 @@ def authorize_login_device(username: str, fingerprint: str, db: Session, local_d
     record.updated_at = now_ts
     db.commit()
 
-def get_current_user(
+def get_subscription_state(user: User, now_ts: Optional[int] = None) -> dict:
+    """Return one authoritative subscription state for login, UI, and API gates."""
+    current_ts = int(time.time()) if now_ts is None else int(now_ts)
+    activated_at = int(user.subscription_activated_at or current_ts)
+    expires_at = activated_at + SUBSCRIPTION_DURATION_SECONDS
+    grace_expires_at = expires_at + SUBSCRIPTION_GRACE_PERIOD_SECONDS
+    if current_ts < expires_at:
+        status = "active"
+        days_left = max(1, math.ceil((expires_at - current_ts) / 86400))
+        grace_days_left = 7
+    elif current_ts < grace_expires_at:
+        status = "grace"
+        days_left = 0
+        grace_days_left = max(1, math.ceil((grace_expires_at - current_ts) / 86400))
+    else:
+        status = "expired"
+        days_left = 0
+        grace_days_left = 0
+    return {
+        "status": status,
+        "activated_at": activated_at,
+        "expires_at": expires_at,
+        "grace_expires_at": grace_expires_at,
+        "days_left": days_left,
+        "grace_days_left": grace_days_left,
+    }
+
+
+def get_authenticated_user(
     authorization: Optional[str] = Header(default=None),
     db: Session = Depends(get_db),
 ) -> User:
@@ -1854,6 +1924,18 @@ def get_current_user(
     current_user = db.query(User).filter(User.username == auth_session.username).first()
     if not current_user:
         raise HTTPException(status_code=401, detail="Session user not found")
+    return current_user
+
+
+def get_current_user(
+    current_user: User = Depends(get_authenticated_user),
+) -> User:
+    subscription = get_subscription_state(current_user)
+    if subscription["status"] == "expired":
+        raise HTTPException(
+            status_code=402,
+            detail="Subscription expired. Renew the plan to continue using paid features",
+        )
     return current_user
 
 
@@ -2173,22 +2255,43 @@ def get_aave_v3_base_positions(wallet_address: str, refresh: bool = False) -> li
             abi=AAVE_V3_POOL_DATA_PROVIDER_ABI,
         )
         owner = Web3.to_checksum_address(wallet_address)
-        reserves = provider.functions.getAllReservesTokens().call()
     except Exception:
         raise HTTPException(status_code=503, detail="Aave Base data is temporarily unavailable")
 
+    # This product currently exposes only the audited Base USDC Aave flow, so
+    # query that reserve directly. Enumerating every Aave reserve made this
+    # read-only card wait on dozens of unrelated RPC calls and could leave the
+    # interface in "Loading" for a long time when a public node was degraded.
+    reserves = [("USDC", BASE_USDC_ADDRESS)]
+
     positions = []
+    successful_reserve_reads = 0
     for reserve in reserves:
         try:
             symbol = str(reserve[0] or "Asset")
             asset_address = Web3.to_checksum_address(reserve[1])
-            user_data = provider.functions.getUserReserveData(asset_address, owner).call()
+            user_data = None
+            for _ in range(2):
+                try:
+                    user_data = provider.functions.getUserReserveData(asset_address, owner).call()
+                    break
+                except Exception:
+                    continue
+            if user_data is None:
+                continue
+            successful_reserve_reads += 1
             supplied_raw = int(user_data[0])
             borrowed_raw = int(user_data[1]) + int(user_data[2])
             if supplied_raw <= 0 and borrowed_raw <= 0:
                 continue
-            reserve_data = provider.functions.getReserveConfigurationData(asset_address).call()
-            decimals = int(reserve_data[0])
+            decimals = BASE_USDC_DECIMALS if asset_address.lower() == BASE_USDC_ADDRESS.lower() else 18
+            try:
+                reserve_data = provider.functions.getReserveConfigurationData(asset_address).call()
+                decimals = int(reserve_data[0])
+            except Exception:
+                # A position remains valid even if this optional metadata call
+                # fails; the supported USDC reserve has a known decimal count.
+                pass
             if not 0 <= decimals <= 36:
                 decimals = 18
             positions.append({
@@ -2204,6 +2307,9 @@ def get_aave_v3_base_positions(wallet_address: str, refresh: bool = False) -> li
             # One unavailable reserve must not prevent the rest of the public
             # portfolio from being shown.
             continue
+
+    if successful_reserve_reads == 0:
+        raise HTTPException(status_code=503, detail="Aave Base data is temporarily unavailable")
 
     positions.sort(key=lambda item: (not item["has_borrow"], item["asset"].lower()))
     defi_positions_cache[cache_key] = {
@@ -2642,6 +2748,7 @@ def reserve_verified_usdc_payment(
     expected_atomic_amount: int,
     purpose: str,
     username: Optional[str] = None,
+    commit: bool = True,
 ) -> None:
     clean_txid = txid.strip().lower()
     if db.query(ProcessedBlockchainTransaction).filter(ProcessedBlockchainTransaction.txid == clean_txid).first():
@@ -2658,7 +2765,10 @@ def reserve_verified_usdc_payment(
         created_at=int(time.time()),
     ))
     try:
-        db.commit()
+        if commit:
+            db.commit()
+        else:
+            db.flush()
     except IntegrityError:
         db.rollback()
         raise HTTPException(status_code=409, detail="This blockchain transaction has already been used")
@@ -3128,6 +3238,8 @@ async def create_payment_session(
     db.add(PaymentCheckoutSession(
         id=payment_session_id,
         client_session_id=client_session_id,
+        username=None,
+        purpose="registration",
         plan=req.plan,
         amount_usdc=format(amount_usdc, ".2f"),
         amount_atomic=str(amount_atomic),
@@ -3171,6 +3283,8 @@ async def confirm_payment_session(
         raise HTTPException(status_code=404, detail="Payment session not found")
     if session_data.client_session_id != req.client_session_id:
         raise HTTPException(status_code=403, detail="Payment confirmed for a different session")
+    if (session_data.purpose or "registration") != "registration" or session_data.username:
+        raise HTTPException(status_code=403, detail="Payment session belongs to an account subscription")
     if int(time.time()) - session_data.created_at > PAYMENT_SESSION_TTL_SECONDS:
         raise HTTPException(status_code=410, detail="Payment session expired. Create a new payment session.")
     if session_data.status == "paid":
@@ -3218,6 +3332,175 @@ async def confirm_payment_session(
         "plan": session_data.plan,
         "amount": session_data.amount_usdc,
         "onboarding": session_data.onboarding,
+    }
+
+
+@app.get("/api/subscription/status")
+async def get_account_subscription_status(
+    current_user: User = Depends(get_authenticated_user),
+):
+    return {
+        "status": "success",
+        "plan": current_user.subscription_plan,
+        "renewal_price": PLAN_PRICES.get(current_user.subscription_plan, PLAN_PRICES["Standard"]),
+        **get_subscription_state(current_user),
+    }
+
+
+@app.post("/api/subscription/create-session")
+async def create_account_subscription_session(
+    req: PaymentSessionCreateReq,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_authenticated_user),
+):
+    payment_config = get_subscription_payment_config()
+    if not payment_config:
+        raise HTTPException(
+            status_code=503,
+            detail="Subscription payments are temporarily unavailable while exact USDC settlement is configured.",
+        )
+    enforce_request_rate_limit(
+        "account-subscription-session",
+        f"{current_user.username}:{get_request_client_key(request)}",
+        12,
+        15 * 60,
+    )
+    client_session_id = validate_client_session_id(req.client_session_id)
+    base_amount = PLAN_PRICES.get(req.plan)
+    if base_amount is None:
+        raise HTTPException(status_code=400, detail="Unknown plan")
+    plan_rank = {"Standard": 1, "Pro": 2, "Premium": 3}
+    state = get_subscription_state(current_user)
+    if (
+        state["status"] == "active"
+        and plan_rank.get(req.plan, 0) < plan_rank.get(current_user.subscription_plan, 0)
+    ):
+        raise HTTPException(status_code=409, detail="An active subscription cannot be downgraded")
+
+    amount_usdc = (
+        SUBSCRIPTION_TEST_AMOUNT_USDC
+        if payment_config["is_testnet"]
+        else Decimal(base_amount)
+    ).quantize(Decimal("0.01"))
+    amount_atomic = int(amount_usdc * Decimal(1_000_000))
+    now_ts = int(time.time())
+    db.query(PaymentCheckoutSession).filter(
+        PaymentCheckoutSession.username == current_user.username,
+        PaymentCheckoutSession.purpose == "subscription",
+        PaymentCheckoutSession.status == "pending",
+        PaymentCheckoutSession.created_at < now_ts - PAYMENT_SESSION_TTL_SECONDS,
+    ).delete(synchronize_session=False)
+    payment_session_id = str(uuid.uuid4())
+    db.add(PaymentCheckoutSession(
+        id=payment_session_id,
+        client_session_id=client_session_id,
+        username=current_user.username,
+        purpose="subscription",
+        plan=req.plan,
+        amount_usdc=format(amount_usdc, ".2f"),
+        amount_atomic=str(amount_atomic),
+        onboarding=False,
+        payment_mode=payment_config["mode"],
+        status="pending",
+        created_at=now_ts,
+    ))
+    db.commit()
+    return {
+        "status": "success",
+        "payment_session_id": payment_session_id,
+        "payment": {
+            "network": payment_config["network"],
+            "chain_id": payment_config["chain_id"],
+            "asset": "USDC",
+            "decimals": 6,
+            "contract": payment_config["usdc_contract"],
+            "receiver": payment_config["receiver"],
+            "amount": format(amount_usdc, ".2f"),
+        },
+        "plan": req.plan,
+        "purpose": "subscription",
+        "is_testnet": payment_config["is_testnet"],
+    }
+
+
+@app.post("/api/subscription/confirm")
+async def confirm_account_subscription_session(
+    req: PaymentSessionConfirmReq,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_authenticated_user),
+):
+    enforce_request_rate_limit(
+        "account-subscription-confirm",
+        f"{current_user.username}:{get_request_client_key(request)}",
+        30,
+        15 * 60,
+    )
+    payment_config = get_subscription_payment_config()
+    if not payment_config:
+        raise HTTPException(status_code=503, detail="Subscription payments are temporarily unavailable while exact USDC settlement is configured.")
+    session_data = db.query(PaymentCheckoutSession).filter(
+        PaymentCheckoutSession.id == req.payment_session_id,
+        PaymentCheckoutSession.username == current_user.username,
+        PaymentCheckoutSession.purpose == "subscription",
+    ).first()
+    if not session_data:
+        raise HTTPException(status_code=404, detail="Payment session not found")
+    if session_data.client_session_id != req.client_session_id:
+        raise HTTPException(status_code=403, detail="Payment confirmed for a different session")
+    if int(time.time()) - session_data.created_at > PAYMENT_SESSION_TTL_SECONDS:
+        raise HTTPException(status_code=410, detail="Payment session expired. Create a new payment session.")
+    if session_data.payment_mode != payment_config["mode"]:
+        raise HTTPException(status_code=409, detail="Payment session network changed. Create a new payment session.")
+    if session_data.status == "applied":
+        return {
+            "status": "success",
+            "subscription_updated": True,
+            "plan": current_user.subscription_plan,
+            **get_subscription_state(current_user),
+        }
+
+    if session_data.status != "paid":
+        reserve_verified_usdc_payment(
+            db,
+            req.txid,
+            payment_config,
+            int(session_data.amount_atomic),
+            "subscription_change",
+            current_user.username,
+            commit=False,
+        )
+        session_data.status = "paid"
+        session_data.txid = req.txid.strip()
+        session_data.paid_at = int(time.time())
+
+    now_ts = int(time.time())
+    previous_state = get_subscription_state(current_user, now_ts)
+    if previous_state["status"] == "active":
+        current_user.subscription_activated_at = previous_state["expires_at"]
+    else:
+        current_user.subscription_activated_at = now_ts
+    current_user.subscription_plan = session_data.plan
+    session_data.status = "applied"
+    db.commit()
+
+    try:
+        send_payment_receipt_email(
+            current_user.email,
+            session_data.plan,
+            float(session_data.amount_usdc),
+            session_data.txid or req.txid,
+        )
+    except Exception as exc:
+        logging.warning("Failed to send subscription receipt: %s", exc)
+
+    return {
+        "status": "success",
+        "subscription_updated": True,
+        "plan": current_user.subscription_plan,
+        "amount": session_data.amount_usdc,
+        **get_subscription_state(current_user),
     }
 
 @app.post("/api/balance/deposit")
@@ -3345,8 +3628,7 @@ async def login(user: UserLogin, request: Request, db: Session = Depends(get_db)
         local_development=request_host in {"127.0.0.1", "localhost", "::1"},
     )
 
-    expires_at = db_user.subscription_activated_at + SUBSCRIPTION_DURATION_SECONDS
-    days_left = max(0, int((expires_at - now_ts) / (24 * 60 * 60)))
+    subscription = get_subscription_state(db_user, now_ts)
 
     return {
         "status": "success",
@@ -3355,7 +3637,11 @@ async def login(user: UserLogin, request: Request, db: Session = Depends(get_db)
         "plan": db_user.subscription_plan,
         "extra_slots": db_user.extra_slots,
         "balance": db_user.balance,
-        "days_left": days_left,
+        "subscription_status": subscription["status"],
+        "subscription_expires_at": subscription["expires_at"],
+        "subscription_grace_expires_at": subscription["grace_expires_at"],
+        "days_left": subscription["days_left"],
+        "grace_days_left": subscription["grace_days_left"],
         "renewal_price": PLAN_PRICES.get(db_user.subscription_plan, PLAN_PRICES["Standard"]),
         "onboarding_purchased": db_user.onboarding_purchased,
         "access_token": issue_access_token(db_user.username, db),
@@ -3782,6 +4068,7 @@ async def save_aave_base_supply_submission(
             tx_hash,
             now_ts,
         )
+        defi_positions_cache.pop(session["wallet_address"].lower(), None)
     if verified and subscription and subscription.notify_defi_supply_submitted:
         amount = record.amount if record else format_token_amount(int(session["amount_atomic"]), BASE_USDC_DECIMALS)
         messages = {
@@ -3884,6 +4171,7 @@ async def save_aave_base_withdraw_submission(
             tx_hash,
             now_ts,
         )
+        defi_positions_cache.pop(session["wallet_address"].lower(), None)
     if verified and subscription and subscription.notify_defi_withdraw_submitted:
         amount = record.amount if record else format_token_amount(int(session["amount_atomic"]), BASE_USDC_DECIMALS)
         messages = {

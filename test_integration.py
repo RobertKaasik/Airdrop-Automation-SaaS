@@ -11,7 +11,9 @@ Run:
 
 import os
 import asyncio
+import re
 import shutil
+import time
 import uuid
 from pathlib import Path
 
@@ -87,6 +89,31 @@ def verify_schema() -> None:
         "financial_transfer_intents",
     }
     require(required.issubset(tables), "Не созданы все таблицы ядра.")
+    checkout_columns = {column["name"] for column in inspect(engine).get_columns("payment_checkout_sessions")}
+    require(
+        {"username", "purpose"}.issubset(checkout_columns),
+        "Платёжная сессия не различает регистрацию и продление подписки.",
+    )
+
+
+def verify_subscription_lifecycle() -> None:
+    from server import (
+        SUBSCRIPTION_DURATION_SECONDS,
+        SUBSCRIPTION_GRACE_PERIOD_SECONDS,
+        get_subscription_state,
+    )
+
+    now_ts = int(time.time())
+    active_user = User(subscription_activated_at=now_ts - 60)
+    grace_user = User(subscription_activated_at=now_ts - SUBSCRIPTION_DURATION_SECONDS - 60)
+    expired_user = User(
+        subscription_activated_at=(
+            now_ts - SUBSCRIPTION_DURATION_SECONDS - SUBSCRIPTION_GRACE_PERIOD_SECONDS - 60
+        )
+    )
+    require(get_subscription_state(active_user, now_ts)["status"] == "active", "Active subscription state failed.")
+    require(get_subscription_state(grace_user, now_ts)["status"] == "grace", "Subscription grace state failed.")
+    require(get_subscription_state(expired_user, now_ts)["status"] == "expired", "Expired subscription state failed.")
 
 
 def create_test_data(prefix: str) -> tuple[int, int, int]:
@@ -391,16 +418,74 @@ def verify_protocol_routes_fail_closed() -> None:
     print("PASS: protocol adapters fail closed and the UI uses verified provider routes.")
 
 
+def verify_ui_interaction_contracts() -> None:
+    """Catch missing inline handlers and regressions in frequently used controls."""
+    root = Path(__file__).resolve().parent
+    index_source = (root / "index.html").read_text(encoding="utf-8")
+    app_source = (root / "app.js").read_text(encoding="utf-8")
+    style_source = (root / "style.css").read_text(encoding="utf-8")
+    combined = f"{index_source}\n{app_source}"
+
+    handlers = {
+        name
+        for name in re.findall(r'onclick="([A-Za-z_][A-Za-z0-9_]*)', combined)
+        if name not in {"event", "if", "document"}
+    }
+    definitions = set(re.findall(r"function\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(", combined))
+    definitions.update(
+        re.findall(r"(?:const|let|var)\s+([A-Za-z_][A-Za-z0-9_]*)\s*=", combined)
+    )
+    missing_handlers = sorted(handlers - definitions)
+    require(not missing_handlers, f"Inline handlers without definitions: {missing_handlers}")
+
+    require("<span onclick=" not in combined, "Clickable spans must be semantic buttons.")
+    require("function toggleFaq(item)" in app_source, "FAQ toggle handler is missing.")
+    require(
+        'class="faq-question"' in index_source and "aria-expanded" in index_source,
+        "FAQ questions are not keyboard-accessible buttons.",
+    )
+    require(".faq-question:focus-visible" in style_source, "FAQ keyboard focus is not visible.")
+    require(
+        "input.value = String(maxLimit);" in app_source,
+        "Numeric upper limits are only decorated instead of enforced.",
+    )
+
+    required_locale_keys = {
+        "walletProxyChecking",
+        "walletProxyOk",
+        "walletProxySlow",
+        "walletProxyFailed",
+        "activityTabDex",
+        "defiOverviewSupplied",
+        "defiOverviewBorrowed",
+        "labelProtocol",
+    }
+    for language in ("ru", "en", "zh"):
+        source = (root / "locales" / f"{language}.js").read_text(encoding="utf-8")
+        missing_keys = sorted(key for key in required_locale_keys if key not in source)
+        require(not missing_keys, f"Missing {language} interaction labels: {missing_keys}")
+        backend_block = re.search(r"backend:\s*\{(.*?)\n\s*\},", source, flags=re.DOTALL)
+        require(backend_block is not None, f"Missing {language} backend translation block.")
+        require(
+            "activityTabDex" not in backend_block.group(1),
+            f"{language} Action Center labels are nested inside backend errors.",
+        )
+
+    print(f"PASS: {len(handlers)} UI handlers and key interaction contracts verified.")
+
+
 def main() -> None:
     prefix = f"__integration_{uuid.uuid4().hex[:12]}"
 
     try:
         verify_schema()
+        verify_subscription_lifecycle()
         owner_id, _another_user_id, profile_id = create_test_data(prefix)
         verify_transfer_intent(owner_id, profile_id)
         asyncio.run(verify_profile_lock(owner_id, profile_id))
         verify_action_center_mvp_requirements()
         verify_protocol_routes_fail_closed()
+        verify_ui_interaction_contracts()
         print("PASS: database ownership, transfer intent, and profile lock checks passed.")
     finally:
         cleanup(prefix)

@@ -96,6 +96,9 @@ function setButtonLoading(button, isLoading, text = '') {
 let userPlan = 'Standard';
 let deviceFingerprint = generateDeviceFingerprint();
 let subscriptionDaysLeft = 29;
+let subscriptionStatus = 'active';
+let subscriptionGraceDaysLeft = 0;
+let subscriptionExpiresAt = 0;
 let showWelcomeGuide = true;
 let activeSafeStartStep = 0;
 
@@ -141,6 +144,12 @@ if (typeof window.fetch === 'function') {
         return nativeFetch(resource, { ...options, headers }).then((response) => {
             if (response.status === 401 && !requestUrl.startsWith('/api/login')) {
                 handleExpiredAuthSession();
+            }
+            if (
+                response.status === 402
+                && !requestUrl.startsWith('/api/subscription/')
+            ) {
+                handleSubscriptionExpired();
             }
             return response;
         });
@@ -480,14 +489,12 @@ function renderLanguageAwareText() {
 function checkInputLimit(input, maxLimit) {
     const val = parseFloat(input.value);
     if (val > maxLimit) {
-        input.style.color = '#ef4444';
-        input.style.borderColor = '#ef4444';
-        input.style.boxShadow = '0 0 8px rgba(239, 68, 68, 0.2)';
-    } else {
-        input.style.color = '#fff';
-        input.style.borderColor = 'var(--border-color)';
-        input.style.boxShadow = 'none';
+        input.value = String(maxLimit);
     }
+    input.style.color = '#fff';
+    input.style.borderColor = 'var(--border-color)';
+    input.style.boxShadow = 'none';
+    return input.value;
 }
 
 // 🌍 Обновление всего статического текста
@@ -611,7 +618,34 @@ function translateBackendDetail(detail, fallbackKey = 'errors.genericRequestFail
     return escapeHtml(translated);
 }
 
+function renderAppEmptyState(title, message, actionLabel = '', action = '') {
+    const actionHtml = actionLabel && action
+        ? `<button type="button" class="app-empty-state__action" onclick="${action}">${escapeHtml(actionLabel)}</button>`
+        : '';
+    return `<section class="app-empty-state" aria-live="polite">
+        <strong>${escapeHtml(title)}</strong>
+        <span>${escapeHtml(message)}</span>
+        ${actionHtml}
+    </section>`;
+}
+
+function operationErrorMessage(error, locale, fallbackMessage = '') {
+    const raw = String(error?.message || error || '').trim();
+    const normalized = raw.toLowerCase();
+    const code = error?.code;
+    if (code === 4001 || code === 'ACTION_REJECTED' || /rejected|cancelled|denied/.test(normalized)) return locale.operationErrorRejected;
+    if (/quote[\s_-]*expired|quote_expired|expired quote/.test(normalized)) return locale.operationErrorQuoteExpired;
+    if (/wallet[\s_-]*(mismatch|required)|wrong[\s_-]*account|no[\s_-]*accounts|save this wallet|active wallet/.test(normalized)) return locale.operationErrorWallet;
+    if (/base_mainnet_not_selected|universal_bridge_network_not_selected|wrong network|chain.?id|switch network|network.*selected/.test(normalized)) return locale.operationErrorNetwork;
+    if (/insufficient|gas reserve|insufficient funds|not enough.*gas/.test(normalized)) return locale.operationErrorGas;
+    if (/invalid.*amount|amount.*invalid|amount.*positive/.test(normalized)) return locale.operationErrorAmount;
+    if (/failed to fetch|network error|connection|timeout|temporarily unavailable|provider unavailable/.test(normalized)) return locale.operationErrorConnection;
+    const translated = raw ? window.translateBackendMessage(raw) : '';
+    return translated && translated !== raw ? translated : (fallbackMessage || locale.operationErrorTryAgain);
+}
+
 function returnToMainSite() {
+    closeBottomSheetMenu();
     isLoggedIn = false;
     document.documentElement.classList.remove('ax-dashboard-active');
     localStorage.removeItem('airdrop_username');
@@ -697,12 +731,52 @@ function hideAllAppModals() {
 }
 
 function openPricingModal() {
-    if (isLoggedIn) return;
+    syncPricingModalForAccount();
     showAppModal('pricingModal');
+}
+
+function syncPricingModalForAccount() {
+    const locale = translations[getActiveLang()];
+    const ranks = { Standard: 1, Pro: 2, Premium: 3 };
+    const buttons = [
+        ['Standard', document.getElementById('p-std-btn'), locale.stdBtn],
+        ['Pro', document.getElementById('p-pro-btn'), locale.proBtn],
+        ['Premium', document.getElementById('p-prem-btn'), locale.premBtn],
+    ];
+    buttons.forEach(([, button, defaultLabel]) => {
+        if (!button) return;
+        button.disabled = false;
+        button.style.opacity = '';
+        button.style.cursor = '';
+        button.textContent = defaultLabel;
+    });
+    if (!isLoggedIn) return;
+    const canChooseAnyPlan = subscriptionStatus !== 'active';
+    buttons.forEach(([plan, button, defaultLabel]) => {
+        if (!button) return;
+        const isCurrent = plan === userPlan;
+        const isDowngrade = ranks[plan] < ranks[userPlan];
+        const disabled = !canChooseAnyPlan && (isCurrent || isDowngrade);
+        button.disabled = disabled;
+        button.style.opacity = disabled ? '.55' : '';
+        button.style.cursor = disabled ? 'not-allowed' : '';
+        if (isCurrent && !canChooseAnyPlan) button.textContent = locale.subscriptionCurrentPlan;
+        if (isDowngrade && !canChooseAnyPlan) button.textContent = locale.subscriptionDowngradeBlocked;
+    });
 }
 
 function closePricingModal() {
     hideAppModal('pricingModal');
+}
+
+function toggleFaq(item) {
+    if (!item) return;
+    const willOpen = !item.classList.contains('active');
+    item.classList.toggle('active', willOpen);
+    const trigger = item.querySelector('.faq-question');
+    const icon = item.querySelector('.faq-toggle');
+    if (trigger) trigger.setAttribute('aria-expanded', String(willOpen));
+    if (icon) icon.textContent = willOpen ? '−' : '+';
 }
 
 let mousedownOverlayTarget = null;
@@ -713,6 +787,18 @@ function handlePricingOverlayClick(event) { if (event.target.id === 'pricingModa
 
 function selectPlanAndRegister(planName, price) {
     closePricingModal();
+    if (isLoggedIn) {
+        const rank = { Standard: 1, Pro: 2, Premium: 3 };
+        if (subscriptionStatus === 'active' && rank[planName] <= rank[userPlan]) {
+            showNotification(translations[getActiveLang()].subscriptionDowngradeBlocked, 'warning');
+            return;
+        }
+        localStorage.setItem('selected_plan', planName);
+        localStorage.setItem('selected_price', String(price));
+        clearPendingSubscriptionPayment();
+        openModal('payment');
+        return;
+    }
     userPlan = planName;
     localStorage.setItem('selected_plan', planName);
     localStorage.setItem('selected_price', String(price));
@@ -750,16 +836,38 @@ function handleAppConfirmOverlayClick(event) {
     }
 }
 
+function passwordVisibilityIcon(isVisible) {
+    return isVisible
+        ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3l18 18M10.6 10.7a2 2 0 0 0 2.7 2.7M9.9 4.2A10.8 10.8 0 0 1 12 4c5.5 0 9 5 9 8a8.5 8.5 0 0 1-2.1 3.6M6.6 6.6C4.3 8 3 10.2 3 12c0 3 3.5 8 9 8 1.5 0 2.8-.4 4-1"/></svg>'
+        : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12c0-3 3.5-8 9-8s9 5 9 8-3.5 8-9 8-9-5-9-8Z"/><circle cx="12" cy="12" r="3"/></svg>';
+}
+
+function sanitizeDecimalInput(input, maxDecimals = 18) {
+    if (!input) return '';
+    const raw = String(input.value || '').replace(',', '.');
+    const cleaned = raw.replace(/[^0-9.]/g, '');
+    const dotIndex = cleaned.indexOf('.');
+    const whole = (dotIndex >= 0 ? cleaned.slice(0, dotIndex) : cleaned).slice(0, 30);
+    const fraction = dotIndex >= 0
+        ? cleaned.slice(dotIndex + 1).replace(/\./g, '').slice(0, Math.max(0, Number(maxDecimals) || 0))
+        : '';
+    input.value = dotIndex >= 0 && maxDecimals > 0 ? `${whole}.${fraction}` : whole;
+    return input.value;
+}
+
+function sanitizeIntegerInput(input, maxLength = 12) {
+    if (!input) return '';
+    input.value = String(input.value || '').replace(/\D/g, '').slice(0, Math.max(1, Number(maxLength) || 12));
+    return input.value;
+}
+
 function togglePasswordVisibility(fieldId, iconEl) {
     const input = document.getElementById(fieldId);
     if (!input) return;
-    if (input.type === 'password') {
-        input.type = 'text';
-        iconEl.innerText = '🙈';
-    } else {
-        input.type = 'password';
-        iconEl.innerText = '👁️';
-    }
+    const willShow = input.type === 'password';
+    input.type = willShow ? 'text' : 'password';
+    iconEl.innerHTML = passwordVisibilityIcon(willShow);
+    iconEl.setAttribute('aria-pressed', willShow ? 'true' : 'false');
 }
 
 function openModal(type) {
@@ -779,7 +887,7 @@ function openModal(type) {
             <form onsubmit="event.preventDefault(); validateLogin();">
                 <div class="modal-logo" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
                     <span style="font-weight:bold; font-size:16px;">${t('login')}</span>
-                    <span onclick="closeAuthModal()" style="cursor: pointer; color: #a3a3a3; font-size: 18px;">✕</span>
+                    <button type="button" class="icon-button-plain" onclick="closeAuthModal()" aria-label="Close" style="color: #a3a3a3; font-size: 18px;">✕</button>
                 </div>
                 <div class="input-group" style="margin-bottom:12px;">
                     <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">${t('auth.usernameLabel')}</label>
@@ -790,7 +898,7 @@ function openModal(type) {
                     <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">${t('auth.password')}</label>
                     <div class="password-wrapper" style="position:relative;">
                         <input type="password" class="auth-input" placeholder="${t('auth.passwordPlaceholder')}" id="loginPass" style="padding-right: 35px;" oninput="clearFormError('loginErrorContainer', 'loginPass'); clearFieldValidationState('loginPass')">
-                        <span class="password-toggle-icon" onclick="togglePasswordVisibility('loginPass', this)" style="position:absolute; right:12px; top:50%; transform:translateY(-50%); cursor:pointer; font-size:14px;">👁️</span>
+                        <button type="button" class="password-toggle-icon" onclick="togglePasswordVisibility('loginPass', this)" aria-label="Show or hide password" aria-pressed="false">${passwordVisibilityIcon(false)}</button>
                     </div>
                 </div>
                 <button type="submit" class="btn-modal-primary" style="width:100%; padding:12px;">${t('login')}</button>
@@ -808,7 +916,7 @@ function openModal(type) {
             <form onsubmit="event.preventDefault(); confirmPasswordReset();">
                 <div class="modal-logo" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                     <span style="font-weight:bold; font-size:16px;">${t('auth.resetPassword')}</span>
-                    <span onclick="closeAuthModal()" style="cursor:pointer; color:#a3a3a3; font-size:18px;">✕</span>
+                    <button type="button" class="icon-button-plain" onclick="closeAuthModal()" aria-label="Close" style="color:#a3a3a3; font-size:18px;">✕</button>
                 </div>
                 <p style="margin:0 0 14px; color:#a3a3a3; font-size:12px; line-height:1.5;">${t('auth.resetInstructions')}</p>
                 <div class="input-group" style="margin-bottom:10px;">
@@ -818,7 +926,7 @@ function openModal(type) {
                 <div class="input-group" style="margin-bottom:10px;">
                     <label style="font-size:11px; color:#a3a3a3; display:block; margin-bottom:4px;">${t('auth.code')}</label>
                     <div style="display:flex; gap:8px;">
-                        <input type="text" class="auth-input" placeholder="${t('auth.codePlaceholder')}" id="resetCode" style="flex:1; margin:0;" oninput="clearFormError('resetErrorContainer', 'resetCode'); clearFieldValidationState('resetCode')">
+                        <input type="text" inputmode="numeric" maxlength="6" class="auth-input" placeholder="${t('auth.codePlaceholder')}" id="resetCode" style="flex:1; margin:0;" oninput="sanitizeIntegerInput(this, 6); clearFormError('resetErrorContainer', 'resetCode'); clearFieldValidationState('resetCode')">
                         <button type="button" id="sendResetCodeBtn" onclick="requestPasswordResetCode()" ${resetButtonDisabled} class="auth-input ${passwordResetCooldownSeconds > 0 ? 'btn-cooldown' : ''}" style="width:auto; background:#1f1f1f; color:#fff; cursor:pointer; font-weight:600;">${resetButtonText}</button>
                     </div>
                 </div>
@@ -826,7 +934,7 @@ function openModal(type) {
                     <label style="font-size:11px; color:#a3a3a3; display:block; margin-bottom:4px;">${t('auth.newPassword')}</label>
                     <div class="password-wrapper" style="position:relative;">
                         <input type="password" class="auth-input" placeholder="${t('auth.passwordPlaceholder')}" id="resetPass" style="padding-right:35px;" oninput="clearFormError('resetErrorContainer', 'resetPass'); clearFieldValidationState('resetPass')">
-                        <span class="password-toggle-icon" onclick="togglePasswordVisibility('resetPass', this)" style="position:absolute; right:12px; top:50%; transform:translateY(-50%); cursor:pointer; font-size:14px;">👁️</span>
+                        <button type="button" class="password-toggle-icon" onclick="togglePasswordVisibility('resetPass', this)" aria-label="Show or hide password" aria-pressed="false">${passwordVisibilityIcon(false)}</button>
                     </div>
                 </div>
                 <button type="submit" class="btn-modal-primary" style="width:100%; padding:10px;">${t('auth.resetSubmit')}</button>
@@ -843,7 +951,7 @@ function openModal(type) {
         container.innerHTML = `
             <div class="modal-logo" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                 <span style="font-weight:bold; font-size:16px;">${t('payTitle')}: ${planDisplayLabel}</span>
-                <span onclick="closeAuthModal()" style="cursor: pointer; color: #a3a3a3; font-size: 18px;">✕</span>
+                <button type="button" class="icon-button-plain" onclick="closeAuthModal()" aria-label="Close" style="color: #a3a3a3; font-size: 18px;">✕</button>
             </div>
             
             <div style="margin-bottom:12px; padding:10px 12px; border:1px solid rgba(96,165,250,.35); background:rgba(30,58,138,.13); border-radius:10px; color:#dbeafe; font-size:12px; line-height:1.5;">
@@ -874,7 +982,7 @@ function openModal(type) {
             <form onsubmit="event.preventDefault(); validateRegister();">
                 <div class="modal-logo" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                     <span style="font-weight:bold; font-size:16px;">${t('auth.register')}: ${planDisplayLabel} ($${chosenPrice})</span>
-                    <span onclick="closeAuthModal()" style="cursor: pointer; color: #a3a3a3; font-size: 18px;">✕</span>
+                    <button type="button" class="icon-button-plain" onclick="closeAuthModal()" aria-label="Close" style="color: #a3a3a3; font-size: 18px;">✕</button>
                 </div>
                 
                 <div class="input-group" style="margin-bottom:10px;">
@@ -891,14 +999,14 @@ function openModal(type) {
                     <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">${t('auth.password')}</label>
                     <div class="password-wrapper" style="position:relative;">
                         <input type="password" class="auth-input" placeholder="${t('auth.passwordPlaceholder')}" id="regPass" style="padding-right: 35px;" oninput="clearFormError('errorContainer', 'regPass'); clearFieldValidationState('regPass')">
-                        <span class="password-toggle-icon" onclick="togglePasswordVisibility('regPass', this)" style="position:absolute; right:12px; top:50%; transform:translateY(-50%); cursor:pointer; font-size:14px;">👁️</span>
+                        <button type="button" class="password-toggle-icon" onclick="togglePasswordVisibility('regPass', this)" aria-label="Show or hide password" aria-pressed="false">${passwordVisibilityIcon(false)}</button>
                     </div>
                 </div>
                 
                 <div class="input-group" style="margin-bottom:14px;">
                     <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">${t('auth.code')}</label>
                     <div style="display: flex; gap: 8px;">
-                        <input type="text" class="auth-input" placeholder="${t('auth.codePlaceholder')}" id="regCode" style="flex: 1; margin: 0;" oninput="clearFormError('errorContainer', 'regCode'); clearFieldValidationState('regCode')">
+                        <input type="text" inputmode="numeric" maxlength="6" class="auth-input" placeholder="${t('auth.codePlaceholder')}" id="regCode" style="flex: 1; margin: 0;" oninput="sanitizeIntegerInput(this, 6); clearFormError('errorContainer', 'regCode'); clearFieldValidationState('regCode')">
                         <button type="button" id="sendCodeBtn" onclick="sendVerificationEmailCode()" ${btnDisabled} class="auth-input ${codeCooldownSeconds > 0 ? 'btn-cooldown' : ''}" style="width: auto; background:#1f1f1f; color:#fff; cursor:pointer; font-weight:600;">${btnText}</button>
                     </div>
                 </div>
@@ -1589,14 +1697,17 @@ async function confirmSubscriptionPayment() {
     try {
         setButtonLoading(button, true, t('payConfirming'));
         setPaymentStatus(t('payConfirming'), 'info');
-        const response = await fetch('/api/payment/confirm', {
+        const response = await fetch(
+            pending.purpose === 'subscription' ? '/api/subscription/confirm' : '/api/payment/confirm',
+            {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(pending),
-        });
+            },
+        );
         const data = await response.json();
         if (!response.ok) {
-            if (data.detail === 'Payment session not found') {
+            if (data.detail === 'Payment session not found' && pending.purpose !== 'subscription') {
                 return await recoverTestnetSubscriptionPayment(pending);
             }
             const isWaitingForConfirmation = data.detail === 'USDC payment is waiting for Base confirmation';
@@ -1617,8 +1728,24 @@ async function confirmSubscriptionPayment() {
 }
 
 function completeSubscriptionPayment(data) {
-    storePaymentAccess(data);
     clearPendingSubscriptionPayment();
+    if (data?.subscription_updated) {
+        userPlan = data.plan || userPlan;
+        subscriptionStatus = data.status || 'active';
+        subscriptionDaysLeft = Number(data.days_left || 0);
+        subscriptionGraceDaysLeft = Number(data.grace_days_left || 0);
+        subscriptionExpiresAt = Number(data.expires_at || 0);
+        subscriptionExpiryHandled = false;
+        localStorage.setItem('selected_plan', userPlan);
+        setPaymentStatus(t('subscriptionUpdated'), 'success');
+        showNotification(t('subscriptionUpdated'), 'success');
+        window.setTimeout(() => {
+            closeAuthModal();
+            renderDashboardContent('Account');
+        }, 700);
+        return;
+    }
+    storePaymentAccess(data);
     setPaymentStatus(t('payConfirmed'), 'success');
     showNotification(t('payConfirmed'));
     setTimeout(() => openModal('register'), 800);
@@ -1692,7 +1819,7 @@ async function startPlanPayment() {
 
     try {
         setButtonLoading(button, true, locale.payPreparing);
-        const createRes = await fetch('/api/payment/create-session', {
+        const createRes = await fetch(isLoggedIn ? '/api/subscription/create-session' : '/api/payment/create-session', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ plan: chosenPlan, amount: basePrice, onboarding: false, client_session_id: clientSessionId }),
@@ -1733,6 +1860,7 @@ async function startPlanPayment() {
             payment_session_id: createData.payment_session_id,
             client_session_id: clientSessionId,
             txid,
+            purpose: isLoggedIn ? 'subscription' : 'registration',
         });
         setPaymentStatus(locale.paySubmitted, 'info');
         await confirmSubscriptionPayment();
@@ -1914,6 +2042,9 @@ async function validateLogin() {
             sessionStorage.setItem('ax_access_token', data.access_token);
             userPlan = data.plan || 'Standard';
             subscriptionDaysLeft = data.days_left ?? 29;
+            subscriptionStatus = data.subscription_status || 'active';
+            subscriptionGraceDaysLeft = Number(data.grace_days_left || 0);
+            subscriptionExpiresAt = Number(data.subscription_expires_at || 0);
             handleLoginSuccess();
         } else {
             let errMsg = t('errors.loginFailed');
@@ -1939,7 +2070,16 @@ function handleLoginSuccess() {
     if(mobileNav) mobileNav.style.display = ''; 
     currentSection = 'Account';
     renderDashboardContent('Account');
-    showNotification("OK!");
+    if (subscriptionStatus === 'grace') {
+        showNotification(
+            t('subscriptionGrace').replace('{days}', subscriptionGraceDaysLeft),
+            'warning',
+        );
+    } else if (subscriptionStatus === 'expired') {
+        window.setTimeout(handleSubscriptionExpired, 100);
+    } else {
+        showNotification("OK!");
+    }
 }
 
 let authExpiryHandled = false;
@@ -2233,6 +2373,75 @@ function switchMenu(element, sectionName) {
     currentSection = sectionName;
     localStorage.setItem('airdrop_current_section', sectionName);
     renderDashboardContent(sectionName);
+}
+
+let subscriptionExpiryHandled = false;
+
+function handleSubscriptionExpired() {
+    subscriptionStatus = 'expired';
+    subscriptionDaysLeft = 0;
+    if (subscriptionExpiryHandled) return;
+    subscriptionExpiryHandled = true;
+    if (isLoggedIn) renderDashboardContent('Account');
+    showNotification(t('subscriptionRequired'), 'warning');
+    openPricingModal();
+}
+
+function syncMobileNavigation() {
+    const navigation = document.getElementById('mobileNavBar');
+    if (!navigation) return;
+    const locale = translations[getActiveLang()] || translations.ru;
+    const labels = {
+        'mn-account': locale.menuAcc,
+        'mn-farming': locale.menuFarm,
+        'mn-wallets': locale.menuWallets,
+        'mn-networks': locale.menuNet,
+        'mn-more': locale.mobileNavMore
+    };
+    Object.entries(labels).forEach(([id, label]) => {
+        const target = document.getElementById(id);
+        if (target) target.textContent = label;
+    });
+    navigation.querySelectorAll('[data-mobile-section]').forEach((button) => {
+        const section = button.dataset.mobileSection;
+        const isMore = section === 'more';
+        button.classList.toggle('active', isMore
+            ? currentSection === 'Looter' || currentSection === 'Settings'
+            : currentSection === section);
+    });
+}
+
+function switchMobileNav(section, element) {
+    closeBottomSheetMenu();
+    switchMenu(element, section);
+}
+
+function openBottomSheetMenu(trigger) {
+    const overlay = document.getElementById('bottomSheetOverlay');
+    const items = document.getElementById('sheetMenuItemsContainer');
+    if (!overlay || !items) return;
+    const locale = translations[getActiveLang()] || translations.ru;
+    items.innerHTML = `
+        <div class="mobile-sheet-heading">${escapeHtml(locale.mobileNavMore)}</div>
+        <button type="button" class="mobile-sheet-item ${currentSection === 'Looter' ? 'active' : ''}" onclick="switchMobileNav('Looter', this)">${escapeHtml(locale.menuLooter)}</button>
+        <button type="button" class="mobile-sheet-item ${currentSection === 'Settings' ? 'active' : ''}" onclick="switchMobileNav('Settings', this)">${escapeHtml(locale.menuSet)}</button>
+        <button type="button" class="mobile-sheet-item mobile-sheet-item--logout" onclick="closeBottomSheetMenu(); logoutUser()">${escapeHtml(locale.menuExit)}</button>
+    `;
+    overlay.classList.add('show');
+    document.body.classList.add('mobile-sheet-open');
+    if (trigger) trigger.setAttribute('aria-expanded', 'true');
+}
+
+function closeBottomSheetMenu() {
+    const overlay = document.getElementById('bottomSheetOverlay');
+    if (overlay) overlay.classList.remove('show');
+    document.body.classList.remove('mobile-sheet-open');
+    const moreButton = document.querySelector('#mobileNavBar [data-mobile-section="more"]');
+    if (moreButton) moreButton.setAttribute('aria-expanded', 'false');
+}
+
+function handleSheetOverlayClick(event) {
+    if (event.target?.id === 'bottomSheetOverlay') closeBottomSheetMenu();
 }
 
 function networkDomId(network) {
@@ -2672,7 +2881,7 @@ async function loadTransferCenter() {
             ? `<div style="display:grid; grid-template-columns:1.1fr 1.6fr .8fr; gap:10px;">
                     <input id="transferTemplateName" maxlength="60" class="auth-input" placeholder="${locale.transferTemplateName}" style="font-size:13px; padding:10px 12px;">
                     <select id="transferTemplateRecipient" class="auth-input" style="font-size:13px; padding:10px 12px;">${recipients}</select>
-                    <input id="transferTemplateAmount" inputmode="decimal" class="auth-input" placeholder="0.001" style="font-size:13px; padding:10px 12px;">
+                    <input id="transferTemplateAmount" inputmode="decimal" class="auth-input" placeholder="0.001" oninput="sanitizeDecimalInput(this, 18)" style="font-size:13px; padding:10px 12px;">
                </div>
                <button type="button" onclick="createTransferTemplate()" class="btn-dark-sm" style="margin-top:10px; width:auto; padding:10px 14px; border-color:#7c3aed;">${locale.transferTemplateSave}</button>`
             : `<div style="color:var(--text-muted); font-size:13px; line-height:1.5;">${locale.transferNeedTwoWallets}</div>`;
@@ -2686,7 +2895,7 @@ async function loadTransferCenter() {
                         <div style="color:var(--text-muted); font-size:12px; margin-top:4px;">${escapeHtml(recipientName)} · ${escapeHtml(template.recipient_address.slice(0, 6))}…${escapeHtml(template.recipient_address.slice(-4))}</div>
                     </div>
                     <div style="display:flex; gap:7px; align-items:center; flex-wrap:wrap; justify-content:flex-end;">
-                        <input id="transferTemplateAmount-${Number(template.id)}" inputmode="decimal" value="${escapeHtml(template.default_amount)}" class="auth-input" style="width:88px; padding:7px 9px; font-size:12px;">
+                        <input id="transferTemplateAmount-${Number(template.id)}" inputmode="decimal" value="${escapeHtml(template.default_amount)}" oninput="sanitizeDecimalInput(this, 18)" class="auth-input" style="width:88px; padding:7px 9px; font-size:12px;">
                         <button type="button" id="transferTemplateSend-${Number(template.id)}" onclick="sendTransferTemplate(${Number(template.id)})" class="btn-dark-sm" style="padding:7px 10px; border-color:#7c3aed;">${locale.transferSend}</button>
                         <button type="button" onclick="deleteTransferTemplate(${Number(template.id)})" class="btn-dark-sm" style="padding:7px 10px; color:#fca5a5;">${locale.transferDelete}</button>
                     </div>
@@ -2867,7 +3076,7 @@ async function loadDirectTransferPanel() {
         container.innerHTML = `
             <div style="display:grid; grid-template-columns:1.4fr 1fr; gap:10px;">
                 <label style="color:var(--text-muted); font-size:12px;">${locale.directTransferRecipient}<select id="directTransferRecipient" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;">${recipientOptions}</select></label>
-                <label style="color:var(--text-muted); font-size:12px;">${locale.directTransferAmount}<input id="directTransferAmount" inputmode="decimal" placeholder="0.001" oninput="updateDirectTransferAmount()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"><div id="directTransferUsd" style="color:#c4b5fd; font-size:14px; font-weight:700; margin-top:6px;"></div></label>
+                <label style="color:var(--text-muted); font-size:12px;">${locale.directTransferAmount}<input id="directTransferAmount" inputmode="decimal" placeholder="0.001" oninput="sanitizeDecimalInput(this, 18); updateDirectTransferAmount()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"><div id="directTransferUsd" style="color:#c4b5fd; font-size:14px; font-weight:700; margin-top:6px;"></div></label>
             </div>
             <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-top:8px;">
                 <div id="directTransferAvailability" style="font-size:12px;"></div>
@@ -3020,10 +3229,8 @@ async function requestBaseSwapQuote() {
         const errorMessage = String(error?.message || '');
         const displayMessage = errorMessage.includes('not configured')
             ? locale.baseSwapNotConfigured
-            : (errorMessage.includes('Save this wallet in AIRDROP-X')
-                ? locale.baseSwapWalletRequired
-                : (translateBackendDetail(errorMessage) || locale.baseSwapQuoteError));
-        if (result) result.innerHTML = `<span style="color:#fca5a5;">${displayMessage}</span>`;
+            : operationErrorMessage(error, locale, locale.baseSwapQuoteError);
+        if (result) result.innerHTML = `<span style="color:#fca5a5;">${escapeHtml(displayMessage)}</span>`;
     } finally {
         setButtonLoading(button, false, locale.baseSwapGetQuote);
     }
@@ -3085,8 +3292,8 @@ async function submitBaseSwap() {
         const errorMessage = String(error?.message || '');
         const displayMessage = errorMessage.includes('Base Swap quote expired')
             ? locale.baseSwapExpired
-            : (translateBackendDetail(errorMessage) || locale.baseSwapFailed);
-        if (result) result.innerHTML = `<span style="color:#fca5a5;">${rejected ? locale.baseSwapRejected : displayMessage}</span>`;
+            : operationErrorMessage(error, locale, locale.baseSwapFailed);
+        if (result) result.innerHTML = `<span style="color:#fca5a5;">${escapeHtml(rejected ? locale.baseSwapRejected : displayMessage)}</span>`;
     } finally {
         setButtonLoading(button, false, locale.baseSwapReview);
     }
@@ -3589,10 +3796,10 @@ async function loadWalletsFromDB() {
             const profileReady = Boolean(w.profile_id && w.profile_status === 'active');
             const profileStatus = profileReady ? t.walletProfileReady : t.walletProfilePending;
             return `
-                <div style="background: var(--bg-main); border: 1px solid var(--border-color); padding: 14px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; gap:12px;">
-                    <div>
+                <div class="wallet-list-item">
+                    <div class="wallet-list-info">
                         <div style="color: #fff; font-weight: 600; font-size: 13px;">${walletName}</div>
-                        <div style="color: #d1d5db; font-size: 12px; margin-top:4px; font-family:monospace;">${address}</div>
+                        <div class="wallet-list-address">${address}</div>
                         <div style="color: ${isActive ? '#86efac' : 'var(--text-muted)'}; font-size: 12px; margin-top:5px;">${isActive ? (isConnectedForActions ? t.walletSessionActive : t.walletActiveNeedsConnection) : t.walletBaseMonitoring}</div>
                         <div style="color: var(--text-muted); font-size: 12px; margin-top:3px;">${proxyStatus}</div>
                         <div style="color:${profileReady ? '#86efac' : '#fbbf24'}; font-size:12px; margin-top:3px;">${profileReady ? '✓' : '◌'} ${profileStatus}</div>
@@ -3607,7 +3814,7 @@ async function loadWalletsFromDB() {
                             <button type="button" onclick="saveWalletDetails(${w.id})" class="btn-dark-sm" style="margin-top:8px; padding:7px 10px; border-color:#7c3aed;">${t.walletEditSave}</button>
                         </div>
                     </div>
-                    <div style="display:flex; gap:6px; flex-wrap:wrap; justify-content:flex-end;">
+                    <div class="wallet-list-actions">
                         <button type="button" onclick="activateSavedWallet(${w.id}, '${w.wallet_address}')" ${isActive ? 'disabled' : ''} style="background:${isActive ? 'rgba(34,197,94,0.12)' : 'rgba(124,58,237,0.12)'}; color:${isActive ? '#86efac' : '#c4b5fd'}; border:1px solid ${isActive ? 'rgba(34,197,94,0.28)' : 'rgba(124,58,237,0.32)'}; padding:6px 10px; border-radius:8px; font-size:12px; cursor:${isActive ? 'default' : 'pointer'};">${isActive ? t.walletActive : t.walletActivate}</button>
                         ${isActive && !isConnectedForActions ? `<button type="button" onclick="connectSavedWalletForActions('${w.wallet_address}', this)" style="background:rgba(34,197,94,.10); color:#86efac; border:1px solid rgba(34,197,94,.30); padding:6px 10px; border-radius:8px; font-size:12px; cursor:pointer;">${t.walletConnectActive.replace('{address}', shortAddress)}</button>` : ''}
                         <button type="button" onclick="toggleWalletEditor(${w.id})" style="background:rgba(255,255,255,.06); color:#e5e7eb; border:1px solid var(--border-color); padding:6px 10px; border-radius:8px; font-size:12px; cursor:pointer;">${t.walletEdit}</button>
@@ -3621,7 +3828,12 @@ async function loadWalletsFromDB() {
             `;
         }).join('');
     } else {
-        container.innerHTML = `<div style="color: var(--text-muted); font-size: 13px;">${t.noWal}</div>`;
+        container.innerHTML = renderAppEmptyState(
+            t.emptyStateWalletsTitle,
+            t.noWal,
+            t.emptyStateWalletsAction,
+            'connectBaseWallet(true)'
+        );
     }
     loadWalletScheduleSummaries(data.wallets);
     } catch (_) {
@@ -3722,7 +3934,8 @@ async function checkWalletHealth(walletId, button) {
 }
 
 async function testWalletProxy(walletId, btn) {
-    btn.innerHTML = '⏳...';
+    const locale = translations[getActiveLang()] || translations.ru;
+    btn.textContent = locale.walletProxyChecking || locale.loading;
     btn.disabled = true;
     btn.style.background = 'rgba(255, 255, 255, 0.1)';
     btn.style.color = '#fff';
@@ -3739,24 +3952,24 @@ async function testWalletProxy(walletId, btn) {
                 btn.style.background = 'rgba(234, 179, 8, 0.1)';
                 btn.style.color = '#eab308';
                 btn.style.borderColor = 'rgba(234, 179, 8, 0.2)';
-                btn.innerHTML = `⚠️ ${ping}ms`;
+                btn.textContent = (locale.walletProxySlow || 'Proxy is slow: {ping} ms').replace('{ping}', String(ping));
             } else {
                 btn.style.background = 'rgba(34, 197, 94, 0.1)';
                 btn.style.color = '#22c55e';
                 btn.style.borderColor = 'rgba(34, 197, 94, 0.2)';
-                btn.innerHTML = '✅ OK';
+                btn.textContent = (locale.walletProxyOk || 'Proxy works: {ping} ms').replace('{ping}', String(ping));
             }
         } else {
             btn.style.background = 'rgba(239, 68, 68, 0.1)';
             btn.style.color = '#ef4444';
             btn.style.borderColor = 'rgba(239, 68, 68, 0.2)';
-            btn.innerHTML = '❌';
+            btn.textContent = locale.walletProxyFailed || locale.walletProxyTest;
         }
     } catch (e) {
         btn.style.background = 'rgba(239, 68, 68, 0.1)';
         btn.style.color = '#ef4444';
         btn.style.borderColor = 'rgba(239, 68, 68, 0.2)';
-        btn.innerHTML = '❌';
+        btn.textContent = locale.walletProxyFailed || locale.walletProxyTest;
     }
     btn.disabled = false;
 }
@@ -3853,12 +4066,12 @@ function updateDailyConfigsUI() {
                     
                     <div style="display: flex; align-items: center; gap: 6px;">
                         <span style="font-size: 12px; color: var(--text-muted);">${t.tMin}</span>
-                        <input type="number" class="auth-input day-min-delay-val" value="${savedMinDelay}" min="15" max="7200" oninput="checkInputLimit(this, 7200)" style="padding: 6px; width: 65px; font-size: 13px; background: var(--bg-card);">
+                        <input type="number" inputmode="numeric" class="auth-input day-min-delay-val" value="${savedMinDelay}" min="15" max="7200" oninput="sanitizeIntegerInput(this, 4); checkInputLimit(this, 7200)" style="padding: 6px; width: 65px; font-size: 13px; background: var(--bg-card);">
                     </div>
                     
                     <div style="display: flex; align-items: center; gap: 6px;">
                         <span style="font-size: 12px; color: var(--text-muted);">${t.tMax}</span>
-                        <input type="number" class="auth-input day-max-delay-val" value="${savedMaxDelay}" min="15" max="7200" oninput="checkInputLimit(this, 7200)" style="padding: 6px; width: 65px; font-size: 13px; background: var(--bg-card);">
+                        <input type="number" inputmode="numeric" class="auth-input day-max-delay-val" value="${savedMaxDelay}" min="15" max="7200" oninput="sanitizeIntegerInput(this, 4); checkInputLimit(this, 7200)" style="padding: 6px; width: 65px; font-size: 13px; background: var(--bg-card);">
                     </div>
                 </div>
             </div>
@@ -3873,8 +4086,7 @@ function randomizeGlobalSettings() {
     lastRandomizeTimestamp = now;
     
     if (shouldRotateProxy()) {
-        const newIndex = rotateProxyIndex();
-        console.log('[Anti-Sybil] Proxy rotation triggered:', newIndex);
+        rotateProxyIndex();
     }
 
     const allDays = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
@@ -4492,11 +4704,22 @@ function renderInterfaceHint(hintId, message, tone = 'info', contentId = '', ico
         ? `<span id="${contentId}">${escapeHtml(message)}</span>`
         : `<span>${escapeHtml(message)}</span>`;
 
+    const iconHtml = icon ? `<span aria-hidden="true" style="font-size:15px; line-height:18px;">${icon}</span>` : '';
     return `<div id="interfaceHint-${hintId}" style="background:${style.background}; border:1px solid ${style.border}; color:${style.color}; padding:11px 12px; border-radius:11px; font-size:12px; line-height:1.5; margin:12px 0; display:flex; align-items:flex-start; gap:9px;">
-        <span aria-hidden="true" style="font-size:15px; line-height:18px;">${icon}</span>
+        ${iconHtml}
         <div style="flex:1; min-width:0;">${content}</div>
         <button type="button" onclick="dismissInterfaceHint('${hintId}')" aria-label="${escapeHtml(t('interfaceHintClose'))}" title="${escapeHtml(t('interfaceHintClose'))}" style="appearance:none; border:0; background:transparent; color:inherit; cursor:pointer; font-size:18px; line-height:16px; padding:0 1px; opacity:.78;">×</button>
     </div>`;
+}
+
+function renderOperationGuide(hintId, title, message, tone = 'info') {
+    if (!isInterfaceHintVisible(hintId)) return '';
+    const closeLabel = (translations[getActiveLang()] || translations.ru).interfaceHintClose || 'Close';
+    return `<aside id="interfaceHint-${hintId}" data-interface-hint="${hintId}" class="operation-explainer operation-explainer--${tone}" role="note">
+        <b>${escapeHtml(title)}</b>
+        <span>${escapeHtml(message)}</span>
+        <button type="button" class="operation-explainer__close" onclick="dismissInterfaceHint('${hintId}')" aria-label="${escapeHtml(closeLabel)}" title="${escapeHtml(closeLabel)}">×</button>
+    </aside>`;
 }
 
 function toggleInterfaceHints(checkbox) {
@@ -5294,6 +5517,30 @@ function setUniversalBridgeResult(message, color = 'var(--text-muted)') {
     result.style.color = color;
 }
 
+function openDexFromSameNetworkBridge() {
+    const amount = document.getElementById('operationAmount')?.value || '';
+    switchActivityPane('dex');
+    window.setTimeout(() => {
+        const input = document.getElementById('operationAmount');
+        if (!input) return;
+        input.value = amount;
+        sanitizeDecimalInput(input, 18);
+        validateOperationAmount();
+    }, 60);
+}
+
+function showUniversalBridgeSameNetwork(network) {
+    const locale = translations[getActiveLang()];
+    const result = document.getElementById('universalBridgeResult');
+    if (!result) return;
+    result.style.display = '';
+    result.style.color = '#fde68a';
+    const action = network === 'Base'
+        ? `<button type="button" class="btn-dark-sm" onclick="openDexFromSameNetworkBridge()" style="display:block; margin-top:9px; border-color:#7c3aed;">${escapeHtml(locale.universalBridgeOpenDex)}</button>`
+        : '';
+    result.innerHTML = `<span>${escapeHtml(locale.universalBridgeSameNetwork)}</span>${action}`;
+}
+
 function setUniversalBridgeReviewVisible(visible) {
     const button = document.getElementById('universalBridgeReviewButton');
     if (button) button.style.display = visible ? 'inline-flex' : 'none';
@@ -5322,7 +5569,7 @@ async function requestUniversalBridgeQuote() {
     activeUniversalBridgeQuote = null;
     setUniversalBridgeReviewVisible(false);
     if (sourceNetwork === destinationNetwork) {
-        setUniversalBridgeResult(locale.universalBridgeNetworksMustDiffer, '#fca5a5');
+        showUniversalBridgeSameNetwork(sourceNetwork);
         return;
     }
     if (!sourceToken || !destinationToken || !amount || !validateOperationAmount() || !/^0x[0-9a-fA-F]{40}$/.test(activeAddress)) {
@@ -5362,7 +5609,7 @@ async function requestUniversalBridgeQuote() {
         setUniversalBridgeResult(quoteUniversalBridgeSummary(data), '#86efac');
         setUniversalBridgeReviewVisible(true);
     } catch (error) {
-        setUniversalBridgeResult(translateBackendDetail(error?.message) || locale.universalBridgeQuoteUnavailable, '#fca5a5');
+        setUniversalBridgeResult(operationErrorMessage(error, locale, locale.universalBridgeQuoteUnavailable), '#fca5a5');
     } finally {
         setButtonLoading(button, false, locale.universalBridgeGetQuote);
     }
@@ -5535,7 +5782,7 @@ async function loadUniversalBridgeHistory() {
         const data = await response.json();
         if (!response.ok || !Array.isArray(data.records)) throw new Error('universal_bridge_history_unavailable');
         if (!data.records.length) {
-            container.innerHTML = `<div style="color:var(--text-muted); font-size:12px;">${locale.universalBridgeHistoryEmpty}</div>`;
+            container.innerHTML = renderAppEmptyState(locale.emptyStateBridgeTitle, locale.universalBridgeHistoryEmpty);
             return;
         }
         container.innerHTML = data.records.map((record) => {
@@ -5816,7 +6063,7 @@ async function requestAaveUsdcSupplyQuote() {
         const display = message.includes('exceeds the wallet balance')
             ? locale.defiSupplyInsufficientBalance
             : (message.includes('Aave USDC supply is temporarily unavailable') ? locale.defiSupplyUnavailable : locale.defiSupplyQuoteError);
-        aaveSupplyResult(display, '#fca5a5');
+        aaveSupplyResult(operationErrorMessage(error, locale, display), '#fca5a5');
     } finally {
         setButtonLoading(button, false, locale.defiSupplyCheck);
     }
@@ -5926,7 +6173,10 @@ async function submitAaveUsdcSupply() {
         const txUrl = `${BASE_MAINNET_CONFIG.blockExplorerUrls[0]}/tx/${encodeURIComponent(txHash)}`;
         const result = document.getElementById('aaveSupplyResult');
         if (result) result.innerHTML = `<span style="color:#86efac;">${escapeHtml(locale.defiSupplySubmitted)}</span> <a href="${txUrl}" target="_blank" rel="noopener noreferrer" style="color:#c4b5fd;">${escapeHtml(locale.defiSupplyOpenExplorer)}</a>`;
-        window.setTimeout(() => loadDefiOverview(true), 7000);
+        window.setTimeout(() => {
+            loadDefiOverview(true);
+            loadLendingPositions(true);
+        }, 7000);
     } catch (error) {
         const rejected = error?.code === 4001 || error?.code === 'ACTION_REJECTED';
         const message = String(error?.message || '');
@@ -5935,7 +6185,7 @@ async function submitAaveUsdcSupply() {
             : (message.includes('quote_expired')
                 ? locale.defiSupplyExpired
                 : (message.includes('wallet_mismatch') ? locale.defiSupplyWalletRequired : locale.defiSupplyFailed));
-        aaveSupplyResult(rejected ? locale.defiSupplyRejected : display, '#fca5a5');
+        aaveSupplyResult(rejected ? locale.defiSupplyRejected : operationErrorMessage(error, locale, display), '#fca5a5');
     } finally {
         setButtonLoading(button, false, locale.defiSupplyReview);
     }
@@ -5946,7 +6196,7 @@ function showAaveUsdcWithdrawForm(positionAmount) {
     const panel = document.getElementById('aaveWithdrawPanel');
     if (!panel) return;
     activeAaveWithdrawQuote = null;
-    panel.innerHTML = `<div style="border-top:1px solid var(--border-color); margin-top:10px; padding-top:11px;"><label style="display:block; color:var(--text-muted); font-size:11px;">${escapeHtml(locale.defiWithdrawAmount)}<input id="aaveWithdrawAmount" inputmode="decimal" value="${escapeHtml(positionAmount)}" class="auth-input" style="margin-top:5px; padding:8px 10px; font-size:12px;"></label><button type="button" id="aaveWithdrawQuoteButton" onclick="requestAaveUsdcWithdrawQuote()" class="btn-dark-sm" style="padding:8px 11px; font-size:12px; margin-top:9px; border-color:#7c3aed;">${escapeHtml(locale.defiWithdrawCheck)}</button><div id="aaveWithdrawResult" style="font-size:12px; line-height:1.5; margin-top:9px;"></div></div>`;
+    panel.innerHTML = `<div style="border-top:1px solid var(--border-color); margin-top:10px; padding-top:11px;"><label style="display:block; color:var(--text-muted); font-size:11px;">${escapeHtml(locale.defiWithdrawAmount)}<input id="aaveWithdrawAmount" inputmode="decimal" value="${escapeHtml(positionAmount)}" oninput="sanitizeDecimalInput(this, 6)" class="auth-input" style="margin-top:5px; padding:8px 10px; font-size:12px;"></label><button type="button" id="aaveWithdrawQuoteButton" onclick="requestAaveUsdcWithdrawQuote()" class="btn-dark-sm" style="padding:8px 11px; font-size:12px; margin-top:9px; border-color:#7c3aed;">${escapeHtml(locale.defiWithdrawCheck)}</button><div id="aaveWithdrawResult" style="font-size:12px; line-height:1.5; margin-top:9px;"></div></div>`;
 }
 
 function aaveWithdrawResult(message, color = 'var(--text-muted)') {
@@ -5993,7 +6243,7 @@ async function requestAaveUsdcWithdrawQuote() {
         const display = message.includes('exceeds the Aave USDC position')
             ? locale.defiWithdrawInsufficientPosition
             : locale.defiWithdrawQuoteError;
-        aaveWithdrawResult(display, '#fca5a5');
+        aaveWithdrawResult(operationErrorMessage(error, locale, display), '#fca5a5');
     } finally {
         setButtonLoading(button, false, locale.defiWithdrawCheck);
     }
@@ -6069,14 +6319,17 @@ async function submitAaveUsdcWithdraw() {
         const txUrl = `${BASE_MAINNET_CONFIG.blockExplorerUrls[0]}/tx/${encodeURIComponent(txHash)}`;
         const result = document.getElementById('aaveWithdrawResult');
         if (result) result.innerHTML = `<span style="color:#86efac;">${escapeHtml(locale.defiWithdrawSubmitted)}</span> <a href="${txUrl}" target="_blank" rel="noopener noreferrer" style="color:#c4b5fd;">${escapeHtml(locale.defiWithdrawOpenExplorer)}</a>`;
-        window.setTimeout(() => loadDefiOverview(true), 7000);
+        window.setTimeout(() => {
+            loadDefiOverview(true);
+            loadLendingPositions(true);
+        }, 7000);
     } catch (error) {
         const rejected = error?.code === 4001 || error?.code === 'ACTION_REJECTED';
         const message = String(error?.message || '');
         const display = message.includes('quote_expired')
             ? locale.defiWithdrawExpired
             : (message.includes('wallet_mismatch') ? locale.defiWithdrawWalletRequired : locale.defiWithdrawFailed);
-        aaveWithdrawResult(rejected ? locale.defiWithdrawRejected : display, '#fca5a5');
+        aaveWithdrawResult(rejected ? locale.defiWithdrawRejected : operationErrorMessage(error, locale, display), '#fca5a5');
     } finally {
         setButtonLoading(button, false, locale.defiWithdrawReview);
     }
@@ -6178,7 +6431,12 @@ async function loadOperationsJournal() {
         });
         renderOperationsJournalSummary(data.records);
         if (!records.length) {
-            container.innerHTML = `<div style="padding:14px 0; color:var(--text-muted); font-size:13px;">${locale.operationsJournalEmpty}</div>`;
+            container.innerHTML = renderAppEmptyState(
+                locale.emptyStateJournalTitle,
+                locale.operationsJournalEmpty,
+                locale.emptyStateJournalAction,
+                "switchActivityPane('dex')"
+            );
             return;
         }
         container.innerHTML = records.map((record) => {
@@ -6347,7 +6605,7 @@ async function executeUniversalBridge() {
                 ? locale.baseSwapActiveWalletMismatch
                 : message.includes('universal_bridge_network_not_selected')
                     ? locale.operationWalletNetworkRequired
-                    : (rejected ? locale.universalBridgeRejected : (translateBackendDetail(message) || locale.universalBridgeFailed));
+                    : (rejected ? locale.universalBridgeRejected : operationErrorMessage(error, locale, locale.universalBridgeFailed));
         setUniversalBridgeResult(display, '#fca5a5');
     } finally {
         setButtonLoading(button, false, locale.universalBridgeReview);
@@ -6712,7 +6970,7 @@ async function executeBridgeTransfer() {
 async function buildLendingOperation() {
     return buildVerifiedLendingOperation();
 }
-async function loadLendingPositions() {
+async function loadLendingPositions(refresh = false) {
     const locale = translations[getActiveLang()];
     const activeAddress = getActiveBaseWalletAddress();
     const container = document.getElementById('lendingPositionsList');
@@ -6730,16 +6988,22 @@ async function loadLendingPositions() {
         const walletsData = await walletsResponse.json();
         const wallet = walletsData.wallets?.find((item) => String(item.wallet_address || '').toLowerCase() === activeAddress.toLowerCase());
         if (!walletsResponse.ok || !wallet) throw new Error('wallet_not_saved');
-        const res = await fetch(`/api/defi/aave-base-positions/${encodeURIComponent(wallet.id)}`);
+        const res = await fetch(`/api/defi/aave-base-positions/${encodeURIComponent(wallet.id)}${refresh ? '?refresh=true' : ''}`);
         const data = await res.json();
         if (!res.ok || !data.positions || !data.positions.length) {
-            container.textContent = locale.defiOverviewEmpty;
+            container.innerHTML = renderAppEmptyState(
+                locale.emptyStateLendingTitle,
+                locale.errors?.defiOverviewEmpty || locale.defiNoPositions,
+            );
             return;
         }
 
         const positions = data.positions.filter((position) => position.has_supply || position.has_borrow);
         if (!positions.length) {
-            container.textContent = locale.defiOverviewEmpty;
+            container.innerHTML = renderAppEmptyState(
+                locale.emptyStateLendingTitle,
+                locale.errors?.defiOverviewEmpty || locale.defiNoPositions,
+            );
             return;
         }
         container.innerHTML = positions.map((pos) => `
@@ -6749,13 +7013,13 @@ async function loadLendingPositions() {
                     <span style="color:var(--text-muted);">Aave V3 · Base</span>
                 </div>
                 <div style="text-align:right;">
-                    <b>${escapeHtml(locale.defiOverviewSupplied)}:</b> ${escapeHtml(pos.supplied || '0')}<br>
-                    <span style="color:var(--text-muted);">${escapeHtml(locale.defiOverviewBorrowed)}: ${escapeHtml(pos.borrowed || '0')}</span>
+                    <b>${escapeHtml(locale.errors?.defiOverviewSupplied || locale.defiOverviewSupplied || 'Supplied')}:</b> ${escapeHtml(pos.supplied || '0')}<br>
+                    <span style="color:var(--text-muted);">${escapeHtml(locale.errors?.defiOverviewBorrowed || locale.defiOverviewBorrowed || 'Borrowed')}: ${escapeHtml(pos.borrowed || '0')}</span>
                 </div>
             </div>
         `).join('');
     } catch (_) {
-        container.textContent = locale.defiOverviewLoadError;
+        container.textContent = locale.errors?.defiOverviewLoadError || locale.defiLoadError;
     }
 }
 
@@ -6786,7 +7050,7 @@ async function buildVerifiedLendingOperation() {
         result.append(hiddenAmount, quoteResult);
         await requestAaveUsdcSupplyQuote();
     }
-    if (!quoteResult.textContent.trim()) quoteResult.textContent = locale.errors_genericRequestFailed || 'Request failed';
+    if (!quoteResult.textContent.trim()) quoteResult.textContent = locale.errors?.genericRequestFailed || locale.operationErrorTryAgain;
 }
 
 async function loadAccountOverview() {
@@ -6879,7 +7143,8 @@ async function loadAccountOverview() {
 // --- Рендеринг Дашборда ---
 function renderDashboardContent(section) {
     currentSection = section;
-    const t = translations[currentLang] || translations['ru'];
+    const activeTranslations = translations[currentLang] || translations['ru'];
+    const t = { ...activeTranslations, ...(activeTranslations.errors || {}) };
     const content = document.getElementById('dashboard-content');
     const username = getCurrentUsername();
 
@@ -6887,6 +7152,16 @@ function renderDashboardContent(section) {
     
     if (section === 'Account') {
         const guideHtml = renderInterfaceHint('account-welcome', `${t.accWelcome}, ${username}! ${t.accountOverviewIntro}`, 'purple', '', '');
+        const subscriptionStatusText = subscriptionStatus === 'grace'
+            ? t.subscriptionGrace.replace('{days}', subscriptionGraceDaysLeft)
+            : (subscriptionStatus === 'expired'
+                ? t.subscriptionExpired
+                : `${t.subActive} (${subscriptionDaysLeft} ${t.days})`);
+        const subscriptionActionHtml = subscriptionStatus !== 'active'
+            ? `<button type="button" onclick="openPricingModal()" class="btn-dark-sm">${t.subscriptionRenew}</button>`
+            : (userPlan === 'Premium'
+                ? `<p class="account-subscription-max">${t.subscriptionPremiumMax}</p>`
+                : `<button type="button" onclick="openPricingModal()" class="btn-dark-sm">${t.btnChangePlan}</button>`);
 
         centerHtml = `
             ${guideHtml}
@@ -6930,9 +7205,9 @@ function renderDashboardContent(section) {
             <div class="account-overview-columns">
                 <div class="dashboard-card account-subscription-card">
                     <div class="account-section-heading"><div><div class="account-kicker">${t.accountOverviewSubscription}</div><h3>${t.subTitle}</h3></div><span id="accountOverviewPlan" class="account-plan-badge">${escapeHtml(userPlan)}</span></div>
-                    <p>${t.subPlan}: <b>${escapeHtml(userPlan)}</b> · ${t.subActive} (${subscriptionDaysLeft} ${t.days})</p>
+                    <p>${t.subPlan}: <b>${escapeHtml(userPlan)}</b> · ${escapeHtml(subscriptionStatusText)}</p>
                     <p class="account-subscription-note">${t.subscriptionPaymentNote}</p>
-                    <button type="button" onclick="openPricingModal()" class="btn-dark-sm">${t.btnChangePlan}</button>
+                    ${subscriptionActionHtml}
                 </div>
                 <div class="dashboard-card account-quick-card">
                     <div class="account-section-heading"><div><div class="account-kicker">${t.accountOverviewShortcuts}</div><h3>${t.accountOverviewQuickTitle}</h3></div></div>
@@ -6987,7 +7262,7 @@ function renderDashboardContent(section) {
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px;">
                     <div>
                         <label style="font-size: 12px; color: var(--text-muted); display: block; margin-bottom: 6px;">${t.setGwei}</label>
-                        <input type="number" class="auth-input" value="30" min="5" max="300" id="globalGweiInput" oninput="checkInputLimit(this, 300)" style="padding: 10px 12px; background: var(--bg-main); border-radius: 10px; font-size: 13px;">
+                        <input type="number" inputmode="numeric" class="auth-input" value="30" min="5" max="300" id="globalGweiInput" oninput="sanitizeIntegerInput(this, 3); checkInputLimit(this, 300)" style="padding: 10px 12px; background: var(--bg-main); border-radius: 10px; font-size: 13px;">
                     </div>
                     <div style="background:var(--bg-main); border:1px solid var(--border-color); border-radius:10px; padding:12px;">
                         <div style="font-size:13px; color:#fff; font-weight:600;">${t.tgConnectTitle}</div>
@@ -7115,6 +7390,9 @@ function renderDashboardContent(section) {
             ['lending', t.activityTabLending || 'Lending'],
             ['journal', t.activityTabJournal || 'Journal'],
         ].map(([key, label]) => `<button type="button" onclick="switchActivityPane('${key}')" style="background:${activityPane === key ? 'rgba(124,58,237,.22)' : 'var(--bg-main)'}; color:${activityPane === key ? '#e9d5ff' : 'var(--text-muted)'}; border:1px solid ${activityPane === key ? '#7c3aed' : 'var(--border-color)'}; padding:9px 11px; border-radius:9px; cursor:pointer; font-size:12px; white-space:nowrap;">${label}</button>`).join('');
+        const dexGuide = renderOperationGuide('operation-guide-dex', t.operationGuideTitle || 'How it works', t.operationGuideDex || '', 'dex');
+        const bridgesGuide = renderOperationGuide('operation-guide-bridges', t.operationGuideTitle || 'How it works', t.operationGuideBridges || '', 'bridges');
+        const lendingGuide = renderOperationGuide('operation-guide-lending', t.operationGuideTitle || 'How it works', t.operationGuideLending || '', 'lending');
         const activeWalletConnectControls = (networkExpression = "'Base'") => `
             <div class="operation-wallet-connect">
                 <button type="button" onclick="connectActiveWalletForActions(this, ${networkExpression})" class="btn-dark-sm operation-wallet-connect-button">${t.operationConnectActiveWallet}</button>
@@ -7126,6 +7404,7 @@ function renderDashboardContent(section) {
             <div class="dashboard-card" style="margin-bottom:16px;">
                 <h3 style="color:#fff; margin:0 0 5px; font-size:16px;">${t.dexTitle || 'DEX Exchange'}</h3>
                 <p style="color:var(--text-muted); font-size:13px; line-height:1.5; margin:0 0 14px;">${t.dexDesc || 'Verified ETH → USDC route through Uniswap on Base.'}</p>
+                ${dexGuide}
                 <div style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px;">
                     <label style="color:var(--text-muted); font-size:12px;">${t.labelChain || 'Sender Chain'}
                         <select id="operationSourceNetwork" class="auth-input" disabled style="margin-top:5px; font-size:13px; padding:10px 12px;">
@@ -7148,7 +7427,7 @@ function renderDashboardContent(section) {
                         </select>
                     </label>
                     <label style="color:var(--text-muted); font-size:12px; grid-column:1 / -1;">${t.labelAmount || 'Amount'}
-                        <input id="operationAmount" inputmode="decimal" placeholder="0.01" oninput="validateOperationAmount()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;">
+                        <input id="operationAmount" inputmode="decimal" placeholder="0.01" oninput="sanitizeDecimalInput(this, 18); validateOperationAmount()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;">
                     </label>
                 </div>
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; font-size:12px;">
@@ -7174,6 +7453,7 @@ function renderDashboardContent(section) {
             <div class="dashboard-card" style="margin-bottom:16px;">
                 <h3 style="color:#fff; margin:0 0 5px; font-size:16px;">${t.bridgesTitle || 'Bridges Routing'}</h3>
                 <p style="color:var(--text-muted); font-size:13px; line-height:1.5; margin:0 0 14px;">${t.bridgesDesc || 'Live cross-network routes supplied and validated through LI.FI.'}</p>
+                ${bridgesGuide}
                 <div style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px;">
                     <label style="color:var(--text-muted); font-size:12px;">${t.labelFromNetwork || 'From Network'}
                         <select id="operationSourceNetwork" onchange="handleOperationSourceNetworkChange()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;">
@@ -7192,7 +7472,7 @@ function renderDashboardContent(section) {
                         <select id="operationReceiveAsset" onchange="handleOperationDestinationTokenChange()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;"><option value="">${t.loading}</option></select>
                     </label>
                     <label style="color:var(--text-muted); font-size:12px; grid-column:1 / -1;">${t.labelAmount || 'Amount'}
-                        <input id="operationAmount" inputmode="decimal" placeholder="0.01" oninput="validateOperationAmount()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;">
+                        <input id="operationAmount" inputmode="decimal" placeholder="0.01" oninput="sanitizeDecimalInput(this, 18); validateOperationAmount()" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;">
                     </label>
                 </div>
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; font-size:12px;">
@@ -7212,6 +7492,7 @@ function renderDashboardContent(section) {
             <div class="dashboard-card" style="margin-bottom:16px;">
                 <h3 style="color:#fff; margin:0 0 5px; font-size:16px;">${t.lendingTitle || 'Lending Markets'}</h3>
                 <p style="color:var(--text-muted); font-size:13px; line-height:1.5; margin:0 0 14px;">${t.lendingDesc || 'DeFi Lending credit protocols integrations: Aave V3.'}</p>
+                ${lendingGuide}
                 <div style="display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px;">
                     <label style="color:var(--text-muted); font-size:12px;">${t.labelChain || 'Network'}
                         <select id="lendingNetwork" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;">
@@ -7235,7 +7516,7 @@ function renderDashboardContent(section) {
                         </select>
                     </label>
                     <label style="color:var(--text-muted); font-size:12px; grid-column:1 / -1;">${t.labelAmount || 'Amount'}
-                        <input id="lendingAmount" inputmode="decimal" placeholder="10.0" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;">
+                        <input id="lendingAmount" inputmode="decimal" placeholder="10.0" oninput="sanitizeDecimalInput(this, 6)" class="auth-input" style="margin-top:5px; font-size:13px; padding:10px 12px;">
                     </label>
                 </div>
                 <div id="lendingWalletStatus" style="margin-top:10px; color:var(--text-muted); font-size:12px;">${t.loading}</div>
@@ -7245,7 +7526,7 @@ function renderDashboardContent(section) {
                 <div id="lendingResultContainer" style="margin-top:12px; padding:12px; background:var(--bg-main); border:1px solid var(--border-color); border-radius:10px; font-size:12px;"></div>
             </div>
             <div class="dashboard-card">
-                <h3 style="color:#fff; margin:0 0 10px; font-size:15px;">${t.lendingPositionsTitle || 'Active Positions'}</h3>
+                <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:10px;"><h3 style="color:#fff; margin:0; font-size:15px;">${t.lendingPositionsTitle || 'Active Positions'}</h3><button type="button" class="btn-dark-sm" onclick="loadLendingPositions(true)" style="padding:7px 10px; font-size:11px;">${t.accountOverviewRefresh || 'Refresh'}</button></div>
                 <div id="lendingPositionsList" style="font-size:12px; color:var(--text-muted);">${t.loading}</div>
             </div>
         `;
@@ -7344,7 +7625,7 @@ function renderDashboardContent(section) {
                 <span class="dashboard-identity__mark">AX</span>
                 <span class="dashboard-identity__copy">
                     <b>${username}</b>
-                    <small>${userPlan} · ${t.subActive} · ${subscriptionDaysLeft} ${t.days}</small>
+                    <small>${userPlan} · ${subscriptionStatus === 'active' ? `${t.subActive} · ${subscriptionDaysLeft} ${t.days}` : (subscriptionStatus === 'grace' ? t.subscriptionGrace.replace('{days}', subscriptionGraceDaysLeft) : t.subscriptionExpired)}</small>
                 </span>
             </div>
             <nav class="dashboard-topnav" aria-label="${t.menuMain}">
@@ -7359,4 +7640,5 @@ function renderDashboardContent(section) {
         </div>
         <div class="dashboard-main">${centerHtml}</div>
     `;
+    syncMobileNavigation();
 }

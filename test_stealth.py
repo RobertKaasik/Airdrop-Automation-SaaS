@@ -1,62 +1,62 @@
-import asyncio
-from core.database import init_db, async_session_factory
-from core.models import UserProfile
-from core.browser_profile_manager import BrowserProfileManager
+"""Offline smoke checks for the isolated browser-profile manager.
 
-async def setup_test_profile():
-    # Создаем таблицы в БД
-    await init_db()
-    
-    async with async_session_factory() as session:
-        # Проверяем, есть ли уже тестовый профиль
-        from sqlalchemy import select
-        result = await session.execute(select(UserProfile).where(UserProfile.profile_name == "stealth_test"))
-        profile = result.scalar_one_or_none()
-        
-        if not profile:
-            # Создаем фейковые метаданные: имитируем мощный ПК с RTX 4090
-            fake_metadata = {
-                "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-                "vendor": "Google Inc. (NVIDIA)", 
-                "renderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 Direct3D11 vs_5_0 ps_5_0, D3D11)",
-                "width": 2560,
-                "height": 1440,
-                "canvas_seed": 777
-            }
-            
-            profile = UserProfile(
-                profile_name="stealth_test",
-                evm_wallet_address="0x0000000000000000000000000000000000000000",
-                private_key="dummy_key",
-                fingerprint_metadata=fake_metadata
-            )
-            session.add(profile)
-            await session.commit()
-            print("✅ Тестовый профиль (RTX 4090) успешно создан в БД!")
-            return profile.id
-        return profile.id
+The test deliberately does not open a browser, visit an external website, or
+store wallet secrets. It validates the profile boundary that the application
+actually uses: required proxy parsing, deterministic environment metadata, and
+exclusive profile locks.
+"""
 
-async def main():
-    profile_id = await setup_test_profile()
-    manager = BrowserProfileManager()
-    
-    print(f"🚀 Запускаем профиль ID: {profile_id}...")
-    # Запускаем браузер
-    context, playwright, lock_path = await manager.launch_profile(profile_id)
-    
-    page = await context.new_page()
-    
-    print("🌐 Переходим на проверку WebGL...")
-    await page.goto("https://browserleaks.com/webgl", wait_until="domcontentloaded")
-    
-    print("👀 Браузер открыт! Посмотри на 'Unmasked Vendor' и 'Renderer' на сайте.")
-    print("Они должны показывать RTX 4090, даже если у тебя другая видеокарта.")
-    print("Браузер закроется сам через 60 секунд...")
-    
-    await asyncio.sleep(60)
-    
-    print("🛑 Закрываем профиль...")
-    await manager.close_profile(context, playwright, lock_path)
+import os
+from pathlib import Path
+
+from core.browser_profile_manager import (
+    BrowserProfileManager,
+    ProfileConfigurationError,
+)
+
+
+def verify_proxy_validation() -> None:
+    authenticated = BrowserProfileManager._parse_proxy(
+        "socks5://demo-user:demo-pass@127.0.0.1:1080"
+    )
+    assert authenticated == {
+        "server": "socks5://127.0.0.1:1080",
+        "username": "demo-user",
+        "password": "demo-pass",
+    }
+
+    try:
+        BrowserProfileManager._parse_proxy(None)
+    except ProfileConfigurationError:
+        pass
+    else:
+        raise AssertionError("An isolated profile must fail closed without a proxy.")
+
+
+def verify_environment_metadata() -> None:
+    metadata = BrowserProfileManager._default_environment_metadata()
+    assert metadata["locale"]
+    assert metadata["viewport"]["width"] > 0
+    assert metadata["viewport"]["height"] > 0
+    assert "private_key" not in metadata
+    assert "seed_phrase" not in metadata
+
+
+def verify_profile_lock_contract() -> None:
+    # Integration tests exercise the real atomic lock. This smaller smoke test
+    # keeps filesystem access read-only so it also works in restricted CI.
+    manager = BrowserProfileManager.__new__(BrowserProfileManager)
+    manager.locks_path = Path("browser_profiles") / "locks"
+    assert manager._lock_path(101) == Path("browser_profiles/locks/profile-101.lock")
+    assert manager._is_process_alive(os.getpid())
+
+
+def main() -> None:
+    verify_proxy_validation()
+    verify_environment_metadata()
+    verify_profile_lock_contract()
+    print("PASS: isolated profile validation and locking checks passed.")
+
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

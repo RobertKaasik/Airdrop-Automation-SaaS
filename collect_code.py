@@ -3,7 +3,19 @@ import os
 # Файлы с какими расширениями мы собираем
 ALLOWED_EXTENSIONS = {'.py', '.js', '.html', '.css', '.json'}
 # Какие папки игнорируем, чтобы не засорять контекст
-IGNORE_DIRS = {'.venv', '__pycache__', '.vscode', '.git', 'docs'}
+IGNORE_DIRS = {
+    '.venv',
+    '__pycache__',
+    '.vscode',
+    '.git',
+    '.continue',
+    '.test-artifacts',
+    '.integration-test-artifacts',
+    'browser_profiles',
+    'docs',
+    'node_modules',
+    'ui-dist',
+}
 
 with open('project_context.txt', 'w', encoding='utf-8') as outfile:
     for root, dirs, files in os.walk('.'):

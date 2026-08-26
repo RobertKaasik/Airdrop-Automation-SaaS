@@ -44,17 +44,17 @@
             <button type="button" id="nav-pricing" onclick="openPricingModal()">Тарифы</button>
         </nav>
         <div class="header-actions">
-            <button id="login-btn" class="btn-dark-sm glow-button-target" onclick="openModal('login')">Войти</button>
+            <button type="button" id="login-btn" class="btn-dark-sm glow-button-target" onclick="openModal('login')">Войти</button>
             
             <div class="lang-dropdown-wrapper">
-                <button class="btn-dark-sm" id="lang-btn" onclick="toggleLangMenu(event)">
+                <button type="button" class="btn-dark-sm" id="lang-btn" onclick="toggleLangMenu(event)">
                     <span style="color: #c77dff; font-size: 11px; font-weight: bold; background: rgba(157,78,221,0.2); padding: 2px 5px; border-radius: 6px;" id="current-lang-badge">RU</span>
                     <span id="current-lang-text">RU</span>
                 </button>
                 <div class="lang-menu" id="langMenu">
-                    <button class="lang-option" onclick="changeLanguage('en')"><span style="color: #c77dff; font-size: 11px; font-weight: bold; background: rgba(157,78,221,0.2); padding: 2px 5px; border-radius: 6px;">US</span> English</button>
-                    <button class="lang-option" onclick="changeLanguage('zh')"><span style="color: #c77dff; font-size: 11px; font-weight: bold; background: rgba(157,78,221,0.2); padding: 2px 5px; border-radius: 6px;">CN</span> 中文</button>
-                    <button class="lang-option" onclick="changeLanguage('ru')"><span style="color: #c77dff; font-size: 11px; font-weight: bold; background: rgba(157,78,221,0.2); padding: 2px 5px; border-radius: 6px;">RU</span> Русский</button>
+                    <button type="button" class="lang-option" onclick="changeLanguage('en')"><span style="color: #c77dff; font-size: 11px; font-weight: bold; background: rgba(157,78,221,0.2); padding: 2px 5px; border-radius: 6px;">US</span> English</button>
+                    <button type="button" class="lang-option" onclick="changeLanguage('zh')"><span style="color: #c77dff; font-size: 11px; font-weight: bold; background: rgba(157,78,221,0.2); padding: 2px 5px; border-radius: 6px;">CN</span> 中文</button>
+                    <button type="button" class="lang-option" onclick="changeLanguage('ru')"><span style="color: #c77dff; font-size: 11px; font-weight: bold; background: rgba(157,78,221,0.2); padding: 2px 5px; border-radius: 6px;">RU</span> Русский</button>
                 </div>
             </div>
         </div>
@@ -65,7 +65,7 @@
         <div class="auth-modal" style="max-width: 950px; width: 95%;">
             <div class="modal-logo">
                 <span id="p-title-modal">⚡ Выберите тарифный план AIRDROP-X</span>
-                <span onclick="closePricingModal()" style="cursor: pointer; color: #b19cd9; font-size: 20px;">✕</span>
+                <button type="button" class="icon-button-plain" onclick="closePricingModal()" aria-label="Close" style="color: #b19cd9; font-size: 20px;">✕</button>
             </div>
             <div class="modal-desc" id="p-desc-modal" style="text-align: center; margin-bottom: 24px;">
                 Ежемесячная подписка без обязательного активационного платежа.
@@ -249,8 +249,8 @@
                     <button type="button" id="walletScheduleCustomMode" class="wallet-schedule-mode" onclick="setWalletScheduleMode('custom')"></button>
                 </div>
                 <div class="wallet-schedule-flex-grid">
-                    <label><span id="walletScheduleWeeklyMinLabel"></span><input id="walletScheduleWeeklyMin" type="number" min="1" max="7" value="3" class="auth-input"></label>
-                    <label><span id="walletScheduleWeeklyMaxLabel"></span><input id="walletScheduleWeeklyMax" type="number" min="1" max="7" value="4" class="auth-input"></label>
+                    <label><span id="walletScheduleWeeklyMinLabel"></span><input id="walletScheduleWeeklyMin" type="number" min="1" max="7" value="3" oninput="sanitizeIntegerInput(this, 1); checkInputLimit(this, 7)" class="auth-input"></label>
+                    <label><span id="walletScheduleWeeklyMaxLabel"></span><input id="walletScheduleWeeklyMax" type="number" min="1" max="7" value="4" oninput="sanitizeIntegerInput(this, 1); checkInputLimit(this, 7)" class="auth-input"></label>
                     <label><span id="walletScheduleWindowStartLabel"></span><input id="walletScheduleWindowStart" type="text" value="10:00" placeholder="10:00" maxlength="5" inputmode="numeric" oninput="format24HourTimeInput(this)" onblur="normalize24HourTimeInput(this)" class="auth-input"></label>
                     <label><span id="walletScheduleWindowEndLabel"></span><input id="walletScheduleWindowEnd" type="text" value="21:00" placeholder="21:00" maxlength="5" inputmode="numeric" oninput="format24HourTimeInput(this)" onblur="normalize24HourTimeInput(this)" class="auth-input"></label>
                 </div>
@@ -278,7 +278,7 @@
         <div class="auth-modal" style="max-width: 380px; text-align:center;">
             <div class="modal-logo" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
                 <span id="walletConnectModalTitle"></span>
-                <span onclick="closeWalletConnectModal()" style="cursor:pointer; color:#b19cd9; font-size:18px;">✕</span>
+                <button type="button" class="icon-button-plain" onclick="closeWalletConnectModal()" aria-label="Close" style="color:#b19cd9; font-size:18px;">✕</button>
             </div>
             <p id="walletConnectModalDesc" style="color:var(--text-muted); font-size:13px; line-height:1.5; margin:0 0 14px;"></p>
             <div id="walletConnectQrCode" style="display:flex; justify-content:center; background:#fff; border-radius:12px; padding:12px; margin:0 auto 14px; width:230px; height:230px; box-sizing:border-box;"></div>
@@ -324,7 +324,7 @@
         </div>
     </div>
 
-    <!-- Мобильное нижнее меню -->
+    <!-- Дополнительные разделы на мобильных устройствах -->
     <div class="bottom-sheet-overlay" id="bottomSheetOverlay" onclick="handleSheetOverlayClick(event)">
         <div class="bottom-sheet" id="bottomSheetContent">
             <div class="sheet-handle"></div>
@@ -342,8 +342,8 @@
                     <p id="hero-desc">Единое пространство для кошелька: проверка возможностей, обмены, мосты, DeFi, планирование и Telegram-уведомления — без передачи приватного ключа.</p>
 
                     <div class="hero-buttons">
-                        <button id="farm-btn" class="btn-purple-lg glow-button-target specular-button" onclick="openPricingModal()">Получить доступ <span class="btn-arrow">→</span></button>
-                        <button id="settings-btn" class="btn-dark-lg glow-button-target" onclick="scrollToFeatures()">Посмотреть платформу <span class="btn-arrow">↘</span></button>
+                        <button type="button" id="farm-btn" class="btn-purple-lg glow-button-target specular-button" onclick="openPricingModal()">Получить доступ <span class="btn-arrow">→</span></button>
+                        <button type="button" id="settings-btn" class="btn-dark-lg glow-button-target" onclick="scrollToFeatures()">Посмотреть платформу <span class="btn-arrow">↘</span></button>
                     </div>
 
                     <div class="hero-proof" id="hero-proof" aria-label="Ключевые принципы">
@@ -629,40 +629,40 @@
 
         <div id="faq-heading" class="section-title">Часто задаваемые вопросы</div>
         <div class="faq-section">
-            <div class="faq-item" onclick="toggleFaq(this)">
-                <div class="faq-question"><span id="q1">Как работает авто-клейм аирдропов?</span> <span>+</span></div>
-                <div class="faq-answer" id="a1">Софт сканирует смарт-контракты и чекеры проектов, находит распределенные на ваши кошельки токены и безопасно подписывает транзакции сбора.</div>
+            <div class="faq-item">
+                <button type="button" class="faq-question" onclick="toggleFaq(this.closest('.faq-item'))" aria-expanded="false" aria-controls="a1"><span id="q1">Как работает авто-клейм аирдропов?</span> <span class="faq-toggle" aria-hidden="true">+</span></button>
+                <div class="faq-answer" id="a1" role="region" aria-labelledby="q1">Софт сканирует смарт-контракты и чекеры проектов, находит распределенные на ваши кошельки токены и безопасно подписывает транзакции сбора.</div>
             </div>
-            <div class="faq-item" onclick="toggleFaq(this)">
-                <div class="faq-question"><span id="q2">В чем разница между Standard и PRO?</span> <span>+</span></div>
-                <div class="faq-answer" id="a2">Standard ограничен 5 кошельками и сетью Base. PRO дает до 15 кошельков, доступ к сетям Arbitrum и ZkSync, а также фоновый планировщик. Premium открывает 30 кошельков и эксклюзивный доступ к Solana.</div>
+            <div class="faq-item">
+                <button type="button" class="faq-question" onclick="toggleFaq(this.closest('.faq-item'))" aria-expanded="false" aria-controls="a2"><span id="q2">В чем разница между Standard и PRO?</span> <span class="faq-toggle" aria-hidden="true">+</span></button>
+                <div class="faq-answer" id="a2" role="region" aria-labelledby="q2">Standard ограничен 5 кошельками и сетью Base. PRO дает до 15 кошельков, доступ к сетям Arbitrum и ZkSync, а также фоновый планировщик. Premium открывает 30 кошельков и эксклюзивный доступ к Solana.</div>
             </div>
-            <div class="faq-item" onclick="toggleFaq(this)">
-                <div class="faq-question"><span id="q3">Нужно ли настраивать прокси для каждого кошелька?</span> <span>+</span></div>
-                <div class="faq-answer" id="a3">Да, софт поддерживает привязку индивидуальных HTTP/Socks5 прокси к каждому адресу.</div>
+            <div class="faq-item">
+                <button type="button" class="faq-question" onclick="toggleFaq(this.closest('.faq-item'))" aria-expanded="false" aria-controls="a3"><span id="q3">Нужно ли настраивать прокси для каждого кошелька?</span> <span class="faq-toggle" aria-hidden="true">+</span></button>
+                <div class="faq-answer" id="a3" role="region" aria-labelledby="q3">Да, софт поддерживает привязку индивидуальных HTTP/Socks5 прокси к каждому адресу.</div>
             </div>
-            <div class="faq-item" onclick="toggleFaq(this)">
-                <div class="faq-question"><span id="q4">Как получить доступ к софту?</span> <span>+</span></div>
-                <div class="faq-answer" id="a4">Выберите тариф вверху сайта, оформите подписку и залогиньтесь. Количество мест ограничено.</div>
+            <div class="faq-item">
+                <button type="button" class="faq-question" onclick="toggleFaq(this.closest('.faq-item'))" aria-expanded="false" aria-controls="a4"><span id="q4">Как получить доступ к софту?</span> <span class="faq-toggle" aria-hidden="true">+</span></button>
+                <div class="faq-answer" id="a4" role="region" aria-labelledby="q4">Выберите тариф вверху сайта, оформите подписку и залогиньтесь. Количество мест ограничено.</div>
             </div>
         </div>
     </div>
 
     <div id="dashboard-content" style="display: none;" class="dashboard-wrapper"></div>
 
-    <div class="mobile-nav-bar" id="mobileNavBar" style="display: none;">
-        <button class="mobile-nav-item active" onclick="switchMobileNav('Looter', this)"><span class="icon">📦</span><span id="mn-looter">Looter</span></button>
-        <button class="mobile-nav-item" onclick="switchMobileNav('Farming', this)"><span class="icon">🌾</span><span id="mn-farm">Фарм</span></button>
-        <button class="mobile-nav-item" onclick="switchMobileNav('Proxy', this)"><span class="icon">🌐</span><span id="mn-proxy">Прокси</span></button>
-        <button class="mobile-nav-item" onclick="switchMobileNav('Statistics', this)"><span class="icon">📊</span><span id="mn-stats">Статистика</span></button>
-        <button class="mobile-nav-item" onclick="openBottomSheetMenu()"><span class="icon">☰</span><span id="mn-more">Ещё</span></button>
+    <div class="mobile-nav-bar" id="mobileNavBar" style="display: none;" aria-label="Mobile navigation">
+        <button type="button" class="mobile-nav-item" data-mobile-section="Account" onclick="switchMobileNav('Account', this)"><span id="mn-account">Account</span></button>
+        <button type="button" class="mobile-nav-item" data-mobile-section="Farming" onclick="switchMobileNav('Farming', this)"><span id="mn-farming">Action center</span></button>
+        <button type="button" class="mobile-nav-item" data-mobile-section="Wallets" onclick="switchMobileNav('Wallets', this)"><span id="mn-wallets">Wallets</span></button>
+        <button type="button" class="mobile-nav-item" data-mobile-section="Networks" onclick="switchMobileNav('Networks', this)"><span id="mn-networks">Networks</span></button>
+        <button type="button" class="mobile-nav-item" data-mobile-section="more" onclick="openBottomSheetMenu(this)"><span id="mn-more">More</span></button>
     </div>
 
     <footer class="footer" style="border-top: 1px solid var(--border-color); padding: 24px 20px; display: flex; justify-content: space-between; align-items: center; background: var(--bg-main); color: var(--text-muted); font-size: 13px;">
     <div id="footer-rights"></div>
     <div style="display: flex; gap: 20px; align-items: center;">
-        <span onclick="openLegalModal('privacy')" style="cursor: pointer; transition: 0.2s;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--text-muted)'" id="footer-privacy"></span>
-        <span onclick="openLegalModal('terms')" style="cursor: pointer; transition: 0.2s;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--text-muted)'" id="footer-terms"></span>
+        <button type="button" class="footer-link-button" onclick="openLegalModal('privacy')" id="footer-privacy"></button>
+        <button type="button" class="footer-link-button" onclick="openLegalModal('terms')" id="footer-terms"></button>
         <a href="https://t.me" target="_blank" style="color: var(--text-muted); text-decoration: none; transition: 0.2s;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--text-muted)'">Telegram</a>
         <a href="https://github.com" target="_blank" style="color: var(--text-muted); text-decoration: none; transition: 0.2s;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--text-muted)'">GitHub</a>
     </div>
@@ -674,7 +674,7 @@
     <div class="auth-modal" style="max-width: 680px; max-height: 85vh; overflow-y: auto;">
         <div class="modal-logo">
             <span id="legalModalTitle" style="font-size: 16px; font-weight: bold; color: #fff;"></span>
-            <span onclick="hideAppModal('legalModal')" style="cursor: pointer; color: var(--text-muted); font-size: 18px;">✕</span>
+            <button type="button" class="icon-button-plain" onclick="hideAppModal('legalModal')" aria-label="Close" style="color: var(--text-muted); font-size: 18px;">✕</button>
         </div>
         <div id="legalModalContent" style="color: var(--text-muted); font-size: 12px; line-height: 1.6;"></div>
     </div>
