@@ -150,6 +150,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from web3 import Web3
+from web3.exceptions import TransactionNotFound
 
 # --- LOGGING AND SETTINGS ---
 logging.getLogger('apscheduler.executors.default').setLevel(logging.WARNING)
@@ -194,6 +195,7 @@ DEVICE_CHANGE_WINDOW_SECONDS = 30 * 24 * 60 * 60
 MAX_DEVICE_CHANGES_PER_WINDOW = 1
 TELEGRAM_LINK_TTL_SECONDS = 10 * 60
 TELEGRAM_TEST_COOLDOWN_SECONDS = 60
+TELEGRAM_REMINDER_RETRY_WINDOW_MINUTES = 5
 BASE_CHAIN_ID = 8453
 BASE_NATIVE_TOKEN_ADDRESS = "0x0000000000000000000000000000000000000000"
 BASE_USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
@@ -837,6 +839,7 @@ PUBLIC_STATIC_PATHS = {
     "",
     "index.html",
     "app.js",
+    "wallet-session-state.js",
     "style.css",
     "demo-gas-ru.gif",
     "demo-wallets-ru.gif",
@@ -939,6 +942,16 @@ def send_telegram_notification(chat_id: str, message: str):
     except Exception as e:
         logging.warning("Telegram notification failed: %s", e)
         return False
+
+
+def escape_telegram_markdown_text(value: Any) -> str:
+    """Escape untrusted text embedded in Telegram's legacy Markdown mode."""
+    return re.sub(r"([\\_*`\[])", r"\\\1", str(value or ""))
+
+
+def escape_telegram_markdown_code(value: Any) -> str:
+    """Escape a value placed inside a Telegram Markdown code span."""
+    return str(value or "").replace("\\", "\\\\").replace("`", "\\`")
 
 def get_telegram_subscription(db: Session, username: str) -> Optional[TelegramSubscription]:
     return db.query(TelegramSubscription).filter(TelegramSubscription.username == username).first()
@@ -1144,23 +1157,32 @@ def receipt_has_exact_usdc_transfer(
 
 
 def get_usdc_payment_verification_state(txid: str, payment_config: dict, expected_atomic_amount: int) -> str:
-    """Return confirmed, pending, or invalid for one exact USDC transfer."""
-    try:
-        clean_txid = txid.strip()
-        if expected_atomic_amount <= 0 or not re.fullmatch(r"0x[0-9a-fA-F]{64}", clean_txid):
-            return "invalid"
+    """Return confirmed, pending, invalid, or unavailable for an exact USDC transfer."""
+    clean_txid = txid.strip()
+    if expected_atomic_amount <= 0 or not re.fullmatch(r"0x[0-9a-fA-F]{64}", clean_txid):
+        return "invalid"
 
+    try:
         w3 = Web3(Web3.HTTPProvider(payment_config["rpc_url"], request_kwargs={"timeout": 10}))
         if not w3.is_connected():
-            return "pending"
+            return "unavailable"
         try:
             receipt = w3.eth.get_transaction_receipt(clean_txid)
-        except Exception:
+        except TransactionNotFound:
             # A wallet can return a hash before the node can see its receipt.
             return "pending"
+        except Exception as error:
+            logging.warning("Subscription payment receipt lookup failed: %s", type(error).__name__)
+            return "unavailable"
         if not receipt or receipt.get("status") != 1:
             return "invalid"
-        tx = w3.eth.get_transaction(clean_txid)
+        try:
+            tx = w3.eth.get_transaction(clean_txid)
+        except TransactionNotFound:
+            return "pending"
+        except Exception as error:
+            logging.warning("Subscription payment transaction lookup failed: %s", type(error).__name__)
+            return "unavailable"
         if not tx:
             return "pending"
 
@@ -1183,21 +1205,55 @@ def get_usdc_payment_verification_state(txid: str, payment_config: dict, expecte
         return "confirmed" if receipt_has_exact_usdc_transfer(
             receipt, payment_config, expected_atomic_amount
         ) else "invalid"
-    except Exception:
-        return "pending"
+    except Exception as error:
+        logging.warning("Subscription payment RPC verification failed: %s", type(error).__name__)
+        return "unavailable"
 
 def verify_usdc_payment_tx(txid: str, payment_config: dict, expected_atomic_amount: int) -> bool:
     return get_usdc_payment_verification_state(txid, payment_config, expected_atomic_amount) == "confirmed"
 
 scheduler = AsyncIOScheduler()
 
+
+def get_due_reminder_slot(
+    current_time: datetime.datetime,
+    time_of_day: str,
+    *,
+    day_of_week: Optional[str] = None,
+    date_string: Optional[str] = None,
+    timezone_name: Optional[str] = None,
+) -> Optional[str]:
+    """Return the scheduled slot when it is inside the delivery retry window."""
+    if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", time_of_day or ""):
+        return None
+    hour, minute = (int(part) for part in time_of_day.split(":"))
+    try:
+        if date_string:
+            target_date = datetime.date.fromisoformat(date_string)
+        else:
+            day_indexes = {"Mon": 0, "Tue": 1, "Wed": 2, "Thu": 3, "Fri": 4, "Sat": 5, "Sun": 6}
+            if day_of_week not in day_indexes:
+                return None
+            days_ago = (current_time.weekday() - day_indexes[day_of_week]) % 7
+            target_date = (current_time - datetime.timedelta(days=days_ago)).date()
+        scheduled_at = datetime.datetime.combine(
+            target_date,
+            datetime.time(hour=hour, minute=minute),
+            tzinfo=current_time.tzinfo,
+        )
+    except (TypeError, ValueError):
+        return None
+
+    seconds_since_slot = (current_time - scheduled_at).total_seconds()
+    if not 0 <= seconds_since_slot <= TELEGRAM_REMINDER_RETRY_WINDOW_MINUTES * 60:
+        return None
+    slot = scheduled_at.strftime("%Y-%m-%d %H:%M")
+    return f"{slot}|{timezone_name}" if timezone_name else slot
+
+
 async def run_scheduled_action_reminder_job():
     """Send an opt-in reminder only. This job never builds or signs a blockchain transaction."""
     now = datetime.datetime.now()
-    current_day_map = {0: 'Mon', 1: 'Tue', 2: 'Wed', 3: 'Thu', 4: 'Fri', 5: 'Sat', 6: 'Sun'}
-    current_day_str = current_day_map.get(now.weekday())
-    current_time_str = now.strftime("%H:%M")
-    current_slot = now.strftime("%Y-%m-%d %H:%M")
     db = SessionLocal()
     try:
         subscription_access_cache: dict[str, bool] = {}
@@ -1210,40 +1266,47 @@ async def run_scheduled_action_reminder_job():
                 )
             return subscription_access_cache[username]
 
-        reminders = db.query(ActionReminder).filter(
-            ActionReminder.enabled.is_(True),
-            ActionReminder.day_of_week == current_day_str,
-            ActionReminder.time_of_day == current_time_str,
-        ).all()
+        reminders = db.query(ActionReminder).filter(ActionReminder.enabled.is_(True)).all()
         for reminder in reminders:
+            due_slot = get_due_reminder_slot(
+                now,
+                reminder.time_of_day,
+                day_of_week=reminder.day_of_week,
+            )
+            if not due_slot or reminder.last_sent_slot == due_slot:
+                continue
             if not subscription_allows_reminders(reminder.username):
                 continue
-            if reminder.last_sent_slot == current_slot:
-                continue
             subscription = get_telegram_subscription(db, reminder.username)
-            if subscription and reminder.telegram_enabled and subscription.notify_reminders:
-                messages = {
-                    "ru": (
-                        "🗓 *AIRDROP-X: напоминание о плане*\n"
-                        f"Сеть: `{reminder.network}`\n"
-                        "Откройте Центр действий, проверьте условия и подтвердите только нужное действие в кошельке."
-                    ),
-                    "en": (
-                        "🗓 *AIRDROP-X: plan reminder*\n"
-                        f"Network: `{reminder.network}`\n"
-                        "Open the Action Center, review the terms, and approve only the action you choose in your wallet."
-                    ),
-                    "zh": (
-                        "🗓 *AIRDROP-X：计划提醒*\n"
-                        f"网络：`{reminder.network}`\n"
-                        "请打开操作中心、检查条件，并且只在钱包中确认您自己选择的操作。"
-                    ),
-                }
-                send_telegram_notification(
-                    subscription.chat_id,
-                    messages[normalize_language(subscription.language)],
-                )
-            reminder.last_sent_slot = current_slot
+            if not subscription or not reminder.telegram_enabled or not subscription.notify_reminders:
+                continue
+            messages = {
+                "ru": (
+                    "🗓 *AIRDROP-X: напоминание о плане*\n"
+                    f"Сеть: `{reminder.network}`\n"
+                    "Откройте Центр действий, проверьте условия и подтвердите только нужное действие в кошельке."
+                ),
+                "en": (
+                    "🗓 *AIRDROP-X: plan reminder*\n"
+                    f"Network: `{reminder.network}`\n"
+                    "Open the Action Center, review the terms, and approve only the action you choose in your wallet."
+                ),
+                "zh": (
+                    "🗓 *AIRDROP-X：计划提醒*\n"
+                    f"网络：`{reminder.network}`\n"
+                    "请打开操作中心、检查条件，并且只在钱包中确认您自己选择的操作。"
+                ),
+            }
+            delivered = send_telegram_notification(
+                subscription.chat_id,
+                messages[normalize_language(subscription.language)],
+            )
+            if not delivered:
+                # Leave the slot pending so the next scheduler tick retries it
+                # during the short delivery window.
+                continue
+            reminder.last_sent_slot = due_slot
+            db.commit()
 
         wallet_schedules = db.query(WalletActionSchedule).filter(
             WalletActionSchedule.enabled.is_(True),
@@ -1254,28 +1317,31 @@ async def run_scheduled_action_reminder_job():
             "zh": {"dex": "DEX", "bridge": "跨链桥", "lending": "借贷"},
         }
         for schedule in wallet_schedules:
-            if not subscription_allows_reminders(schedule.username):
-                continue
             try:
                 local_now = datetime.datetime.now(ZoneInfo(schedule.timezone))
             except (ZoneInfoNotFoundError, ValueError):
                 logging.warning("Invalid timezone on wallet schedule id=%s", schedule.id)
                 continue
-            local_day = current_day_map.get(local_now.weekday())
-            local_time = local_now.strftime("%H:%M")
-            local_slot = f"{local_now.strftime('%Y-%m-%d %H:%M')}|{schedule.timezone}"
+            due_slot = None
             if schedule.schedule_mode == "custom":
                 custom_slots = parse_custom_schedule_slots(schedule.custom_slots)
                 if not custom_slots:
                     logging.warning("Invalid custom schedule id=%s", schedule.id)
                     schedule.enabled = False
                     schedule.updated_at = int(time.time())
+                    db.commit()
                     continue
-                if not any(
-                    item.get("day") == local_day and item.get("time") == local_time
+                due_slot = next((
+                    candidate
                     for item in custom_slots
-                ):
-                    continue
+                    if (candidate := get_due_reminder_slot(
+                        local_now,
+                        item.get("time", ""),
+                        day_of_week=item.get("day"),
+                        timezone_name=schedule.timezone,
+                    ))
+                    and candidate != schedule.last_sent_slot
+                ), None)
             elif schedule.schedule_mode == "flexible":
                 try:
                     generated_slots = ensure_flexible_schedule_week(schedule, local_now)
@@ -1283,16 +1349,30 @@ async def run_scheduled_action_reminder_job():
                     logging.warning("Invalid flexible schedule id=%s", schedule.id)
                     schedule.enabled = False
                     schedule.updated_at = int(time.time())
+                    db.commit()
                     continue
-                current_date = local_now.date().isoformat()
-                if not any(
-                    item.get("date") == current_date and item.get("time") == local_time
+                due_slot = next((
+                    candidate
                     for item in generated_slots
-                ):
-                    continue
-            elif schedule.day_of_week != local_day or schedule.time_of_day != local_time:
+                    if (candidate := get_due_reminder_slot(
+                        local_now,
+                        item.get("time", ""),
+                        date_string=item.get("date"),
+                        timezone_name=schedule.timezone,
+                    ))
+                    and candidate != schedule.last_sent_slot
+                ), None)
+            else:
+                due_slot = get_due_reminder_slot(
+                    local_now,
+                    schedule.time_of_day,
+                    day_of_week=schedule.day_of_week,
+                    timezone_name=schedule.timezone,
+                )
+            if not due_slot or schedule.last_sent_slot == due_slot:
                 continue
-            if schedule.last_sent_slot == local_slot:
+
+            if not subscription_allows_reminders(schedule.username):
                 continue
 
             wallet = db.query(Wallet).filter(
@@ -1302,43 +1382,45 @@ async def run_scheduled_action_reminder_job():
             if not wallet or not wallet.proxy:
                 schedule.enabled = False
                 schedule.updated_at = int(time.time())
+                db.commit()
                 continue
 
             subscription = get_telegram_subscription(db, schedule.username)
-            if subscription and schedule.telegram_enabled and subscription.notify_reminders:
-                language = normalize_language(subscription.language)
-                wallet_name = re.sub(
-                    r"([_*`\[])",
-                    r"\\\1",
-                    (wallet.label or f"Wallet {wallet.id}")[:80],
-                )
-                short_address = f"{wallet.wallet_address[:8]}…{wallet.wallet_address[-6:]}"
-                action_name = action_labels[language].get(schedule.action_type, schedule.action_type)
-                messages = {
-                    "ru": (
-                        "🗓 *AIRDROP-X: действие по расписанию*\n"
-                        f"Кошелёк: *{wallet_name}* (`{short_address}`)\n"
-                        f"Действие: *{action_name}*\n"
-                        "Откройте Центр действий, проверьте параметры и подтвердите операцию в MetaMask или WalletConnect. "
-                        "Без подтверждения средства не перемещаются."
-                    ),
-                    "en": (
-                        "🗓 *AIRDROP-X: scheduled action*\n"
-                        f"Wallet: *{wallet_name}* (`{short_address}`)\n"
-                        f"Action: *{action_name}*\n"
-                        "Open the Action Center, review the parameters, and approve the operation in MetaMask or WalletConnect. "
-                        "No funds move without your confirmation."
-                    ),
-                    "zh": (
-                        "🗓 *AIRDROP-X：计划操作*\n"
-                        f"钱包：*{wallet_name}* (`{short_address}`)\n"
-                        f"操作：*{action_name}*\n"
-                        "请打开操作中心、检查参数，并在 MetaMask 或 WalletConnect 中确认。未经确认不会转移资金。"
-                    ),
-                }
-                send_telegram_notification(subscription.chat_id, messages[language])
-            schedule.last_sent_slot = local_slot
+            if not subscription or not schedule.telegram_enabled or not subscription.notify_reminders:
+                continue
+            language = normalize_language(subscription.language)
+            wallet_name = escape_telegram_markdown_text(
+                (wallet.label or f"Wallet {wallet.id}")[:80]
+            )
+            short_address = f"{wallet.wallet_address[:8]}…{wallet.wallet_address[-6:]}"
+            action_name = action_labels[language].get(schedule.action_type, schedule.action_type)
+            messages = {
+                "ru": (
+                    "🗓 *AIRDROP-X: действие по расписанию*\n"
+                    f"Кошелёк: *{wallet_name}* (`{short_address}`)\n"
+                    f"Действие: *{action_name}*\n"
+                    "Откройте Центр действий, проверьте параметры и подтвердите операцию в MetaMask или WalletConnect. "
+                    "Без подтверждения средства не перемещаются."
+                ),
+                "en": (
+                    "🗓 *AIRDROP-X: scheduled action*\n"
+                    f"Wallet: *{wallet_name}* (`{short_address}`)\n"
+                    f"Action: *{action_name}*\n"
+                    "Open the Action Center, review the parameters, and approve the operation in MetaMask or WalletConnect. "
+                    "No funds move without your confirmation."
+                ),
+                "zh": (
+                    "🗓 *AIRDROP-X：计划操作*\n"
+                    f"钱包：*{wallet_name}* (`{short_address}`)\n"
+                    f"操作：*{action_name}*\n"
+                    "请打开操作中心、检查参数，并在 MetaMask 或 WalletConnect 中确认。未经确认不会转移资金。"
+                ),
+            }
+            if not send_telegram_notification(subscription.chat_id, messages[language]):
+                continue
+            schedule.last_sent_slot = due_slot
             schedule.updated_at = int(time.time())
+            db.commit()
         db.commit()
     except Exception:
         db.rollback()
@@ -1924,6 +2006,13 @@ def get_authenticated_user(
     current_user = db.query(User).filter(User.username == auth_session.username).first()
     if not current_user:
         raise HTTPException(status_code=401, detail="Session user not found")
+    # Legacy rows created before subscription timestamps were introduced must
+    # receive one persistent anchor.  Using ``time.time()`` only inside
+    # ``get_subscription_state`` would otherwise slide the expiry forward on
+    # every request and make such an account effectively never expire.
+    if current_user.subscription_activated_at is None:
+        current_user.subscription_activated_at = now_ts
+        db.commit()
     return current_user
 
 
@@ -2162,6 +2251,46 @@ def lifi_headers() -> dict:
     if LIFI_API_KEY:
         headers["x-lifi-api-key"] = LIFI_API_KEY
     return headers
+
+def parse_provider_json_response(
+    response: requests.Response,
+    *,
+    provider: str,
+    unavailable_detail: str,
+    rejected_detail: str,
+    invalid_detail: str,
+    rejected_status: int = 502,
+) -> dict:
+    """Map an upstream HTTP response to a validated JSON object.
+
+    Provider response bodies are intentionally not included in errors or logs:
+    they may contain request identifiers or other implementation details that
+    should not be reflected to a client.  A 429 and all 5xx responses are
+    temporary dependency failures; other non-success responses retain the
+    endpoint-specific rejection status.
+    """
+    try:
+        status_code = int(response.status_code)
+    except (AttributeError, TypeError, ValueError):
+        logging.warning("%s returned a response without a valid HTTP status", provider)
+        raise HTTPException(status_code=503, detail=unavailable_detail)
+
+    if status_code == 429 or status_code >= 500:
+        logging.warning("%s is temporarily unavailable (HTTP %s)", provider, status_code)
+        raise HTTPException(status_code=503, detail=unavailable_detail)
+    if status_code >= 400:
+        logging.warning("%s rejected a request (HTTP %s)", provider, status_code)
+        raise HTTPException(status_code=rejected_status, detail=rejected_detail)
+
+    try:
+        payload = response.json()
+    except (ValueError, TypeError):
+        logging.warning("%s returned malformed JSON", provider)
+        raise HTTPException(status_code=502, detail=invalid_detail)
+    if not isinstance(payload, dict):
+        logging.warning("%s returned a non-object JSON payload", provider)
+        raise HTTPException(status_code=502, detail=invalid_detail)
+    return payload
 
 def normalize_token_address(value: str) -> str:
     address = (value or "").strip()
@@ -2636,10 +2765,16 @@ def get_lifi_tokens(network: str) -> list[dict]:
             headers=lifi_headers(),
             timeout=15,
         )
-        response.raise_for_status()
-        payload = response.json()
-    except (requests.RequestException, ValueError):
+    except requests.RequestException:
         raise HTTPException(status_code=503, detail="Universal bridge token catalog is temporarily unavailable")
+    payload = parse_provider_json_response(
+        response,
+        provider="LI.FI token catalog",
+        unavailable_detail="Universal bridge token catalog is temporarily unavailable",
+        rejected_detail="Universal bridge token catalog request was rejected",
+        invalid_detail="Universal bridge returned an invalid token catalog",
+        rejected_status=502,
+    )
 
     token_map = payload.get("tokens", payload) if isinstance(payload, dict) else {}
     raw_tokens = token_map.get(str(config["chain_id"]), []) if isinstance(token_map, dict) else []
@@ -2754,6 +2889,8 @@ def reserve_verified_usdc_payment(
     if db.query(ProcessedBlockchainTransaction).filter(ProcessedBlockchainTransaction.txid == clean_txid).first():
         raise HTTPException(status_code=409, detail="This blockchain transaction has already been used")
     verification_state = get_usdc_payment_verification_state(clean_txid, payment_config, expected_atomic_amount)
+    if verification_state == "unavailable":
+        raise HTTPException(status_code=503, detail="Base payment verification is temporarily unavailable. Please try again shortly")
     if verification_state == "pending":
         raise HTTPException(status_code=409, detail="USDC payment is waiting for Base confirmation")
     if verification_state != "confirmed":
@@ -2886,7 +3023,7 @@ async def save_user_settings(
             if max_d > 7200:
                 raise HTTPException(status_code=400, detail=f"Delay limit exceeded for day {day}: max 7200 seconds")
 
-        USER_SETTINGS_DB[data.username] = data.dict()
+        USER_SETTINGS_DB[data.username] = data.model_dump()
         subscription = get_telegram_subscription(db, data.username)
         if subscription:
             subscription.language = normalize_language(data.language)
@@ -2967,9 +3104,12 @@ def create_telegram_link_code(
         (TelegramLinkCode.username == current_user.username) |
         (TelegramLinkCode.expires_at <= now_ts)
     ).delete(synchronize_session=False)
+    # The raw deep-link token is shown once to the authenticated browser. Only
+    # its digest is persisted, so a read-only database leak cannot be used to
+    # take over a still-pending Telegram link.
     code = secrets.token_urlsafe(24).replace("=", "")
     db.add(TelegramLinkCode(
-        code=code,
+        code=hash_secret(code),
         username=current_user.username,
         language=normalize_language(data.language),
         expires_at=now_ts + TELEGRAM_LINK_TTL_SECONDS,
@@ -2997,11 +3137,13 @@ def send_telegram_test(current_user: User = Depends(get_current_user), db: Sessi
         "en": "AIRDROP-X: Telegram connection is active. You will only receive notifications that you enabled.",
         "zh": "AIRDROP-X：Telegram 已连接。您只会收到自己启用的通知。",
     }
-    if not send_telegram_notification(subscription.chat_id, messages[normalize_language(subscription.language)]):
-        raise HTTPException(status_code=502, detail="Telegram message could not be delivered")
+    # Consume the cooldown before contacting Telegram. A failed upstream call
+    # must not let a client hammer the bot endpoint without any throttling.
     subscription.last_test_at = now_ts
     subscription.updated_at = now_ts
     db.commit()
+    if not send_telegram_notification(subscription.chat_id, messages[normalize_language(subscription.language)]):
+        raise HTTPException(status_code=502, detail="Telegram message could not be delivered")
     return {"status": "success"}
 
 @app.get("/api/gas/{network}")
@@ -3039,17 +3181,20 @@ async def recover_payment_session(
         payment_config,
         int(amount_usdc * Decimal(1_000_000)),
         "subscription_payment_test_recovery",
+        commit=False,
     )
     recovery_session = PaymentCheckoutSession(
         id=str(uuid.uuid4()),
         client_session_id=client_session_id,
+        username=None,
+        purpose="registration",
         plan=req.plan,
         amount_usdc=format(amount_usdc, ".2f"),
         amount_atomic=str(int(amount_usdc * Decimal(1_000_000))),
         onboarding=False,
         payment_mode=payment_config["mode"],
         status="paid",
-        txid=req.txid.strip(),
+        txid=req.txid.strip().lower(),
         created_at=int(time.time()),
         paid_at=int(time.time()),
     )
@@ -3112,6 +3257,8 @@ def resume_paid_registration(
     now_ts = int(time.time())
     payment_session = db.query(PaymentCheckoutSession).filter(
         PaymentCheckoutSession.client_session_id == client_session_id,
+        PaymentCheckoutSession.username.is_(None),
+        PaymentCheckoutSession.purpose == "registration",
         PaymentCheckoutSession.status == "paid",
     ).order_by(PaymentCheckoutSession.paid_at.desc()).first()
     if not payment_session:
@@ -3273,21 +3420,29 @@ async def confirm_payment_session(
     db: Session = Depends(get_db),
 ):
     enforce_request_rate_limit("payment-confirm", get_request_client_key(request), 30, 15 * 60)
-    payment_config = get_subscription_payment_config()
-    if not payment_config:
-        raise HTTPException(status_code=503, detail="Subscription payments are temporarily unavailable while exact USDC settlement is configured.")
+    client_session_id = validate_client_session_id(req.client_session_id)
     session_data = db.query(PaymentCheckoutSession).filter(
         PaymentCheckoutSession.id == req.payment_session_id,
     ).first()
     if not session_data:
         raise HTTPException(status_code=404, detail="Payment session not found")
-    if session_data.client_session_id != req.client_session_id:
+    if not hmac.compare_digest(session_data.client_session_id, client_session_id):
         raise HTTPException(status_code=403, detail="Payment confirmed for a different session")
     if (session_data.purpose or "registration") != "registration" or session_data.username:
         raise HTTPException(status_code=403, detail="Payment session belongs to an account subscription")
-    if int(time.time()) - session_data.created_at > PAYMENT_SESSION_TTL_SECONDS:
-        raise HTTPException(status_code=410, detail="Payment session expired. Create a new payment session.")
+    clean_txid = req.txid.strip().lower()
     if session_data.status == "paid":
+        now_ts = int(time.time())
+        if (
+            not session_data.paid_at
+            or now_ts - session_data.paid_at > PAYMENT_REGISTRATION_RESUME_TTL_SECONDS
+        ):
+            raise HTTPException(
+                status_code=410,
+                detail="Paid registration session expired. Contact support with your payment TXID",
+            )
+        if not session_data.txid or not hmac.compare_digest(session_data.txid.lower(), clean_txid):
+            raise HTTPException(status_code=409, detail="Payment TXID does not match this checkout session")
         payment_token = issue_payment_token(
             db=db,
             client_session_id=session_data.client_session_id,
@@ -3303,6 +3458,13 @@ async def confirm_payment_session(
             "amount": session_data.amount_usdc,
             "onboarding": session_data.onboarding,
         }
+    if session_data.status != "pending":
+        raise HTTPException(status_code=409, detail="Payment session is no longer available")
+    if int(time.time()) - session_data.created_at > PAYMENT_SESSION_TTL_SECONDS:
+        raise HTTPException(status_code=410, detail="Payment session expired. Create a new payment session.")
+    payment_config = get_subscription_payment_config()
+    if not payment_config:
+        raise HTTPException(status_code=503, detail="Subscription payments are temporarily unavailable while exact USDC settlement is configured.")
     if session_data.payment_mode != payment_config["mode"]:
         raise HTTPException(status_code=409, detail="Payment session network changed. Create a new payment session.")
 
@@ -3312,9 +3474,10 @@ async def confirm_payment_session(
         payment_config,
         int(session_data.amount_atomic),
         "subscription_payment",
+        commit=False,
     )
     session_data.status = "paid"
-    session_data.txid = req.txid.strip()
+    session_data.txid = clean_txid
     session_data.paid_at = int(time.time())
     db.commit()
     
@@ -3437,9 +3600,7 @@ async def confirm_account_subscription_session(
         30,
         15 * 60,
     )
-    payment_config = get_subscription_payment_config()
-    if not payment_config:
-        raise HTTPException(status_code=503, detail="Subscription payments are temporarily unavailable while exact USDC settlement is configured.")
+    client_session_id = validate_client_session_id(req.client_session_id)
     session_data = db.query(PaymentCheckoutSession).filter(
         PaymentCheckoutSession.id == req.payment_session_id,
         PaymentCheckoutSession.username == current_user.username,
@@ -3447,19 +3608,48 @@ async def confirm_account_subscription_session(
     ).first()
     if not session_data:
         raise HTTPException(status_code=404, detail="Payment session not found")
-    if session_data.client_session_id != req.client_session_id:
+    if not hmac.compare_digest(session_data.client_session_id, client_session_id):
         raise HTTPException(status_code=403, detail="Payment confirmed for a different session")
-    if int(time.time()) - session_data.created_at > PAYMENT_SESSION_TTL_SECONDS:
-        raise HTTPException(status_code=410, detail="Payment session expired. Create a new payment session.")
-    if session_data.payment_mode != payment_config["mode"]:
-        raise HTTPException(status_code=409, detail="Payment session network changed. Create a new payment session.")
+    clean_txid = req.txid.strip().lower()
     if session_data.status == "applied":
+        if not session_data.txid or not hmac.compare_digest(session_data.txid.lower(), clean_txid):
+            raise HTTPException(status_code=409, detail="Payment TXID does not match this checkout session")
         return {
             "status": "success",
             "subscription_updated": True,
             "plan": current_user.subscription_plan,
             **get_subscription_state(current_user),
         }
+    if session_data.status not in {"pending", "paid"}:
+        raise HTTPException(status_code=409, detail="Payment session is no longer available")
+
+    now_ts = int(time.time())
+    if session_data.status == "paid":
+        if (
+            not session_data.paid_at
+            or now_ts - session_data.paid_at > PAYMENT_REGISTRATION_RESUME_TTL_SECONDS
+        ):
+            raise HTTPException(status_code=410, detail="Confirmed subscription payment is too old to resume automatically")
+        if not session_data.txid or not hmac.compare_digest(session_data.txid.lower(), clean_txid):
+            raise HTTPException(status_code=409, detail="Payment TXID does not match this checkout session")
+    else:
+        if now_ts - session_data.created_at > PAYMENT_SESSION_TTL_SECONDS:
+            raise HTTPException(status_code=410, detail="Payment session expired. Create a new payment session.")
+        payment_config = get_subscription_payment_config()
+        if not payment_config:
+            raise HTTPException(status_code=503, detail="Subscription payments are temporarily unavailable while exact USDC settlement is configured.")
+        if session_data.payment_mode != payment_config["mode"]:
+            raise HTTPException(status_code=409, detail="Payment session network changed. Create a new payment session.")
+
+    plan_rank = {"Standard": 1, "Pro": 2, "Premium": 3}
+    if session_data.plan not in plan_rank:
+        raise HTTPException(status_code=409, detail="Payment session contains an unknown plan")
+    current_state = get_subscription_state(current_user, now_ts)
+    if (
+        current_state["status"] == "active"
+        and plan_rank[session_data.plan] < plan_rank.get(current_user.subscription_plan, 0)
+    ):
+        raise HTTPException(status_code=409, detail="An active subscription cannot be downgraded")
 
     if session_data.status != "paid":
         reserve_verified_usdc_payment(
@@ -3472,10 +3662,9 @@ async def confirm_account_subscription_session(
             commit=False,
         )
         session_data.status = "paid"
-        session_data.txid = req.txid.strip()
-        session_data.paid_at = int(time.time())
+        session_data.txid = clean_txid
+        session_data.paid_at = now_ts
 
-    now_ts = int(time.time())
     previous_state = get_subscription_state(current_user, now_ts)
     if previous_state["status"] == "active":
         current_user.subscription_activated_at = previous_state["expires_at"]
@@ -4306,12 +4495,18 @@ async def get_universal_bridge_quote(
         )
     except requests.RequestException:
         raise HTTPException(status_code=503, detail="Universal bridge quote service is temporarily unavailable")
-    if not response.ok:
-        logging.warning("LI.FI quote rejected with status %s", response.status_code)
-        raise HTTPException(status_code=422, detail="No current route is available for this pair and amount")
+    quote = parse_provider_json_response(
+        response,
+        provider="LI.FI quote",
+        unavailable_detail="Universal bridge quote service is temporarily unavailable",
+        rejected_detail="No current route is available for this pair and amount",
+        invalid_detail="Universal bridge returned an invalid quote",
+        rejected_status=422,
+    )
     try:
-        quote = response.json()
         estimate = quote["estimate"]
+        if not isinstance(estimate, dict):
+            raise TypeError("Invalid estimate")
         transaction = validate_lifi_transaction_request(
             quote["transactionRequest"], from_config["chain_id"], wallet_address,
         )
@@ -4371,11 +4566,20 @@ async def get_universal_bridge_status(
         params["bridge"] = bridge
     try:
         response = requests.get(f"{LIFI_API_URL}/status", params=params, headers=lifi_headers(), timeout=15)
-        if not response.ok:
-            raise requests.RequestException("status unavailable")
-        data = response.json()
-    except (requests.RequestException, ValueError):
+    except requests.RequestException:
         raise HTTPException(status_code=503, detail="Universal bridge status is temporarily unavailable")
+    data = parse_provider_json_response(
+        response,
+        provider="LI.FI status",
+        unavailable_detail="Universal bridge status is temporarily unavailable",
+        rejected_detail="Universal bridge status is temporarily unavailable",
+        invalid_detail="Universal bridge returned an invalid status response",
+        rejected_status=503,
+    )
+    if not isinstance(data.get("status"), str) or not data["status"].strip():
+        raise HTTPException(status_code=502, detail="Universal bridge returned an invalid status response")
+    if "substatus" in data and not isinstance(data.get("substatus"), str):
+        raise HTTPException(status_code=502, detail="Universal bridge returned an invalid status response")
     return {
         "status": "success",
         "substatus": str(data.get("substatus", ""))[:80],
@@ -4421,10 +4625,10 @@ def notify_universal_bridge_status(subscription: Optional[TelegramSubscription],
         return False
     if record.status == "failed" and not subscription.notify_errors:
         return False
-    route = f"{record.from_network} → {record.to_network}"
-    amount = f"{record.amount_in} {record.from_symbol}"
-    expected = f"{record.amount_out or '—'} {record.to_symbol}"
-    provider_status = record.provider_status or record.status
+    route = escape_telegram_markdown_code(f"{record.from_network} → {record.to_network}")
+    amount = escape_telegram_markdown_code(f"{record.amount_in} {record.from_symbol}")
+    expected = escape_telegram_markdown_code(f"{record.amount_out or '—'} {record.to_symbol}")
+    provider_status = escape_telegram_markdown_code(record.provider_status or record.status)
     messages = {
         "ru": (
             f"{'✅' if record.status == 'completed' else '⚠️'} *AIRDROP-X: статус моста*\n"
@@ -4495,8 +4699,8 @@ async def save_universal_bridge_submission(
     subscription = get_telegram_subscription(db, current_user.username)
     telegram_sent = False
     if subscription and subscription.notify_transaction_submitted:
-        route = f"{from_network} → {to_network}"
-        amount = f"{amount_in} {from_token['symbol']}"
+        route = escape_telegram_markdown_code(f"{from_network} → {to_network}")
+        amount = escape_telegram_markdown_code(f"{amount_in} {from_token['symbol']}")
         messages = {
             "ru": f"🌉 *AIRDROP-X: мост отправлен*\nМаршрут: `{route}`\nСумма: `{amount}`\nTX: `{tx_hash}`",
             "en": f"🌉 *AIRDROP-X: bridge submitted*\nRoute: `{route}`\nAmount: `{amount}`\nTX: `{tx_hash}`",
@@ -4539,10 +4743,19 @@ async def refresh_universal_bridge_record(
         params["bridge"] = record.bridge
     try:
         response = requests.get(f"{LIFI_API_URL}/status", params=params, headers=lifi_headers(), timeout=15)
-        if not response.ok:
-            raise requests.RequestException("status unavailable")
-        data = response.json()
-    except (requests.RequestException, ValueError):
+        data = parse_provider_json_response(
+            response,
+            provider="LI.FI status",
+            unavailable_detail="Universal bridge status is temporarily unavailable",
+            rejected_detail="Universal bridge status is temporarily unavailable",
+            invalid_detail="Universal bridge returned an invalid status response",
+            rejected_status=503,
+        )
+        if not isinstance(data.get("status"), str) or not data["status"].strip():
+            raise HTTPException(status_code=502, detail="Universal bridge returned an invalid status response")
+        if "substatus" in data and not isinstance(data.get("substatus"), str):
+            raise HTTPException(status_code=502, detail="Universal bridge returned an invalid status response")
+    except (requests.RequestException, HTTPException):
         return {"status": "success", "record": serialize_universal_bridge_record(record), "provider_available": False}
 
     lifi_status = str(data.get("status", ""))[:80]
@@ -5418,13 +5631,22 @@ async def get_base_swap_quote(
         )
     except requests.RequestException:
         raise HTTPException(status_code=503, detail="Base Swap quote service is temporarily unavailable")
-    if not response.ok:
-        logging.warning("Uniswap quote rejected with status %s", response.status_code)
-        raise HTTPException(status_code=502, detail="Unable to get a Base Swap quote")
+    quote_response = parse_provider_json_response(
+        response,
+        provider="Uniswap quote",
+        unavailable_detail="Base Swap quote service is temporarily unavailable",
+        rejected_detail="Unable to get a Base Swap quote",
+        invalid_detail="Base Swap returned an invalid quote",
+    )
     try:
-        quote_response = response.json()
         quote = quote_response["quote"]
-    except (ValueError, KeyError, TypeError):
+        if not isinstance(quote, dict):
+            raise TypeError("Invalid quote")
+        output = quote.get("output")
+        amount_out = str(output.get("amount", "")) if isinstance(output, dict) else ""
+        if not re.fullmatch(r"[1-9]\d*", amount_out):
+            raise ValueError("Invalid output amount")
+    except (KeyError, TypeError, ValueError):
         raise HTTPException(status_code=502, detail="Base Swap returned an invalid quote")
 
     # ETH input needs no token approval. Refuse any unexpected permit request.
@@ -5437,7 +5659,7 @@ async def get_base_swap_quote(
         "wallet_address": wallet_address.lower(),
         "quote": quote,
         "amount_in": amount,
-        "amount_out": str((quote.get("output") or {}).get("amount", "")),
+        "amount_out": amount_out,
         "created_at": now_ts,
     }
     # Keep this in-memory cache small even if a user repeatedly refreshes a quote.
@@ -5446,13 +5668,12 @@ async def get_base_swap_quote(
         if session["created_at"] < stale_before:
             swap_quote_sessions.pop(session_id, None)
 
-    output = quote.get("output") or {}
     return {
         "status": "success",
         "quote_id": quote_id,
         "expires_in": SWAP_QUOTE_TTL_SECONDS,
         "amount_in": amount,
-        "amount_out": str(output.get("amount", "")),
+        "amount_out": amount_out,
         "routing": quote.get("routing") or quote_response.get("routing") or "UNISWAP",
         "token_out": "USDC",
     }
@@ -5484,11 +5705,17 @@ async def build_base_swap_transaction(
         )
     except requests.RequestException:
         raise HTTPException(status_code=503, detail="Base Swap transaction service is temporarily unavailable")
-    if not response.ok:
-        logging.warning("Uniswap swap build rejected with status %s", response.status_code)
-        raise HTTPException(status_code=502, detail="Unable to prepare the Base Swap transaction")
+    swap_response = parse_provider_json_response(
+        response,
+        provider="Uniswap transaction builder",
+        unavailable_detail="Base Swap transaction service is temporarily unavailable",
+        rejected_detail="Unable to prepare the Base Swap transaction",
+        invalid_detail="Base Swap returned an invalid transaction",
+    )
     try:
-        swap = response.json()["swap"]
+        swap = swap_response["swap"]
+        if not isinstance(swap, dict):
+            raise TypeError("Invalid swap")
         chain_id = int(swap["chainId"])
         to_address = swap["to"]
         from_address = swap["from"]

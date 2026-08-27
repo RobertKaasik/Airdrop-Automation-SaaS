@@ -21,14 +21,23 @@
 ```powershell
 $env:AIRDROP_X_TEST_BASE_URL='http://127.0.0.1:8011'
 python test_backend.py
+python -m unittest -v test_subscription_lifecycle.py test_telegram_wallet_backend.py test_provider_outages.py test_sqlite_backup.py
 python test_integration.py
+python test_stealth.py
+node test_subscription_frontend.js
+node test_wallet_session_frontend.js
+node test_mobile_responsive.js
 node scripts/check-locales.js
 node scripts/check-backend-translations.js
 node scripts/check-pricing.js
+npm run build:ui
 python scripts/preflight_production.py
 ```
 
 ## Обязательно сделать оператору до публичного запуска
+
+Подробные команды запуска, мониторинга, аварийного отключения платежей и
+backup/restore находятся в [`PRODUCTION_RUNBOOK.md`](PRODUCTION_RUNBOOK.md).
 
 1. **Юридические реквизиты.** Внести юридическое имя оператора, рабочий email
    поддержки, адрес, применимое право, правила возвратов и сроки хранения
@@ -43,14 +52,19 @@ python scripts/preflight_production.py
 4. **Платежи.** Оставить `SUBSCRIPTION_PAYMENTS_ENABLED=false`, пока точный
    контракт USDC, receiving address, RPC и сеть не проверены на тестнете и
    отдельным ручным тестом. Перед mainnet нужен независимый обзор этого потока.
-5. **Резервные копии.** Настроить ежедневный backup базы, проверку возможности
-   восстановления и шифрованное хранение копий. При одновременных пользователях
-   спланировать переход SQLite → PostgreSQL.
+5. **Резервные копии.** Настроить ежедневный согласованный backup через SQLite
+   online backup API, автоматический `PRAGMA integrity_check`, ежемесячную
+   проверку восстановления и шифрованное хранение копий. Простое копирование
+   только `airdrop_x.db` при работающем WAL не считается backup. При
+   одновременных пользователях спланировать переход SQLite → PostgreSQL.
 6. **Наблюдаемость.** Настроить доступ к логам, мониторинг `/api/health`,
    оповещение о недоступности и процедуру безопасного отключения платежей.
 7. **Поддержка.** Опубликовать официальный Telegram/почту, часы ответа и путь
    для обращения по аккаунту, оплате и данным. Не принимать seed-фразы,
    приватные ключи или пароли в поддержке.
+8. **Топология процессов.** Запускать ровно один Uvicorn worker и отдельный
+   singleton-процесс `tg_bot.py`. Несколько workers запрещены, пока APScheduler,
+   SQLite и in-memory quote/session state не вынесены в общие сервисы.
 
 ## Ручной приёмочный прогон
 

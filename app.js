@@ -99,6 +99,8 @@ let subscriptionDaysLeft = 29;
 let subscriptionStatus = 'active';
 let subscriptionGraceDaysLeft = 0;
 let subscriptionExpiresAt = 0;
+let subscriptionExpiryHandled = false;
+let authExpiryHandled = false;
 let showWelcomeGuide = true;
 let activeSafeStartStep = 0;
 
@@ -130,6 +132,8 @@ const PLAN_PRICES = { Standard: 29, Pro: 49, Premium: 89 };
 const clientSessionId = getOrCreateClientSessionId();
 let paymentAccessToken = sessionStorage.getItem('ax_payment_token') || '';
 let paymentUnlocked = sessionStorage.getItem('ax_paid_session_id') === clientSessionId && !!paymentAccessToken;
+let activeAuthModalType = '';
+let paymentInteractionInProgress = false;
 
 if (typeof window.fetch === 'function') {
     const nativeFetch = window.fetch.bind(window);
@@ -235,6 +239,13 @@ const BASE_SEPOLIA_CONFIG = {
 const WALLETCONNECT_PROVIDER_MODULE_URL = 'https://esm.sh/@walletconnect/ethereum-provider@2.23.10?bundle&target=es2022';
 let walletConnectProvider = null;
 let walletConnectModulePromise = null;
+let walletConnectListenersProvider = null;
+let injectedWalletListenersProvider = null;
+let walletConnectionFlowInProgress = false;
+let savedWalletAddressesCache = new Set();
+let savedWalletAddressesCacheOwner = '';
+let savedWalletAddressesCacheUpdatedAt = 0;
+const walletSessionStateApi = window.AxWalletSessionState;
 
 const NETWORKS_CONFIG = [
     { name: "Ethereum", symbol: "ETH", key: "Ethereum", icon: '<img src="https://cryptologos.cc/logos/ethereum-eth-logo.svg?v=032" style="width:32px; height:32px;">', explorer: "https://etherscan.io" },
@@ -286,6 +297,7 @@ window.addEventListener('DOMContentLoaded', () => {
         
         currentSection = localStorage.getItem('airdrop_current_section') || 'Account';
         renderDashboardContent(currentSection);
+        void initializeWalletSessionLifecycle();
     }
     syncEmailCodeCooldown();
     updateRegistrationContinueAction();
@@ -647,7 +659,10 @@ function operationErrorMessage(error, locale, fallbackMessage = '') {
 function returnToMainSite() {
     closeBottomSheetMenu();
     isLoggedIn = false;
+    authExpiryHandled = false;
+    subscriptionExpiryHandled = false;
     document.documentElement.classList.remove('ax-dashboard-active');
+    clearConnectedWalletState();
     localStorage.removeItem('airdrop_username');
     localStorage.removeItem('airdrop_current_section');
     sessionStorage.removeItem('ax_access_token');
@@ -738,6 +753,10 @@ function openPricingModal() {
 function syncPricingModalForAccount() {
     const locale = translations[getActiveLang()];
     const ranks = { Standard: 1, Pro: 2, Premium: 3 };
+    const planNames = { Standard: locale.stdName, Pro: locale.proName, Premium: locale.premName };
+    const status = document.getElementById('pricingAccountStatus');
+    const closeButton = document.getElementById('pricingModalClose');
+    if (closeButton) closeButton.setAttribute('aria-label', locale.modalCloseLabel);
     const buttons = [
         ['Standard', document.getElementById('p-std-btn'), locale.stdBtn],
         ['Pro', document.getElementById('p-pro-btn'), locale.proBtn],
@@ -750,7 +769,27 @@ function syncPricingModalForAccount() {
         button.style.cursor = '';
         button.textContent = defaultLabel;
     });
+    if (status) {
+        status.hidden = !isLoggedIn;
+        status.className = 'pricing-account-status';
+        status.textContent = '';
+    }
     if (!isLoggedIn) return;
+
+    if (status) {
+        status.classList.add(`pricing-account-status--${subscriptionStatus}`);
+        if (subscriptionStatus === 'grace') {
+            status.textContent = locale.subscriptionPricingGrace
+                .replace('{plan}', planNames[userPlan] || userPlan)
+                .replace('{days}', String(subscriptionGraceDaysLeft));
+        } else if (subscriptionStatus === 'expired') {
+            status.textContent = locale.subscriptionPricingExpired;
+        } else {
+            status.textContent = locale.subscriptionPricingActive
+                .replace('{plan}', planNames[userPlan] || userPlan);
+        }
+    }
+
     const canChooseAnyPlan = subscriptionStatus !== 'active';
     buttons.forEach(([plan, button, defaultLabel]) => {
         if (!button) return;
@@ -762,6 +801,16 @@ function syncPricingModalForAccount() {
         button.style.cursor = disabled ? 'not-allowed' : '';
         if (isCurrent && !canChooseAnyPlan) button.textContent = locale.subscriptionCurrentPlan;
         if (isDowngrade && !canChooseAnyPlan) button.textContent = locale.subscriptionDowngradeBlocked;
+        if (!canChooseAnyPlan && !isCurrent && !isDowngrade) {
+            button.textContent = locale.subscriptionUpgradePlan
+                .replace('{plan}', planNames[plan] || plan)
+                .replace('{price}', String(PLAN_PRICES[plan]));
+        }
+        if (canChooseAnyPlan) {
+            button.textContent = locale.subscriptionRestorePlan
+                .replace('{plan}', planNames[plan] || plan)
+                .replace('{price}', String(PLAN_PRICES[plan]));
+        }
     });
 }
 
@@ -782,8 +831,26 @@ function toggleFaq(item) {
 let mousedownOverlayTarget = null;
 window.addEventListener('mousedown', (e) => { mousedownOverlayTarget = e.target; });
 
-function handleOverlayClick(event) { if (event.target.id === 'authModal' && mousedownOverlayTarget?.id === 'authModal') closeAuthModal(); }
+function handleOverlayClick(event) { if (event.target.id === 'authModal' && mousedownOverlayTarget?.id === 'authModal') void requestCloseAuthModal(); }
 function handlePricingOverlayClick(event) { if (event.target.id === 'pricingModal' && mousedownOverlayTarget?.id === 'pricingModal') closePricingModal(); }
+
+window.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape' || event.defaultPrevented) return;
+    if (document.getElementById('appConfirmModal')?.classList.contains('show')) {
+        event.preventDefault();
+        finishAppConfirm(false);
+        return;
+    }
+    if (document.getElementById('authModal')?.classList.contains('show')) {
+        event.preventDefault();
+        void requestCloseAuthModal();
+        return;
+    }
+    if (document.getElementById('pricingModal')?.classList.contains('show')) {
+        event.preventDefault();
+        closePricingModal();
+    }
+});
 
 function selectPlanAndRegister(planName, price) {
     closePricingModal();
@@ -807,7 +874,34 @@ function selectPlanAndRegister(planName, price) {
     openModal('payment');
 }
 
-function closeAuthModal() { hideAppModal('authModal'); }
+function closeAuthModal() {
+    activeAuthModalType = '';
+    hideAppModal('authModal');
+}
+
+async function requestCloseAuthModal() {
+    if (activeAuthModalType !== 'payment') {
+        closeAuthModal();
+        return;
+    }
+    const locale = translations[getActiveLang()] || translations.ru;
+    const pendingPayment = getPendingSubscriptionPayment();
+    if (paymentInteractionInProgress) {
+        showNotification(pendingPayment ? locale.payVerificationInProgress : locale.payCancelInWalletFirst, 'warning');
+        return;
+    }
+    if (!pendingPayment) {
+        closeAuthModal();
+        return;
+    }
+    const shouldClose = await openAppConfirm({
+        title: locale.payClosePendingTitle,
+        message: locale.payClosePendingMessage,
+        confirmText: locale.payClosePendingAction,
+    });
+    if (shouldClose) closeAuthModal();
+    else openModal('payment');
+}
 
 let appConfirmResolver = null;
 
@@ -880,6 +974,7 @@ function openModal(type) {
         return;
     }
 
+    activeAuthModalType = type;
     showAppModal('authModal');
 
     if (type === 'login') {
@@ -887,7 +982,7 @@ function openModal(type) {
             <form onsubmit="event.preventDefault(); validateLogin();">
                 <div class="modal-logo" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
                     <span style="font-weight:bold; font-size:16px;">${t('login')}</span>
-                    <button type="button" class="icon-button-plain" onclick="closeAuthModal()" aria-label="Close" style="color: #a3a3a3; font-size: 18px;">✕</button>
+                    <button type="button" class="icon-button-plain" onclick="requestCloseAuthModal()" aria-label="${t('modalCloseLabel')}" style="color: #a3a3a3; font-size: 18px;">✕</button>
                 </div>
                 <div class="input-group" style="margin-bottom:12px;">
                     <label style="font-size: 11px; color: #a3a3a3; display: block; margin-bottom: 4px;">${t('auth.usernameLabel')}</label>
@@ -916,7 +1011,7 @@ function openModal(type) {
             <form onsubmit="event.preventDefault(); confirmPasswordReset();">
                 <div class="modal-logo" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                     <span style="font-weight:bold; font-size:16px;">${t('auth.resetPassword')}</span>
-                    <button type="button" class="icon-button-plain" onclick="closeAuthModal()" aria-label="Close" style="color:#a3a3a3; font-size:18px;">✕</button>
+                    <button type="button" class="icon-button-plain" onclick="requestCloseAuthModal()" aria-label="${t('modalCloseLabel')}" style="color:#a3a3a3; font-size:18px;">✕</button>
                 </div>
                 <p style="margin:0 0 14px; color:#a3a3a3; font-size:12px; line-height:1.5;">${t('auth.resetInstructions')}</p>
                 <div class="input-group" style="margin-bottom:10px;">
@@ -951,7 +1046,7 @@ function openModal(type) {
         container.innerHTML = `
             <div class="modal-logo" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                 <span style="font-weight:bold; font-size:16px;">${t('payTitle')}: ${planDisplayLabel}</span>
-                <button type="button" class="icon-button-plain" onclick="closeAuthModal()" aria-label="Close" style="color: #a3a3a3; font-size: 18px;">✕</button>
+                <button type="button" class="icon-button-plain" onclick="requestCloseAuthModal()" aria-label="${t('modalCloseLabel')}" style="color: #a3a3a3; font-size: 18px;">✕</button>
             </div>
             
             <div style="margin-bottom:12px; padding:10px 12px; border:1px solid rgba(96,165,250,.35); background:rgba(30,58,138,.13); border-radius:10px; color:#dbeafe; font-size:12px; line-height:1.5;">
@@ -982,7 +1077,7 @@ function openModal(type) {
             <form onsubmit="event.preventDefault(); validateRegister();">
                 <div class="modal-logo" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                     <span style="font-weight:bold; font-size:16px;">${t('auth.register')}: ${planDisplayLabel} ($${chosenPrice})</span>
-                    <button type="button" class="icon-button-plain" onclick="closeAuthModal()" aria-label="Close" style="color: #a3a3a3; font-size: 18px;">✕</button>
+                    <button type="button" class="icon-button-plain" onclick="requestCloseAuthModal()" aria-label="${t('modalCloseLabel')}" style="color: #a3a3a3; font-size: 18px;">✕</button>
                 </div>
                 
                 <div class="input-group" style="margin-bottom:10px;">
@@ -1690,6 +1785,15 @@ function restorePaymentActionButton(button, label) {
     button.textContent = label;
 }
 
+function getPaymentActionLabel() {
+    const locale = translations[getActiveLang()] || translations.ru;
+    const shownAmount = document.getElementById('paymentAmountValue')?.textContent?.trim();
+    if (shownAmount) return `${locale.payWithWallet} · ${shownAmount}`;
+    const chosenPlan = localStorage.getItem('selected_plan') || 'Standard';
+    const amount = Number(PLAN_PRICES[chosenPlan] || PLAN_PRICES.Standard).toFixed(2);
+    return `${locale.payWithWallet} · ${amount} USDC`;
+}
+
 async function confirmSubscriptionPayment() {
     const pending = getPendingSubscriptionPayment();
     if (!pending) return false;
@@ -1808,16 +1912,17 @@ async function recoverTestnetSubscriptionPayment(pending) {
 }
 
 async function startPlanPayment() {
-    if (getPendingSubscriptionPayment()) {
-        await confirmSubscriptionPayment();
-        return;
-    }
     const locale = translations[getActiveLang()];
     const chosenPlan = localStorage.getItem('selected_plan') || 'Standard';
     const basePrice = PLAN_PRICES[chosenPlan] || PLAN_PRICES.Standard;
     const button = document.getElementById('paymentActionBtn');
+    paymentInteractionInProgress = true;
 
     try {
+        if (getPendingSubscriptionPayment()) {
+            await confirmSubscriptionPayment();
+            return;
+        }
         setButtonLoading(button, true, locale.payPreparing);
         const createRes = await fetch(isLoggedIn ? '/api/subscription/create-session' : '/api/payment/create-session', {
             method: 'POST',
@@ -1866,15 +1971,23 @@ async function startPlanPayment() {
         await confirmSubscriptionPayment();
     } catch (error) {
         const rejected = error?.code === 4001 || error?.code === 'ACTION_REJECTED';
+        const errorMessage = String(error?.message || '');
         const message = rejected
             ? locale.payWalletRejected
-            : (String(error?.message || '').includes('payment_wallet_unavailable') ? locale.payWalletUnavailable : locale.errors.networkError);
+            : (errorMessage.includes('payment_wallet_unavailable')
+                ? locale.payWalletUnavailable
+                : (errorMessage.includes('payment_network_unavailable')
+                    ? locale.payNetworkUnavailable
+                    : (errorMessage.includes('payment_details_invalid')
+                        ? locale.payDetailsInvalid
+                        : locale.errors.networkError)));
         setPaymentStatus(message, 'error');
     } finally {
+        paymentInteractionInProgress = false;
         if (!paymentUnlocked) {
             restorePaymentActionButton(
                 button,
-                getPendingSubscriptionPayment() ? locale.payCheckStatus : locale.payWithWallet,
+                getPendingSubscriptionPayment() ? locale.payCheckStatus : getPaymentActionLabel(),
             );
         }
     }
@@ -2060,6 +2173,8 @@ async function validateLogin() {
 
 function handleLoginSuccess() {
     isLoggedIn = true;
+    authExpiryHandled = false;
+    subscriptionExpiryHandled = false;
     document.documentElement.classList.add('ax-dashboard-active');
     const loginBtn = document.getElementById('login-btn');
     if (loginBtn) loginBtn.style.display = 'none';
@@ -2070,6 +2185,7 @@ function handleLoginSuccess() {
     if(mobileNav) mobileNav.style.display = ''; 
     currentSection = 'Account';
     renderDashboardContent('Account');
+    void initializeWalletSessionLifecycle();
     if (subscriptionStatus === 'grace') {
         showNotification(
             t('subscriptionGrace').replace('{days}', subscriptionGraceDaysLeft),
@@ -2081,8 +2197,6 @@ function handleLoginSuccess() {
         showNotification("OK!");
     }
 }
-
-let authExpiryHandled = false;
 
 function handleExpiredAuthSession() {
     if (authExpiryHandled) return;
@@ -2375,8 +2489,6 @@ function switchMenu(element, sectionName) {
     renderDashboardContent(sectionName);
 }
 
-let subscriptionExpiryHandled = false;
-
 function handleSubscriptionExpired() {
     subscriptionStatus = 'expired';
     subscriptionDaysLeft = 0;
@@ -2565,25 +2677,95 @@ function switchActivityPane(pane) {
 }
 
 function getActiveBaseWalletAddress() {
-    return sessionStorage.getItem('ax_active_wallet_address') || sessionStorage.getItem('ax_base_wallet_address') || '';
+    const username = getCurrentUsername();
+    const persisted = walletSessionStateApi?.read(localStorage, username)?.activeAddress || '';
+    const active = persisted || sessionStorage.getItem('ax_active_wallet_address') || '';
+    if (active) sessionStorage.setItem('ax_active_wallet_address', active);
+    return active;
 }
 
-function setConnectedBaseWalletAddress(address) {
-    const normalized = String(address || '').trim();
-    if (!/^0x[0-9a-fA-F]{40}$/.test(normalized)) return;
-    sessionStorage.setItem('ax_base_wallet_address', normalized);
+function getConnectedBaseWalletAddress() {
+    return sessionStorage.getItem('ax_base_wallet_address') || '';
+}
+
+function getWalletSessionPersistenceState() {
+    return walletSessionStateApi?.read(localStorage, getCurrentUsername()) || {
+        activeAddress: getActiveBaseWalletAddress(), connectedAddress: getConnectedBaseWalletAddress(), providerKind: '', chainId: '',
+    };
+}
+
+function setActiveBaseWalletAddress(address) {
+    const normalized = walletSessionStateApi?.normalizeAddress(address) || '';
+    if (!normalized) return '';
+    walletSessionStateApi?.setActive(localStorage, getCurrentUsername(), normalized);
     sessionStorage.setItem('ax_active_wallet_address', normalized);
+    const connected = getConnectedBaseWalletAddress();
+    if (connected && connected.toLowerCase() !== normalized.toLowerCase()) {
+        sessionStorage.removeItem('ax_base_wallet_address');
+    }
+    return normalized;
+}
+
+function setConnectedBaseWalletAddress(address, providerKind = '', chainId = '') {
+    const normalized = walletSessionStateApi?.normalizeAddress(address) || '';
+    if (!normalized || !['metamask', 'walletconnect'].includes(providerKind)) return '';
+    walletSessionStateApi?.setConnection(localStorage, getCurrentUsername(), {
+        address: normalized, providerKind, chainId,
+    });
+    sessionStorage.setItem('ax_base_wallet_address', normalized);
+    return normalized;
+}
+
+function rememberWalletProviderKind(providerKind, chainId = '') {
+    if (!['metamask', 'walletconnect'].includes(providerKind)) return;
+    walletSessionStateApi?.setConnection(localStorage, getCurrentUsername(), {
+        address: '', providerKind, chainId,
+    });
+    sessionStorage.removeItem('ax_base_wallet_address');
+}
+
+function clearConnectedWalletState({ keepProvider = false } = {}) {
+    const state = getWalletSessionPersistenceState();
+    if (keepProvider && ['metamask', 'walletconnect'].includes(state.providerKind)) {
+        rememberWalletProviderKind(state.providerKind, state.chainId);
+    } else {
+        walletSessionStateApi?.clearConnection(localStorage, getCurrentUsername());
+        sessionStorage.removeItem('ax_base_wallet_address');
+    }
+}
+
+function clearActiveWalletState() {
+    const state = getWalletSessionPersistenceState();
+    walletSessionStateApi?.write(localStorage, getCurrentUsername(), {
+        ...state, activeAddress: '', connectedAddress: '',
+    });
+    sessionStorage.removeItem('ax_active_wallet_address');
+    sessionStorage.removeItem('ax_base_wallet_address');
+}
+
+function restoreWalletStateMirrors() {
+    const username = getCurrentUsername();
+    if (!username) return;
+    let state = walletSessionStateApi?.read(localStorage, username);
+    const legacyActive = sessionStorage.getItem('ax_active_wallet_address') || '';
+    const legacyConnected = sessionStorage.getItem('ax_base_wallet_address') || '';
+    if (!state?.activeAddress && walletSessionStateApi?.normalizeAddress(legacyActive || legacyConnected)) {
+        state = walletSessionStateApi.setActive(localStorage, username, legacyActive || legacyConnected);
+    }
+    if (!state?.providerKind && walletSessionStateApi?.normalizeAddress(legacyConnected)) {
+        state = walletSessionStateApi.setConnection(localStorage, username, {
+            address: legacyConnected,
+            providerKind: 'metamask',
+        });
+    }
+    if (state?.activeAddress) sessionStorage.setItem('ax_active_wallet_address', state.activeAddress);
+    // A persisted address is only a hint. It becomes connected again after the
+    // provider confirms its current accounts without requesting permissions.
+    sessionStorage.removeItem('ax_base_wallet_address');
 }
 
 function selectedEvmWalletAddresses(accounts) {
-    const seen = new Set();
-    return (Array.isArray(accounts) ? accounts : []).filter((address) => {
-        if (!/^0x[0-9a-fA-F]{40}$/.test(address || '')) return false;
-        const key = address.toLowerCase();
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-    });
+    return walletSessionStateApi?.uniqueAddresses(accounts) || [];
 }
 
 let walletConfigResolve = null;
@@ -2622,9 +2804,10 @@ function cancelWalletConfigModal() {
     if (modal) hideAppModal('walletConfigModal');
     
     const resolve = walletConfigResolve;
+    const address = currentConfiguringAddress;
     walletConfigResolve = null;
     currentConfiguringAddress = '';
-    if (resolve) resolve();
+    if (resolve) resolve({ saved: false, address });
 }
 
 async function saveWalletConfigModal() {
@@ -2653,9 +2836,11 @@ async function saveWalletConfigModal() {
             if (modal) hideAppModal('walletConfigModal');
             
             const resolve = walletConfigResolve;
+            savedWalletAddressesCache.add(address.toLowerCase());
+            savedWalletAddressesCacheUpdatedAt = Date.now();
             walletConfigResolve = null;
             currentConfiguringAddress = '';
-            if (resolve) resolve();
+            if (resolve) resolve({ saved: true, address });
         } else {
             const errText = translateBackendDetail(data.detail);
             showNotification(errText || 'Ошибка подключения кошелька', 'error');
@@ -2669,17 +2854,19 @@ async function saveWalletConfigModal() {
 
 async function saveSelectedWalletAccounts(accounts) {
     const addresses = selectedEvmWalletAddresses(accounts);
-    if (!addresses.length) return;
-    
+    if (!addresses.length) return [];
+    const savedAddresses = [];
     for (const address of addresses) {
-        await new Promise((resolve) => {
+        const result = await new Promise((resolve) => {
             openWalletConfigModal(address, resolve);
         });
+        if (result?.saved) savedAddresses.push(address);
     }
     if (document.getElementById('walletsListContainer')) await loadWalletsFromDB();
+    return savedAddresses;
 }
 
-function updateBaseWalletConnectionState(address = sessionStorage.getItem('ax_base_wallet_address') || '') {
+function updateBaseWalletConnectionState(address = getConnectedBaseWalletAddress()) {
     const status = document.getElementById('baseWalletConnectionStatus');
     const addressInput = document.getElementById('newWalletAddress');
     const disconnectButton = document.getElementById('disconnectBaseWalletButton');
@@ -2694,14 +2881,14 @@ function updateBaseWalletConnectionState(address = sessionStorage.getItem('ax_ba
 
 async function disconnectBaseWalletSession() {
     const t = translations[currentLang];
+    const providerKind = getWalletSessionPersistenceState().providerKind;
     try {
-        if (walletConnectProvider?.session) await walletConnectProvider.disconnect();
+        if (providerKind === 'walletconnect' && walletConnectProvider?.session) await walletConnectProvider.disconnect();
     } catch (error) {
         console.warn('WalletConnect session disconnect failed', error);
     } finally {
         walletConnectProvider = null;
-        sessionStorage.removeItem('ax_base_wallet_address');
-        sessionStorage.removeItem('ax_active_wallet_address');
+        clearConnectedWalletState();
         updateBaseWalletConnectionState('');
         if (document.getElementById('walletsListContainer')) loadWalletsFromDB();
         showNotification(t.walletSessionDisconnected);
@@ -2716,6 +2903,7 @@ async function connectBaseWallet(requestAccountPicker = true) {
         return;
     }
     try {
+        walletConnectionFlowInProgress = true;
         // When the site is already connected, MetaMask otherwise returns the last
         // permitted account without showing a picker. This explicit request lets
         // the user decide which public addresses may be configured in AIRDROP-X.
@@ -2738,10 +2926,17 @@ async function connectBaseWallet(requestAccountPicker = true) {
             throw error;
         }
         await switchToBaseMainnet(provider);
-        const address = selectedAccounts[0];
-        setConnectedBaseWalletAddress(address);
-        updateBaseWalletConnectionState(address);
-        await saveSelectedWalletAccounts(selectedAccounts);
+        const savedAddresses = await saveSelectedWalletAccounts(selectedAccounts);
+        const address = savedAddresses[0] || '';
+        if (address) {
+            setActiveBaseWalletAddress(address);
+            const chainId = await provider.request({ method: 'eth_chainId' }).catch(() => BASE_MAINNET_CHAIN_ID);
+            setConnectedBaseWalletAddress(address, 'metamask', chainId);
+            updateBaseWalletConnectionState(address);
+            await refreshActiveWalletConnectionUi();
+        } else {
+            await reconcileWalletProviderAccounts('metamask', selectedAccounts, { notify: false });
+        }
     } catch (error) {
         const message = error?.code === 4001
             ? t.walletConnectRejected
@@ -2756,6 +2951,8 @@ async function connectBaseWallet(requestAccountPicker = true) {
                     : t.walletAddConnectionFailed;
         console.warn('Wallet add connection failed', error);
         showNotification(message, 'error');
+    } finally {
+        walletConnectionFlowInProgress = false;
     }
 }
 
@@ -3299,8 +3496,201 @@ async function submitBaseSwap() {
     }
 }
 
+function updateSavedWalletAddressesCache(wallets) {
+    savedWalletAddressesCache = new Set((Array.isArray(wallets) ? wallets : [])
+        .map((wallet) => String(wallet?.wallet_address || '').toLowerCase())
+        .filter((address) => /^0x[0-9a-f]{40}$/.test(address)));
+    savedWalletAddressesCacheOwner = getCurrentUsername().toLowerCase();
+    savedWalletAddressesCacheUpdatedAt = Date.now();
+}
+
+async function getSavedWalletAddressSet({ force = false } = {}) {
+    const username = getCurrentUsername();
+    if (!username) return new Set();
+    const owner = username.toLowerCase();
+    if (!force && savedWalletAddressesCacheOwner === owner && Date.now() - savedWalletAddressesCacheUpdatedAt < 15_000) {
+        return new Set(savedWalletAddressesCache);
+    }
+    try {
+        const response = await fetch(`/api/wallets/${encodeURIComponent(username)}`);
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !Array.isArray(data.wallets)) return null;
+        updateSavedWalletAddressesCache(data.wallets);
+        return new Set(savedWalletAddressesCache);
+    } catch (_) {
+        return null;
+    }
+}
+
+function walletProviderForKind(providerKind) {
+    if (providerKind === 'walletconnect') return walletConnectProvider?.session ? walletConnectProvider : null;
+    if (providerKind === 'metamask') return window.ethereum?.request ? window.ethereum : null;
+    return null;
+}
+
+function walletNetworkLabel(chainId) {
+    const normalized = walletSessionStateApi?.normalizeChainId(chainId) || String(chainId || '');
+    const match = Object.values(UNIVERSAL_BRIDGE_NETWORKS).find((network) => network.chainId.toLowerCase() === normalized.toLowerCase());
+    return match?.chainName || normalized || '—';
+}
+
+async function reconcileWalletProviderAccounts(providerKind, accounts, { notify = false, chainId = '' } = {}) {
+    if (!['metamask', 'walletconnect'].includes(providerKind)) return { matches: false, reason: 'provider-unavailable' };
+    if (!isLoggedIn || !getCurrentUsername()) return { matches: false, reason: 'session-unavailable' };
+    const locale = translations[getActiveLang()];
+    const activeAddress = getActiveBaseWalletAddress();
+    const savedAddresses = await getSavedWalletAddressSet();
+    const accountState = savedAddresses
+        ? walletSessionStateApi?.reconcileSavedAccounts(accounts, activeAddress, Array.from(savedAddresses))
+        : walletSessionStateApi?.resolveAccounts(accounts, activeAddress);
+    const resolvedState = accountState || { matches: false, reason: 'no-account', accounts: [] };
+
+    if (!activeAddress) {
+        rememberWalletProviderKind(providerKind, chainId);
+        updateBaseWalletConnectionState('');
+        if (notify && !walletConnectionFlowInProgress && resolvedState.accounts?.length) {
+            showNotification(locale.walletSessionSelectSavedWallet, 'error');
+        }
+        return { ...resolvedState, reason: 'missing-active-address' };
+    }
+
+    if (resolvedState.reason === 'unsaved-active-address') {
+        clearActiveWalletState();
+        rememberWalletProviderKind(providerKind, chainId);
+        updateBaseWalletConnectionState('');
+        if (notify && !walletConnectionFlowInProgress) showNotification(locale.walletSessionUnsavedAccount, 'error');
+        await refreshActiveWalletConnectionUi();
+        return { matches: false, reason: 'unsaved-active-address', accounts: resolvedState.accounts || [] };
+    }
+
+    if (resolvedState.matches) {
+        setConnectedBaseWalletAddress(resolvedState.address, providerKind, chainId);
+        updateBaseWalletConnectionState(resolvedState.address);
+        await refreshActiveWalletConnectionUi();
+        if (notify && !walletConnectionFlowInProgress) showNotification(locale.walletSessionAccountRestored, 'success');
+        return { ...resolvedState, providerKind };
+    }
+
+    rememberWalletProviderKind(providerKind, chainId);
+    updateBaseWalletConnectionState('');
+    await refreshActiveWalletConnectionUi();
+    if (notify && !walletConnectionFlowInProgress) {
+        const message = resolvedState.reason === 'no-account'
+            ? locale.operationWalletNoAccount
+            : locale.operationWalletWrongAccount.replace('{address}', `${activeAddress.slice(0, 6)}…${activeAddress.slice(-4)}`);
+        showNotification(message, 'error');
+    }
+    return { ...resolvedState, providerKind };
+}
+
+async function handleWalletProviderChainChanged(providerKind, chainId) {
+    if (!isLoggedIn || !getCurrentUsername()) return;
+    const state = getWalletSessionPersistenceState();
+    if (state.providerKind && state.providerKind !== providerKind) return;
+    const normalizedChainId = walletSessionStateApi?.normalizeChainId(chainId) || '';
+    if (state.connectedAddress) {
+        setConnectedBaseWalletAddress(state.connectedAddress, providerKind, normalizedChainId);
+    } else {
+        rememberWalletProviderKind(providerKind, normalizedChainId);
+    }
+    await refreshActiveWalletConnectionUi();
+    if (!walletConnectionFlowInProgress && getActiveBaseWalletAddress()) {
+        showNotification(translations[getActiveLang()].walletSessionNetworkChanged.replace('{network}', walletNetworkLabel(normalizedChainId)));
+    }
+}
+
+function bindInjectedWalletProviderListeners() {
+    const provider = window.ethereum;
+    if (!provider?.on || injectedWalletListenersProvider === provider) return;
+    injectedWalletListenersProvider = provider;
+    provider.on('accountsChanged', (accounts) => {
+        void reconcileWalletProviderAccounts('metamask', accounts, { notify: true });
+    });
+    provider.on('chainChanged', (chainId) => {
+        void handleWalletProviderChainChanged('metamask', chainId);
+    });
+    provider.on('disconnect', () => {
+        if (!isLoggedIn || !getCurrentUsername()) return;
+        if (getWalletSessionPersistenceState().providerKind !== 'metamask') return;
+        clearConnectedWalletState();
+        updateBaseWalletConnectionState('');
+        void refreshActiveWalletConnectionUi();
+        if (!walletConnectionFlowInProgress) showNotification(translations[getActiveLang()].walletSessionDisconnected);
+    });
+}
+
+function bindWalletConnectProviderListeners(provider) {
+    if (!provider?.on || walletConnectListenersProvider === provider) return;
+    walletConnectListenersProvider = provider;
+    provider.on('accountsChanged', (accounts) => {
+        void reconcileWalletProviderAccounts('walletconnect', accounts, { notify: true });
+    });
+    provider.on('chainChanged', (chainId) => {
+        void handleWalletProviderChainChanged('walletconnect', chainId);
+    });
+    provider.on('display_uri', openWalletConnectQr);
+    provider.on('connect', closeWalletConnectModal);
+    provider.on('disconnect', () => {
+        if (walletConnectProvider === provider) walletConnectProvider = null;
+        walletConnectListenersProvider = null;
+        if (!isLoggedIn || !getCurrentUsername()) return;
+        if (getWalletSessionPersistenceState().providerKind === 'walletconnect') {
+            clearConnectedWalletState();
+            updateBaseWalletConnectionState('');
+            void refreshActiveWalletConnectionUi();
+            if (!walletConnectionFlowInProgress) showNotification(translations[getActiveLang()].walletSessionDisconnected);
+        }
+    });
+}
+
+async function initializeWalletSessionLifecycle() {
+    restoreWalletStateMirrors();
+    bindInjectedWalletProviderListeners();
+    const state = getWalletSessionPersistenceState();
+    try {
+        if (state.providerKind === 'walletconnect') {
+            const provider = await getWalletConnectProvider();
+            if (!provider?.session) {
+                clearConnectedWalletState();
+                updateBaseWalletConnectionState('');
+                return;
+            }
+            const accounts = await provider.request({ method: 'eth_accounts' });
+            const chainId = await provider.request({ method: 'eth_chainId' }).catch(() => state.chainId);
+            await reconcileWalletProviderAccounts('walletconnect', accounts, { notify: false, chainId });
+            return;
+        }
+        const provider = window.ethereum;
+        let injectedState = { matches: false, reason: 'provider-unavailable' };
+        if (provider?.request) {
+            const accounts = await provider.request({ method: 'eth_accounts' });
+            const chainId = await provider.request({ method: 'eth_chainId' }).catch(() => state.chainId);
+            injectedState = await reconcileWalletProviderAccounts('metamask', accounts, { notify: false, chainId });
+            if (injectedState.matches) return;
+        }
+        // Older versions did not persist the provider kind. Initialising the SDK
+        // does not request accounts or show a QR code; it only exposes an already
+        // approved WalletConnect session, if one exists.
+        if (state.activeAddress) {
+            const provider = await getWalletConnectProvider();
+            if (provider?.session) {
+                const accounts = await provider.request({ method: 'eth_accounts' });
+                const chainId = await provider.request({ method: 'eth_chainId' }).catch(() => state.chainId);
+                await reconcileWalletProviderAccounts('walletconnect', accounts, { notify: false, chainId });
+            }
+        }
+    } catch (error) {
+        console.warn('Wallet session restore failed', error);
+        clearConnectedWalletState();
+        updateBaseWalletConnectionState('');
+    }
+}
+
 async function getWalletConnectProvider() {
-    if (walletConnectProvider) return walletConnectProvider;
+    if (walletConnectProvider) {
+        bindWalletConnectProviderListeners(walletConnectProvider);
+        return walletConnectProvider;
+    }
     const configResponse = await fetch('/api/walletconnect/config');
     const config = await configResponse.json();
     if (!configResponse.ok || !config.project_id) throw new Error('walletconnect_config_missing');
@@ -3326,40 +3716,35 @@ async function getWalletConnectProvider() {
             icons: []
         }
     });
-    walletConnectProvider.on('accountsChanged', (accounts) => {
-        const address = Array.isArray(accounts) ? accounts[0] : '';
-        if (address) {
-            setConnectedBaseWalletAddress(address);
-            updateBaseWalletConnectionState(address);
-        }
-    });
-    walletConnectProvider.on('display_uri', openWalletConnectQr);
-    walletConnectProvider.on('connect', closeWalletConnectModal);
-    walletConnectProvider.on('disconnect', () => {
-        walletConnectProvider = null;
-        sessionStorage.removeItem('ax_base_wallet_address');
-        sessionStorage.removeItem('ax_active_wallet_address');
-        updateBaseWalletConnectionState('');
-    });
+    bindWalletConnectProviderListeners(walletConnectProvider);
     return walletConnectProvider;
 }
 
 async function connectWalletConnectBase() {
     const locale = translations[getActiveLang()];
     try {
+        walletConnectionFlowInProgress = true;
         showNotification(locale.walletConnectLoading);
         const provider = await getWalletConnectProvider();
         const accounts = await provider.enable();
-        const chainId = await provider.request({ method: 'eth_chainId' });
+        let chainId = await provider.request({ method: 'eth_chainId' });
         if (chainId !== BASE_MAINNET_CHAIN_ID) {
             await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: BASE_MAINNET_CHAIN_ID }] });
+            chainId = await provider.request({ method: 'eth_chainId' }).catch(() => BASE_MAINNET_CHAIN_ID);
         }
         const selectedAccounts = selectedEvmWalletAddresses(accounts);
         const address = selectedAccounts[0] || '';
         if (!address) throw new Error('walletconnect_no_address');
-        setConnectedBaseWalletAddress(address);
-        updateBaseWalletConnectionState(address);
-        await saveSelectedWalletAccounts(selectedAccounts);
+        const savedAddresses = await saveSelectedWalletAccounts(selectedAccounts);
+        const savedAddress = savedAddresses[0] || '';
+        if (savedAddress) {
+            setActiveBaseWalletAddress(savedAddress);
+            setConnectedBaseWalletAddress(savedAddress, 'walletconnect', chainId);
+            updateBaseWalletConnectionState(savedAddress);
+            await refreshActiveWalletConnectionUi();
+        } else {
+            await reconcileWalletProviderAccounts('walletconnect', selectedAccounts, { notify: false, chainId });
+        }
     } catch (error) {
         closeWalletConnectModal();
         console.error('WalletConnect connection failed', error);
@@ -3372,22 +3757,34 @@ async function connectWalletConnectBase() {
                     ? locale.walletConnectNetworkError
                     : locale.walletConnectRejected;
         showNotification(message, 'error');
+    } finally {
+        walletConnectionFlowInProgress = false;
     }
 }
 
 async function getActiveWalletSessionState(address = getActiveBaseWalletAddress()) {
     const expectedAddress = String(address || '').trim().toLowerCase();
     if (!/^0x[0-9a-f]{40}$/.test(expectedAddress)) return { matches: false, reason: 'missing-active-address' };
-    const provider = walletConnectProvider?.session ? walletConnectProvider : window.ethereum;
+    const persistenceState = getWalletSessionPersistenceState();
+    let providerKind = persistenceState.providerKind;
+    let provider = walletProviderForKind(providerKind);
+    if (providerKind === 'walletconnect' && !provider) {
+        try {
+            const restoredProvider = await getWalletConnectProvider();
+            provider = restoredProvider?.session ? restoredProvider : null;
+        } catch (_) {
+            provider = null;
+        }
+    }
+    if (!provider) {
+        providerKind = walletConnectProvider?.session ? 'walletconnect' : 'metamask';
+        provider = walletProviderForKind(providerKind);
+    }
     if (!provider || typeof provider.request !== 'function') return { matches: false, reason: 'provider-unavailable' };
     try {
         const accounts = await provider.request({ method: 'eth_accounts' });
-        const selectedAccounts = selectedEvmWalletAddresses(accounts);
-        if (!selectedAccounts.length) return { matches: false, reason: 'no-account' };
-        return {
-            matches: selectedAccounts.some((account) => account.toLowerCase() === expectedAddress),
-            reason: selectedAccounts.some((account) => account.toLowerCase() === expectedAddress) ? 'connected' : 'different-account',
-        };
+        const accountState = walletSessionStateApi?.resolveAccounts(accounts, expectedAddress) || { matches: false, reason: 'no-account' };
+        return { ...accountState, providerKind };
     } catch (_) {
         return { matches: false, reason: 'request-failed' };
     }
@@ -3435,6 +3832,7 @@ async function connectActiveWalletForActions(button, network = 'Base') {
         return;
     }
     try {
+        walletConnectionFlowInProgress = true;
         if (button) setButtonLoading(button, true, locale.operationWalletConnecting);
         if (provider.isMetaMask) {
             try {
@@ -3458,7 +3856,8 @@ async function connectActiveWalletForActions(button, network = 'Base') {
             throw error;
         }
         await switchToOperationNetwork(provider, network);
-        setConnectedBaseWalletAddress(selectedAddress);
+        const chainId = await provider.request({ method: 'eth_chainId' }).catch(() => '');
+        setConnectedBaseWalletAddress(selectedAddress, 'metamask', chainId);
         updateBaseWalletConnectionState(selectedAddress);
         await refreshActiveWalletConnectionUi();
         showNotification(locale.operationWalletConnected);
@@ -3475,6 +3874,7 @@ async function connectActiveWalletForActions(button, network = 'Base') {
         console.warn('Active wallet connection failed', error);
         showNotification(message, 'error');
     } finally {
+        walletConnectionFlowInProgress = false;
         if (button) setButtonLoading(button, false, locale.operationConnectActiveWallet);
     }
 }
@@ -3483,7 +3883,12 @@ async function connectSavedWalletForActions(walletAddress, button) {
     if (!/^0x[0-9a-fA-F]{40}$/.test(walletAddress || '')) return;
     // This only chooses an already saved public address for the current session.
     // It never creates another wallet record or imports a private key.
-    sessionStorage.setItem('ax_active_wallet_address', walletAddress);
+    const savedAddresses = await getSavedWalletAddressSet({ force: true });
+    if (!savedAddresses?.has(walletAddress.toLowerCase())) {
+        showNotification(translations[getActiveLang()].walletSessionUnsavedAccount, 'error');
+        return;
+    }
+    setActiveBaseWalletAddress(walletAddress);
     await connectActiveWalletForActions(button);
 }
 
@@ -3495,6 +3900,7 @@ async function connectActiveWalletWithWalletConnect(button, network = 'Base') {
         return;
     }
     try {
+        walletConnectionFlowInProgress = true;
         if (button) setButtonLoading(button, true, locale.operationWalletConnecting);
         const provider = await getWalletConnectProvider();
         const accounts = await provider.enable();
@@ -3513,7 +3919,8 @@ async function connectActiveWalletWithWalletConnect(button, network = 'Base') {
             throw error;
         }
         await switchToOperationNetwork(provider, network);
-        setConnectedBaseWalletAddress(selectedAddress);
+        const chainId = await provider.request({ method: 'eth_chainId' }).catch(() => '');
+        setConnectedBaseWalletAddress(selectedAddress, 'walletconnect', chainId);
         updateBaseWalletConnectionState(selectedAddress);
         await refreshActiveWalletConnectionUi();
         showNotification(locale.operationWalletConnected);
@@ -3531,6 +3938,7 @@ async function connectActiveWalletWithWalletConnect(button, network = 'Base') {
         console.warn('WalletConnect active wallet connection failed', error);
         showNotification(message, 'error');
     } finally {
+        walletConnectionFlowInProgress = false;
         if (button) setButtonLoading(button, false, locale.btnConnectWalletConnect);
     }
 }
@@ -3779,13 +4187,18 @@ async function loadWalletsFromDB() {
         if (res.status === 401) return;
         const data = await res.json();
         if (!res.ok || !Array.isArray(data.wallets)) throw new Error('wallet_load_failed');
+    updateSavedWalletAddressesCache(data.wallets);
+    const persistedActiveAddress = getActiveBaseWalletAddress();
+    if (persistedActiveAddress && !savedWalletAddressesCache.has(persistedActiveAddress.toLowerCase())) {
+        clearActiveWalletState();
+    }
     userPlan = data.plan;
     const badge = document.getElementById('slot-info-badge');
     if(badge) badge.innerText = `${t.slotsLabel}: ${data.wallets.length} / ${data.max_slots} (${data.plan})`;
     
     if(data.wallets.length > 0) {
         const activeAddress = getActiveBaseWalletAddress().toLowerCase();
-        const connectedAddress = (sessionStorage.getItem('ax_base_wallet_address') || '').toLowerCase();
+        const connectedAddress = getConnectedBaseWalletAddress().toLowerCase();
         container.innerHTML = data.wallets.map(w => {
             const isActive = activeAddress && w.wallet_address.toLowerCase() === activeAddress;
             const isConnectedForActions = isActive && connectedAddress === w.wallet_address.toLowerCase();
@@ -3844,7 +4257,7 @@ async function loadWalletsFromDB() {
 async function activateSavedWallet(walletId, walletAddress) {
     const locale = translations[getActiveLang()];
     if (!/^0x[0-9a-fA-F]{40}$/.test(walletAddress || '')) return;
-    sessionStorage.setItem('ax_active_wallet_address', walletAddress);
+    setActiveBaseWalletAddress(walletAddress);
     await loadWalletsFromDB();
     showNotification(locale.walletActivated, 'success');
 }
@@ -7203,7 +7616,7 @@ function renderDashboardContent(section) {
             </div>
 
             <div class="account-overview-columns">
-                <div class="dashboard-card account-subscription-card">
+                <div class="dashboard-card account-subscription-card account-subscription-card--${subscriptionStatus}">
                     <div class="account-section-heading"><div><div class="account-kicker">${t.accountOverviewSubscription}</div><h3>${t.subTitle}</h3></div><span id="accountOverviewPlan" class="account-plan-badge">${escapeHtml(userPlan)}</span></div>
                     <p>${t.subPlan}: <b>${escapeHtml(userPlan)}</b> · ${escapeHtml(subscriptionStatusText)}</p>
                     <p class="account-subscription-note">${t.subscriptionPaymentNote}</p>

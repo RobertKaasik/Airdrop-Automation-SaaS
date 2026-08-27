@@ -23,7 +23,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=20260822-flex-schedule-2">
+    <link rel="stylesheet" href="style.css?v=20260827-mobile-1">
 </head>
 <body>
 
@@ -65,11 +65,12 @@
         <div class="auth-modal" style="max-width: 950px; width: 95%;">
             <div class="modal-logo">
                 <span id="p-title-modal">⚡ Выберите тарифный план AIRDROP-X</span>
-                <button type="button" class="icon-button-plain" onclick="closePricingModal()" aria-label="Close" style="color: #b19cd9; font-size: 20px;">✕</button>
+                <button type="button" id="pricingModalClose" class="icon-button-plain" onclick="closePricingModal()" aria-label="Закрыть окно" style="color: #b19cd9; font-size: 20px;">✕</button>
             </div>
             <div class="modal-desc" id="p-desc-modal" style="text-align: center; margin-bottom: 24px;">
                 Ежемесячная подписка без обязательного активационного платежа.
             </div>
+            <div id="pricingAccountStatus" class="pricing-account-status" role="status" aria-live="polite" hidden></div>
 
             <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px;">
                 
@@ -700,6 +701,7 @@
     }
 </script>
 <script type="module" src="ui-dist/react-ui.js"></script>
-    <script src="app.js?v=20260822-flex-schedule-2"></script>
+    <script src="wallet-session-state.js?v=20260827-wallet-session-1"></script>
+    <script src="app.js?v=20260827-wallet-session-1"></script>
 </body>
 </html>

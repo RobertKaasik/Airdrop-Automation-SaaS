@@ -127,6 +127,7 @@ def test_public_surface_security():
 
     # Files that form the public app shell must still be reachable.
     assert requests.get(f"{BASE_URL}/locales/ru.js", timeout=10).status_code == 200
+    assert requests.get(f"{BASE_URL}/wallet-session-state.js", timeout=10).status_code == 200
     assert requests.get(f"{BASE_URL}/favicon.svg", timeout=10).status_code == 200
     print("Public files and browser security headers are constrained safely.")
 

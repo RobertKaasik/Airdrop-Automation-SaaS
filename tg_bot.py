@@ -15,8 +15,11 @@ from server import (
     SessionLocal,
     TelegramLinkCode,
     TelegramSubscription,
+    User,
     classify_gas_level,
+    get_subscription_state,
     get_live_gas_price,
+    hash_secret,
 )
 from telegram_locales import get_text, normalize_language
 
@@ -58,8 +61,12 @@ async def command_start_handler(message: Message) -> None:
     now_ts = int(time.time())
     db = SessionLocal()
     try:
+        code_digest = hash_secret(code)
+        # New codes are stored as digests. Accepting the raw value as a
+        # fallback keeps already-issued, short-lived codes usable during a
+        # rolling local update; no newly issued code is stored in plaintext.
         link = db.query(TelegramLinkCode).filter(
-            TelegramLinkCode.code == code,
+            TelegramLinkCode.code.in_((code_digest, code)),
             TelegramLinkCode.used.is_(False),
             TelegramLinkCode.expires_at > now_ts,
         ).first()
@@ -69,6 +76,13 @@ async def command_start_handler(message: Message) -> None:
 
         language = normalize_language(link.language)
 
+        account = db.query(User).filter(User.username == link.username).first()
+        if not account or get_subscription_state(account, now_ts)["status"] == "expired":
+            link.used = True
+            db.commit()
+            await message.answer(get_text(language, "invalid_link"))
+            return
+
         chat_id = str(message.chat.id)
         occupied = db.query(TelegramSubscription).filter(
             TelegramSubscription.chat_id == chat_id,
@@ -76,6 +90,19 @@ async def command_start_handler(message: Message) -> None:
         ).first()
         if occupied:
             await message.answer(get_text(language, "chat_taken"))
+            return
+
+        # Claim the one-time code atomically before changing the subscription.
+        # Concurrent /start requests can therefore never relink one account to
+        # two different chats with the same token.
+        claimed = db.query(TelegramLinkCode).filter(
+            TelegramLinkCode.code == link.code,
+            TelegramLinkCode.used.is_(False),
+            TelegramLinkCode.expires_at > now_ts,
+        ).update({TelegramLinkCode.used: True}, synchronize_session=False)
+        if claimed != 1:
+            db.rollback()
+            await message.answer(get_text(language, "invalid_link"))
             return
 
         subscription = db.query(TelegramSubscription).filter(
@@ -93,7 +120,6 @@ async def command_start_handler(message: Message) -> None:
                 linked_at=now_ts,
                 updated_at=now_ts,
             ))
-        link.used = True
         db.commit()
         name = html.quote(message.from_user.first_name or "user")
         await message.answer(get_text(language, "linked", name=name))
