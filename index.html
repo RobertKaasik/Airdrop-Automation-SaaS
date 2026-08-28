@@ -17,13 +17,13 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
-    <script src="locales/ru.js?v=20260822-flex-schedule-2"></script>
-    <script src="locales/en.js?v=20260822-flex-schedule-2"></script>
-    <script src="locales/zh.js?v=20260822-flex-schedule-2"></script>
+    <script src="locales/ru.js?v=20260828-pricing-v2"></script>
+    <script src="locales/en.js?v=20260828-pricing-v2"></script>
+    <script src="locales/zh.js?v=20260828-pricing-v2"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css?v=20260827-mobile-1">
+    <link rel="stylesheet" href="style.css?v=20260828-cookie-consent-1">
 </head>
 <body>
 
@@ -62,7 +62,7 @@
 
     <!-- Модальное окно выбора тарифов -->
     <div class="modal-overlay" id="pricingModal" onclick="handlePricingOverlayClick(event)">
-        <div class="auth-modal" style="max-width: 950px; width: 95%;">
+        <div class="auth-modal" style="max-width: 1320px; width: min(96vw, 1320px);">
             <div class="modal-logo">
                 <span id="p-title-modal">⚡ Выберите тарифный план AIRDROP-X</span>
                 <button type="button" id="pricingModalClose" class="icon-button-plain" onclick="closePricingModal()" aria-label="Закрыть окно" style="color: #b19cd9; font-size: 20px;">✕</button>
@@ -72,7 +72,7 @@
             </div>
             <div id="pricingAccountStatus" class="pricing-account-status" role="status" aria-live="polite" hidden></div>
 
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(235px, 1fr)); gap: 16px; align-items: stretch;">
                 
                 <!-- Стандарт -->
                 <div class="pricing-card" style="background: #07050c; border: 1px solid rgba(157,78,221,0.3); border-radius: 18px; padding: 22px; display: flex; flex-direction: column; justify-content: space-between;">
@@ -82,9 +82,9 @@
                         <div style="font-size: 26px; font-weight: 800; color: #e0aaff; margin-bottom: 16px;">$29 <span id="p-std-per" style="font-size: 13px; color: #b19cd9; font-weight: normal;">/ мес</span></div>
                         
                         <div style="border-top: 1px solid rgba(157,78,221,0.2); padding-top: 14px; display: flex; flex-direction: column; gap: 10px; font-size: 13px; color: #b19cd9;">
-                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-std-f1">Лимит: до 5 кошельков (воркеров)</span></div>
-                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-std-f2">Только сеть Base L2</span></div>
-                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-std-f3">Базовый Claim Looter и Anti-Sybil</span></div>
+                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-std-f1">До 5 профилей кошельков</span></div>
+                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-std-f2">Мониторинг публичных EVM-адресов</span></div>
+                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-std-f3">Ручное подтверждение операций в кошельке</span></div>
                         </div>
                     </div>
                     <button type="button" id="p-std-btn" onclick="selectPlanAndRegister('Standard', 29)" class="btn-dark-lg glow-button-target" style="margin-top: 20px; width: 100%; padding: 12px; font-size: 13px;">Выбрать за $29/мес</button>
@@ -95,14 +95,14 @@
                     <div id="p-pro-badge" style="position: absolute; top: -12px; right: 20px; background: linear-gradient(135deg, #7c3aed, #9333ea); color: #fff; font-size: 10px; font-weight: bold; padding: 4px 10px; border-radius: 10px; text-transform: uppercase;">Рекомендуемый</div>
                     <div>
                         <div id="p-pro-top" style="font-size: 14px; font-weight: bold; color: #c77dff; margin-bottom: 6px;">ВХОД + ПОДПИСКА</div>
-                        <div id="p-pro-name" style="font-size: 22px; font-weight: 800; color: #fff; margin-bottom: 4px;">PRO Фермер</div>
+                        <div id="p-pro-name" style="font-size: 22px; font-weight: 800; color: #fff; margin-bottom: 4px;">PRO</div>
                         <div style="font-size: 26px; font-weight: 800; color: #e0aaff; margin-bottom: 16px;">$49 <span id="p-pro-per" style="font-size: 13px; color: #b19cd9; font-weight: normal;">/ мес</span></div>
                         
                         <div style="border-top: 1px solid rgba(157,78,221,0.2); padding-top: 14px; display: flex; flex-direction: column; gap: 10px; font-size: 13px; color: #b19cd9;">
-                            <div style="display: flex; align-items: flex-start; gap: 8px; color: #fff;"><span>✓</span> <span id="p-pro-f1"><b>Лимит до 15 кошельков</b> (воркеров)</span></div>
-                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-pro-f2">Все сети кроме Solana (Arbitrum, ZkSync, Scroll...)</span></div>
-                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-pro-f3">Автоматический фоновый планировщик</span></div>
-                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-pro-f4">Приоритетная поддержка 24/7</span></div>
+                            <div style="display: flex; align-items: flex-start; gap: 8px; color: #fff;"><span>✓</span> <span id="p-pro-f1"><b>До 15 профилей кошельков</b></span></div>
+                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-pro-f2">Расписания и мониторинг EVM-сетей</span></div>
+                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-pro-f3">Telegram-уведомления</span></div>
+                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-pro-f4">Приоритетная поддержка</span></div>
                         </div>
                     </div>
                     <button type="button" id="p-pro-btn" onclick="selectPlanAndRegister('Pro', 49)" class="btn-purple-lg glow-button-target" style="margin-top: 20px; width: 100%; padding: 12px; font-size: 13px;">Выбрать за $49/мес</button>
@@ -116,13 +116,47 @@
                         <div style="font-size: 26px; font-weight: 800; color: #e0aaff; margin-bottom: 16px;">$89 <span id="p-prem-per" style="font-size: 13px; color: #b19cd9; font-weight: normal;">/ мес</span></div>
                         
                         <div style="border-top: 1px solid rgba(157,78,221,0.2); padding-top: 14px; display: flex; flex-direction: column; gap: 10px; font-size: 13px; color: #b19cd9;">
-                            <div style="display: flex; align-items: flex-start; gap: 8px; color: #00d95f;"><span>✓</span> <span id="p-prem-f1"><b>Лимит до 30 слотов</b> кошельков</span></div>
-                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-prem-f2">Все текущие и будущие блокчейны</span></div>
-                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-prem-f3">Telegram Webhook пуш-уведомления</span></div>
-                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-prem-f4">Личный менеджер и ранний доступ</span></div>
+                            <div style="display: flex; align-items: flex-start; gap: 8px; color: #00d95f;"><span>✓</span> <span id="p-prem-f1"><b>До 30 профилей кошельков</b></span></div>
+                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-prem-f2">Расширенный центр действий для поддерживаемых сетей</span></div>
+                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-prem-f3">Тонкая настройка Telegram-уведомлений</span></div>
+                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-prem-f4">Ранний доступ к совместимым интеграциям</span></div>
                         </div>
                     </div>
                     <button type="button" id="p-prem-btn" onclick="selectPlanAndRegister('Premium', 89)" class="btn-dark-lg glow-button-target" style="margin-top: 20px; width: 100%; padding: 12px; font-size: 13px;">Выбрать за $89/мес</button>
+                </div>
+
+                <!-- Whale -->
+                <div class="pricing-card pricing-card--whale" style="background: linear-gradient(145deg, rgba(7,24,39,.92), rgba(22,16,54,.88)); border: 1px solid rgba(56, 189, 248, .56); border-radius: 18px; padding: 22px; display: flex; flex-direction: column; justify-content: space-between; position: relative; box-shadow: 0 16px 38px rgba(14, 165, 233, .13), inset 0 1px 0 rgba(255,255,255,.08);">
+                    <div id="p-whale-badge" style="position: absolute; top: -12px; right: 18px; background: linear-gradient(135deg, #0891b2, #2563eb); color: #ecfeff; font-size: 10px; font-weight: 800; padding: 4px 10px; border-radius: 10px; letter-spacing: .04em;">РАСШИРЕННЫЙ МАСШТАБ</div>
+                    <div>
+                        <div id="p-whale-top" style="font-size: 14px; font-weight: bold; color: #67e8f9; margin-bottom: 6px;">ЕЖЕМЕСЯЧНАЯ ПОДПИСКА</div>
+                        <div id="p-whale-name" style="font-size: 22px; font-weight: 800; color: #fff; margin-bottom: 4px;">Whale</div>
+                        <div style="font-size: 28px; font-weight: 800; color: #7dd3fc; margin-bottom: 16px;">$149 <span id="p-whale-per" style="font-size: 13px; color: #a5c9db; font-weight: normal;">/ мес</span></div>
+                        <div style="border-top: 1px solid rgba(103,232,249,.22); padding-top: 14px; display: flex; flex-direction: column; gap: 10px; font-size: 13px; color: #c1dbe8;">
+                            <div style="display: flex; align-items: flex-start; gap: 8px; color: #fff;"><span>✓</span> <span id="p-whale-f1"><b>До 100 профилей кошельков</b></span></div>
+                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-whale-f2">Индивидуальные расписания для каждого профиля</span></div>
+                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-whale-f3">Расширенная очередь уведомлений Telegram</span></div>
+                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-whale-f4">Каждая операция подтверждается в вашем кошельке</span></div>
+                        </div>
+                    </div>
+                    <button type="button" id="p-whale-btn" onclick="selectPlanAndRegister('Whale', 149)" class="btn-dark-lg glow-button-target" style="margin-top: 20px; width: 100%; padding: 12px; font-size: 13px; border-color: rgba(56,189,248,.6); color:#dff8ff;">Выбрать за $149/мес</button>
+                </div>
+
+                <!-- Enterprise -->
+                <div class="pricing-card pricing-card--enterprise" style="background: linear-gradient(145deg, rgba(52,22,7,.88), rgba(38,12,33,.9)); border: 1px solid rgba(251, 191, 36, .58); border-radius: 18px; padding: 22px; display: flex; flex-direction: column; justify-content: space-between; position: relative; box-shadow: 0 18px 44px rgba(245, 158, 11, .15), inset 0 1px 0 rgba(255,255,255,.08);">
+                    <div id="p-enterprise-badge" style="position: absolute; top: -12px; right: 18px; background: linear-gradient(135deg, #b45309, #eab308); color: #fff7d6; font-size: 10px; font-weight: 800; padding: 4px 10px; border-radius: 10px; letter-spacing: .07em;">MAX SCALE</div>
+                    <div>
+                        <div id="p-enterprise-top" style="font-size: 14px; font-weight: bold; color: #fcd34d; margin-bottom: 6px;">ЕЖЕМЕСЯЧНАЯ ПОДПИСКА</div>
+                        <div id="p-enterprise-name" style="font-size: 22px; font-weight: 800; color: #fff; margin-bottom: 4px;">Enterprise</div>
+                        <div style="font-size: 28px; font-weight: 800; color: #facc15; margin-bottom: 16px;">$299 <span id="p-enterprise-per" style="font-size: 13px; color: #e7c778; font-weight: normal;">/ мес</span></div>
+                        <div style="border-top: 1px solid rgba(252,211,77,.26); padding-top: 14px; display: flex; flex-direction: column; gap: 10px; font-size: 13px; color: #f0ddae;">
+                            <div style="display: flex; align-items: flex-start; gap: 8px; color: #fff;"><span>✓</span> <span id="p-enterprise-f1"><b>До 250 профилей кошельков</b></span></div>
+                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-enterprise-f2">Централизованный мониторинг большого портфеля</span></div>
+                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-enterprise-f3">Приоритетное подключение совместимых сетей</span></div>
+                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-enterprise-f4">Без хранения ключей и без автоподписей</span></div>
+                        </div>
+                    </div>
+                    <button type="button" id="p-enterprise-btn" onclick="selectPlanAndRegister('Enterprise', 299)" class="btn-dark-lg glow-button-target" style="margin-top: 20px; width: 100%; padding: 12px; font-size: 13px; border-color: rgba(251,191,36,.65); color:#fff1bd;">Выбрать за $299/мес</button>
                 </div>
 
             </div>
@@ -661,14 +695,28 @@
 
     <footer class="footer" style="border-top: 1px solid var(--border-color); padding: 24px 20px; display: flex; justify-content: space-between; align-items: center; background: var(--bg-main); color: var(--text-muted); font-size: 13px;">
     <div id="footer-rights"></div>
-    <div style="display: flex; gap: 20px; align-items: center;">
+    <div style="display: flex; gap: 20px; align-items: center; flex-wrap: wrap; justify-content: center;">
         <button type="button" class="footer-link-button" onclick="openLegalModal('privacy')" id="footer-privacy"></button>
         <button type="button" class="footer-link-button" onclick="openLegalModal('terms')" id="footer-terms"></button>
-        <a href="https://t.me" target="_blank" style="color: var(--text-muted); text-decoration: none; transition: 0.2s;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--text-muted)'">Telegram</a>
-        <a href="https://github.com" target="_blank" style="color: var(--text-muted); text-decoration: none; transition: 0.2s;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--text-muted)'">GitHub</a>
+        <button type="button" class="footer-link-button" onclick="openLegalModal('cookies')" id="footer-cookies"></button>
+        <a href="mailto:airdrop.x.support@gmail.com" class="footer-link-button" id="footer-support"></a>
+        <span id="footer-support-hours" style="font-size: 12px;"></span>
     </div>
     <div class="footer-wordmark" aria-hidden="true">AIRDROP—X</div>
 </footer>
+
+<section id="cookieConsentBanner" class="cookie-consent-banner" role="dialog" aria-modal="false" aria-labelledby="cookie-consent-title" aria-describedby="cookie-consent-desc" hidden>
+    <div class="cookie-consent-copy">
+        <p class="cookie-consent-eyebrow" id="cookie-consent-eyebrow"></p>
+        <h2 id="cookie-consent-title"></h2>
+        <p id="cookie-consent-desc"></p>
+    </div>
+    <div class="cookie-consent-actions">
+        <button type="button" class="cookie-consent-button cookie-consent-button--secondary" id="cookie-consent-essential" onclick="declineOptionalCookies()"></button>
+        <button type="button" class="cookie-consent-button cookie-consent-button--link" id="cookie-consent-policy" onclick="openLegalModal('cookies')"></button>
+        <button type="button" class="cookie-consent-button" id="cookie-consent-accept" onclick="acceptOptionalCookies()"></button>
+    </div>
+</section>
 
 <!-- Модальное окно для юридических документов -->
 <div id="legalModal" class="modal-overlay" onclick="closeLegalModal(event)">
@@ -688,9 +736,9 @@
         const content = document.getElementById('legalModalContent');
         if (!modal || !title || !content) return;
 
-        const prefix = type === 'terms' ? 'legal.terms' : 'legal.privacy';
+        const prefix = type === 'terms' ? 'legal.terms' : (type === 'cookies' ? 'legal.cookies' : 'legal.privacy');
         title.innerText = window.t(`${prefix}Title`);
-        content.innerHTML = window.t(`${prefix}Content`);
+        content.innerHTML = `${window.t(`${prefix}Content`)}<p style="margin-top:16px; padding-top:12px; border-top:1px solid var(--border-color);"><strong>${window.t('legalSupportTitle')}</strong><br><a href="mailto:airdrop.x.support@gmail.com" style="color:#c77dff;">airdrop.x.support@gmail.com</a><br><span style="color:var(--text-muted);">${window.t('legalSupportHours')}</span></p>`;
         showAppModal('legalModal');
     }
 
@@ -702,6 +750,6 @@
 </script>
 <script type="module" src="ui-dist/react-ui.js"></script>
     <script src="wallet-session-state.js?v=20260827-wallet-session-1"></script>
-    <script src="app.js?v=20260827-wallet-session-1"></script>
+    <script src="app.js?v=20260828-pricing-v2"></script>
 </body>
 </html>

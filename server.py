@@ -40,7 +40,13 @@ browser_manager = BrowserProfileManager(
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 465
 SENDER_EMAIL = "airdrop.x.support@gmail.com"
-SENDER_PASSWORD = os.getenv("SMTP_PASSWORD")
+# Gmail shows App Passwords in groups for readability. Remove accidental spaces
+# from the environment value before SMTP authentication; the secret never leaves
+# this process or the server logs.
+SENDER_PASSWORD = "".join(os.getenv("SMTP_PASSWORD", "").split())
+INITIAL_ADMIN_BOOTSTRAP_ENABLED = os.getenv("INITIAL_ADMIN_BOOTSTRAP_ENABLED", "false").strip().lower() == "true"
+INITIAL_ADMIN_EMAIL = os.getenv("INITIAL_ADMIN_EMAIL", "").strip().lower()
+INITIAL_ADMIN_USERNAME = os.getenv("INITIAL_ADMIN_USERNAME", "Admin").strip() or "Admin"
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_BOT_USERNAME = os.getenv("TELEGRAM_BOT_USERNAME", "").strip().lstrip("@")
 WALLETCONNECT_PROJECT_ID = os.getenv("WALLETCONNECT_PROJECT_ID", "").strip()
@@ -65,77 +71,92 @@ SUBSCRIPTION_PAYMENT_RECEIVER = os.getenv(
 # Testnet payments follow the exact same USDC verification path as production,
 # but use a faucet-friendly amount. This value is never used on Base mainnet.
 SUBSCRIPTION_TEST_AMOUNT_USDC = Decimal("1.00")
+# A one-time owner-only mainnet check of the exact USDC settlement path.  It is
+# deliberately independent from public subscription payments so a production
+# checkout cannot be opened before the owner completes this verification.
+ADMIN_PAYMENT_TEST_ENABLED = os.getenv("ADMIN_PAYMENT_TEST_ENABLED", "false").strip().lower() == "true"
+ADMIN_PAYMENT_TEST_AMOUNT_USDC = Decimal("1.00")
 
 DEFAULT_OFFICIAL_OPPORTUNITY_SOURCES = [
-    {
-        "source_key": "base",
-        "name": "Base",
-        "network": "Base",
-        "official_url": "https://www.base.org/",
-        "status": "official_updates",
-        "summary_ru": "Следите за новостями и объявлениями Base на официальном сайте. Сейчас AIRDROP-X не заявляет о подтверждённом аирдропе.",
-        "summary_en": "Follow Base news and announcements on the official website. AIRDROP-X does not claim a confirmed airdrop at this time.",
-        "summary_zh": "请在 Base 官方网站关注新闻和公告。AIRDROP-X 目前不声称存在已确认的空投。",
-    },
     {
         "source_key": "arbitrum",
         "name": "Arbitrum",
         "network": "Arbitrum",
         "official_url": "https://arbitrum.io/",
         "status": "official_updates",
-        "summary_ru": "Официальный сайт Arbitrum. Следите за новостями и объявлениями проекта только через его официальные каналы.",
-        "summary_en": "Official Arbitrum website. Follow project news and announcements only through its official channels.",
-        "summary_zh": "Arbitrum 官方网站。请仅通过项目官方渠道关注新闻和公告。",
+        "summary_ru": "У Arbitrum уже было распределение ARB. Публичной даты нового распределения нет: следите только за DAO и официальными каналами. Прошлый дроп не создаёт право на следующий.",
+        "summary_en": "Arbitrum has distributed ARB before. There is no public date for another distribution; follow only the DAO and official channels. A past drop does not create future eligibility.",
+        "summary_zh": "Arbitrum 曾经分发过 ARB。目前没有下一次分发的公开日期；请只关注 DAO 和官方渠道。过去的空投不代表未来资格。",
     },
     {
         "source_key": "optimism",
         "name": "Optimism",
         "network": "Optimism",
-        "official_url": "https://optimism.io/",
+        "official_url": "https://gov.optimism.io/",
         "status": "official_updates",
-        "summary_ru": "Официальный сайт Optimism. Страница не означает наличие активного аирдропа или права на получение токенов.",
-        "summary_en": "Official Optimism website. This page does not mean an active airdrop or token eligibility exists.",
-        "summary_zh": "Optimism 官方网站。此页面不表示存在活跃空投或代币领取资格。",
+        "summary_ru": "У Optimism было несколько распределений OP, однако в текущем плане Year 5 новый пользовательский аирдроп не заявлен. Источник оставлен как исторический и новостной, а не как обещание награды.",
+        "summary_en": "Optimism has made several OP distributions, but its current Year 5 plan does not announce another user airdrop. This is a historical and news source, not a reward promise.",
+        "summary_zh": "Optimism 曾进行过多次 OP 分发，但其当前 Year 5 计划未宣布新的用户空投。此处仅作历史与新闻来源，不代表奖励承诺。",
     },
     {
         "source_key": "zksync",
         "name": "ZKsync",
         "network": "ZKsync",
-        "official_url": "https://www.zksync.io/",
+        "official_url": "https://www.zksync.io/token",
         "status": "official_updates",
-        "summary_ru": "Официальный сайт ZKsync для новостей и объявлений. Проверяйте условия распределений только в официальных сообщениях.",
-        "summary_en": "Official ZKsync website for news and announcements. Verify distribution terms only in official communications.",
-        "summary_zh": "ZKsync 官方新闻与公告网站。仅在官方公告中核实分发条件。",
+        "summary_ru": "Основное распределение токена ZK уже завершено. Публичной даты нового распределения нет; проверяйте только объявления ZKsync.",
+        "summary_en": "The main ZK token distribution has finished. There is no public date for a new distribution; verify only ZKsync announcements.",
+        "summary_zh": "主要的 ZK 代币分发已结束。没有新的公开分发日期；请只核实 ZKsync 的公告。",
     },
     {
         "source_key": "polygon",
         "name": "Polygon",
         "network": "Polygon",
-        "official_url": "https://polygon.technology/",
+        "official_url": "https://staking.polygon.technology/community-drops",
         "status": "official_updates",
-        "summary_ru": "Официальный сайт Polygon. Не вводите seed-фразу или приватный ключ на сторонних страницах.",
-        "summary_en": "Official Polygon website. Never enter a seed phrase or private key on third-party pages.",
-        "summary_zh": "Polygon 官方网站。切勿在第三方页面输入助记词或私钥。",
+        "summary_ru": "Официальные Community Drops Polygon предназначены для участников стейкинга POL и партнёрских кампаний. Конкретную дату и условия публикует Polygon; не вводите seed-фразу или приватный ключ нигде.",
+        "summary_en": "Polygon’s official Community Drops target POL stakers and partner campaigns. Polygon publishes the exact dates and terms; never enter a seed phrase or private key anywhere.",
+        "summary_zh": "Polygon 官方 Community Drops 面向 POL 质押者和合作活动参与者。具体日期和条件由 Polygon 发布；切勿在任何地方输入助记词或私钥。",
     },
     {
         "source_key": "bnb-chain",
         "name": "BNB Chain",
         "network": "BNB Chain",
-        "official_url": "https://www.bnbchain.org/en",
+        "official_url": "https://dappbay.bnbchain.org/campaign/bnb-chain-airdrop-alliance-program",
         "status": "official_updates",
-        "summary_ru": "Официальный сайт BNB Chain. Используйте его для проверки новостей и ссылок на официальные приложения.",
-        "summary_en": "Official BNB Chain website. Use it to verify news and links to official applications.",
-        "summary_zh": "BNB Chain 官方网站。请用它核实新闻和官方应用链接。",
+        "summary_ru": "BNB Chain публиковала официальные партнёрские кампании в DappBay. Это не общий аирдроп сети и не гарантия награды — условия всегда задаёт конкретная кампания.",
+        "summary_en": "BNB Chain has published official partner campaigns in DappBay. This is not a network-wide airdrop or a reward guarantee; each campaign sets its own terms.",
+        "summary_zh": "BNB Chain 曾在 DappBay 发布官方合作活动。这不是全网空投或奖励保证；每个活动都有自己的条件。",
     },
     {
-        "source_key": "solana",
-        "name": "Solana",
-        "network": "Solana",
-        "official_url": "https://solana.com/",
+        "source_key": "linea",
+        "name": "Linea",
+        "network": "Linea",
+        "official_url": "https://linea.build/blog/linea-tokenomics",
         "status": "official_updates",
-        "summary_ru": "Официальный сайт Solana. Наличие источника не означает подтверждённый аирдроп.",
-        "summary_en": "Official Solana website. A listed source does not mean an airdrop is confirmed.",
-        "summary_zh": "Solana 官方网站。列出来源并不表示空投已确认。",
+        "summary_ru": "В токеномике Linea есть доля для ранних пользователей и будущих программ экосистемы, но следующая дата или критерии публично не объявлены.",
+        "summary_en": "Linea tokenomics includes an allocation for early users and future ecosystem programs, but no next date or criteria are public.",
+        "summary_zh": "Linea 代币经济学包含给早期用户和未来生态项目的份额，但尚未公布下一次日期或标准。",
+    },
+    {
+        "source_key": "scroll",
+        "name": "Scroll",
+        "network": "Scroll",
+        "official_url": "https://scroll.io/airdrop-faq",
+        "status": "official_updates",
+        "summary_ru": "Первый claim Scroll уже завершён. В официальном FAQ указаны будущие программы для сообщества, но без даты следующего распределения.",
+        "summary_en": "Scroll’s first claim has ended. Its official FAQ mentions future community programs, but gives no date for another distribution.",
+        "summary_zh": "Scroll 的首次领取已经结束。官方 FAQ 提到未来社区计划，但未给出下一次分发日期。",
+    },
+    {
+        "source_key": "mantle",
+        "name": "Mantle",
+        "network": "Mantle",
+        "official_url": "https://missions.mantle.xyz/",
+        "status": "official_updates",
+        "summary_ru": "Mantle Missions показывает актуальные кампании отдельных приложений. Это не обещание сетевого аирдропа: проверяйте условия каждой миссии отдельно.",
+        "summary_en": "Mantle Missions lists current application-specific campaigns. It is not a network airdrop promise; check each mission’s terms separately.",
+        "summary_zh": "Mantle Missions 展示当前各应用的活动。这不是全网空投承诺；请分别查看每个任务的规则。",
     },
 ]
 
@@ -166,8 +187,10 @@ USER_SETTINGS_DB = {}
 verification_codes = {}
 SUBSCRIPTION_DURATION_SECONDS = 30 * 24 * 60 * 60
 SUBSCRIPTION_GRACE_PERIOD_SECONDS = 7 * 24 * 60 * 60
-PLAN_PRICES = {"Standard": 29, "Pro": 49, "Premium": 89}
-BASE_SLOT_LIMITS = {"Standard": 5, "Pro": 15, "Premium": 30}
+PLAN_PRICES = {"Standard": 29, "Pro": 49, "Premium": 89, "Whale": 149, "Enterprise": 299}
+BASE_SLOT_LIMITS = {"Standard": 5, "Pro": 15, "Premium": 30, "Whale": 100, "Enterprise": 250}
+PLAN_RANKS = {"Standard": 1, "Pro": 2, "Premium": 3, "Whale": 4, "Enterprise": 5}
+MAINTENANCE_MODE = os.getenv("MAINTENANCE_MODE", "false").strip().lower() == "true"
 request_rate_limits = {}
 gas_cache = {}
 wallet_health_cache = {}
@@ -787,6 +810,14 @@ def ensure_default_opportunity_sources() -> None:
     db = SessionLocal()
     try:
         now_ts = int(time.time())
+        configured_keys = {source["source_key"] for source in DEFAULT_OFFICIAL_OPPORTUNITY_SOURCES}
+        # Only curated system records are synchronized. Administrator-created
+        # sources are never deleted or overwritten by a deployment.
+        for retired in db.query(OfficialOpportunitySource).filter(
+            OfficialOpportunitySource.is_system.is_(True),
+            ~OfficialOpportunitySource.source_key.in_(configured_keys),
+        ).all():
+            db.delete(retired)
         for source in DEFAULT_OFFICIAL_OPPORTUNITY_SOURCES:
             existing = db.query(OfficialOpportunitySource).filter(
                 OfficialOpportunitySource.source_key == source["source_key"]
@@ -798,6 +829,11 @@ def ensure_default_opportunity_sources() -> None:
                     created_at=now_ts,
                     updated_at=now_ts,
                 ))
+            elif existing.is_system:
+                for field, value in source.items():
+                    setattr(existing, field, value)
+                existing.claim_url = None
+                existing.updated_at = now_ts
         db.commit()
     finally:
         db.close()
@@ -887,6 +923,28 @@ app.add_middleware(
 
 @app.middleware("http")
 async def add_security_headers(request, call_next):
+    # Keep operational health checks available while the public interface is
+    # intentionally closed for a controlled release. Telegram polling and the
+    # scheduler run as separate server-side processes and are unaffected.
+    if MAINTENANCE_MODE and request.url.path not in {"/api/health"}:
+        return Response(
+            content=(
+                "<!doctype html><html lang='ru'><head><meta charset='utf-8'>"
+                "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+                "<title>AIRDROP-X — технические работы</title></head>"
+                "<body style='margin:0;min-height:100vh;display:grid;place-items:center;"
+                "background:#090611;color:#f5f3ff;font-family:Arial,sans-serif;padding:24px;box-sizing:border-box'>"
+                "<main style='max-width:520px;text-align:center;padding:42px 32px;border:1px solid #4c1d95;"
+                "border-radius:22px;background:linear-gradient(145deg,#120a22,#090611);box-shadow:0 18px 70px #000'>"
+                "<div style='font-weight:800;letter-spacing:.08em;color:#c4b5fd;margin-bottom:14px'>AIRDROP-X</div>"
+                "<h1 style='margin:0 0 14px;font-size:28px'>Проводим технические работы</h1>"
+                "<p style='margin:0;color:#c4b5fd;line-height:1.6'>Обновляем платформу и скоро вернём доступ. "
+                "Подключённые кошельки и данные не удаляются.</p></main></body></html>"
+            ),
+            status_code=503,
+            media_type="text/html",
+            headers={"Retry-After": "3600"},
+        )
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
@@ -1091,6 +1149,33 @@ def get_subscription_payment_config() -> Optional[dict]:
         }
     logging.error("Unknown subscription payment mode: %s", SUBSCRIPTION_PAYMENT_MODE)
     return None
+
+
+def get_admin_payment_test_config() -> Optional[dict]:
+    """Return the isolated owner-only settlement test route.
+
+    The route is intentionally available only for Base mainnet, only when the
+    explicit environment toggle is enabled, and only to a configured admin.
+    It never grants a plan or changes a subscription.
+    """
+    if not ADMIN_PAYMENT_TEST_ENABLED:
+        return None
+    if SUBSCRIPTION_PAYMENT_MODE not in {"mainnet", "base-mainnet"}:
+        logging.error("Admin payment test requires Base mainnet")
+        return None
+    if not re.fullmatch(r"0x[0-9a-fA-F]{40}", SUBSCRIPTION_PAYMENT_RECEIVER):
+        logging.error("Admin payment test receiver is not a valid EVM address")
+        return None
+    return {
+        "mode": "mainnet",
+        "is_testnet": False,
+        "network": "Base",
+        "chain_id": 8453,
+        "rpc_url": BASE_RPC_URL,
+        "usdc_contract": BASE_USDC_MAINNET_ADDRESS,
+        "receiver": Web3.to_checksum_address(SUBSCRIPTION_PAYMENT_RECEIVER),
+        "amount": ADMIN_PAYMENT_TEST_AMOUNT_USDC.quantize(Decimal("0.01")),
+    }
 
 def decode_erc20_transfer_call(call_data: Any) -> Optional[tuple[str, int]]:
     """Decode exactly ERC-20 transfer(address,uint256), without ABI fallbacks."""
@@ -1672,6 +1757,11 @@ class UserRegister(BaseModel):
     client_session_id: str
     payment_token: str
     fingerprint: str = ""
+
+class InitialAdminBootstrapRequest(BaseModel):
+    email: str
+    password: str
+    code: str
 
 class UserLogin(BaseModel):
     username: str
@@ -2944,6 +3034,7 @@ def send_payment_receipt_email(to_email: str, plan: str, amount: float, txid: st
             server.send_message(msg)
         return True
     except Exception as e:
+        logging.exception("Payment receipt email delivery failed: %s", e)
         return False
     
 def send_real_email(to_email: str, code: str):
@@ -3007,7 +3098,8 @@ def send_password_reset_email(to_email: str, code: str) -> bool:
             server.login(SENDER_EMAIL, SENDER_PASSWORD)
             server.send_message(msg)
         return True
-    except Exception:
+    except Exception as error:
+        logging.exception("Password reset email delivery failed: %s", error)
         return False
 
 @app.post("/api/settings/save")
@@ -3244,6 +3336,100 @@ def api_send_code(data: EmailRequest, request: Request, db: Session = Depends(ge
     db.commit()
         
     return {"status": "success", "message": "Code sent successfully!"}  
+
+
+def initial_admin_bootstrap_is_available(db: Session) -> bool:
+    """A short-lived first-account flow for a newly deployed instance.
+
+    It is deliberately restricted to a single configured email and becomes
+    unavailable immediately after the first user is created.  It does not
+    accept payment and must never be enabled on an established installation.
+    """
+    return bool(
+        INITIAL_ADMIN_BOOTSTRAP_ENABLED
+        and INITIAL_ADMIN_EMAIL
+        and not db.query(User.id).first()
+    )
+
+
+@app.get("/api/bootstrap-admin/status")
+def get_initial_admin_bootstrap_status(db: Session = Depends(get_db)):
+    return {"status": "success", "available": initial_admin_bootstrap_is_available(db)}
+
+
+@app.post("/api/bootstrap-admin/request-code")
+def request_initial_admin_bootstrap_code(data: EmailRequest, request: Request, db: Session = Depends(get_db)):
+    """Send a one-time setup code only to the configured owner email."""
+    if not initial_admin_bootstrap_is_available(db):
+        raise HTTPException(status_code=410, detail="Initial administrator setup is unavailable")
+    email = normalize_registration_email(data.email)
+    enforce_request_rate_limit("initial-admin-email", get_request_client_key(request), 3, 15 * 60)
+    # Keep a generic response for a mismatched address so the bootstrap email
+    # cannot be used as an enumeration endpoint.
+    if not hmac.compare_digest(email, INITIAL_ADMIN_EMAIL):
+        return {"status": "success", "message": "If the address is authorised, a code was sent"}
+    now_ts = int(time.time())
+    existing = db.query(EmailVerificationCode).filter(EmailVerificationCode.email == email).first()
+    if existing and now_ts - existing.sent_at < EMAIL_CODE_RESEND_SECONDS:
+        raise HTTPException(status_code=429, detail="Please wait before requesting another verification code")
+    code = f"{secrets.randbelow(1_000_000):06d}"
+    if not send_real_email(email, code):
+        raise HTTPException(status_code=502, detail="Email service is temporarily unavailable")
+    if existing:
+        existing.code_hash = hash_password(code)
+        existing.attempts = 0
+        existing.sent_at = now_ts
+        existing.expires_at = now_ts + EMAIL_CODE_TTL_SECONDS
+    else:
+        db.add(EmailVerificationCode(
+            email=email,
+            code_hash=hash_password(code),
+            attempts=0,
+            sent_at=now_ts,
+            expires_at=now_ts + EMAIL_CODE_TTL_SECONDS,
+        ))
+    db.commit()
+    return {"status": "success", "message": "If the address is authorised, a code was sent"}
+
+
+@app.post("/api/bootstrap-admin/complete")
+def complete_initial_admin_bootstrap(data: InitialAdminBootstrapRequest, request: Request, db: Session = Depends(get_db)):
+    """Create the first owner account after ownership of its inbox is proven."""
+    if not initial_admin_bootstrap_is_available(db):
+        raise HTTPException(status_code=410, detail="Initial administrator setup is unavailable")
+    enforce_request_rate_limit("initial-admin-complete", get_request_client_key(request), 5, 15 * 60)
+    email = normalize_registration_email(data.email)
+    if not hmac.compare_digest(email, INITIAL_ADMIN_EMAIL):
+        raise HTTPException(status_code=400, detail="Setup code is invalid or expired")
+    if len(data.password.encode("utf-8")) > 72:
+        raise HTTPException(status_code=400, detail="Password must be no more than 72 bytes")
+    if len(data.password) < 12:
+        raise HTTPException(status_code=400, detail="Password must be at least 12 characters")
+    verification = db.query(EmailVerificationCode).filter(EmailVerificationCode.email == email).first()
+    now_ts = int(time.time())
+    if not verification or verification.expires_at <= now_ts or verification.attempts >= 5:
+        if verification and verification.expires_at <= now_ts:
+            db.delete(verification)
+            db.commit()
+        raise HTTPException(status_code=400, detail="Setup code is invalid or expired")
+    if not re.fullmatch(r"\d{6}", data.code or "") or not verify_password(data.code, verification.code_hash):
+        verification.attempts += 1
+        db.commit()
+        raise HTTPException(status_code=400, detail="Setup code is invalid or expired")
+    db.add(User(
+        username=INITIAL_ADMIN_USERNAME,
+        email=email,
+        password_hash=hash_password(data.password),
+        subscription_plan="Premium",
+        fingerprint="initial-admin-bootstrap",
+        balance=0.0,
+        subscription_activated_at=now_ts,
+        onboarding_purchased=False,
+    ))
+    db.delete(verification)
+    db.commit()
+    logging.warning("Initial administrator account was created successfully")
+    return {"status": "success", "username": INITIAL_ADMIN_USERNAME}
 
 @app.post("/api/payment/resume-registration")
 def resume_paid_registration(
@@ -3498,6 +3684,120 @@ async def confirm_payment_session(
     }
 
 
+@app.get("/api/admin/payment-test/status")
+async def get_admin_payment_test_status(
+    current_user: User = Depends(get_authenticated_user),
+    db: Session = Depends(get_db),
+):
+    """Expose a minimal, owner-only status for the one-time live test."""
+    require_admin_user(current_user)
+    config = get_admin_payment_test_config()
+    completed = db.query(PaymentCheckoutSession).filter(
+        PaymentCheckoutSession.username == current_user.username,
+        PaymentCheckoutSession.purpose == "admin_payment_test",
+        PaymentCheckoutSession.status == "confirmed_test",
+    ).first()
+    if completed:
+        return {"status": "success", "available": False, "completed": True, "amount": completed.amount_usdc, "network": "Base"}
+    if not config:
+        return {"status": "success", "available": False, "completed": False}
+    return {
+        "status": "success", "available": True, "completed": False,
+        "payment": {
+            "network": config["network"], "chain_id": config["chain_id"], "asset": "USDC",
+            "decimals": 6, "contract": config["usdc_contract"], "receiver": config["receiver"],
+            "amount": format(config["amount"], ".2f"),
+        },
+    }
+
+
+@app.post("/api/admin/payment-test/create-session")
+async def create_admin_payment_test_session(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_authenticated_user),
+):
+    """Create a short-lived 1 USDC test session without changing a plan."""
+    require_admin_user(current_user)
+    config = get_admin_payment_test_config()
+    if not config:
+        raise HTTPException(status_code=503, detail="Admin payment test is not enabled")
+    enforce_request_rate_limit("admin-payment-test", f"{current_user.username}:{get_request_client_key(request)}", 3, 15 * 60)
+    existing = db.query(PaymentCheckoutSession).filter(
+        PaymentCheckoutSession.username == current_user.username,
+        PaymentCheckoutSession.purpose == "admin_payment_test",
+        PaymentCheckoutSession.status == "confirmed_test",
+    ).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="Admin payment test has already been completed")
+
+    now_ts = int(time.time())
+    db.query(PaymentCheckoutSession).filter(
+        PaymentCheckoutSession.username == current_user.username,
+        PaymentCheckoutSession.purpose == "admin_payment_test",
+        PaymentCheckoutSession.status == "pending",
+    ).delete(synchronize_session=False)
+    amount_atomic = int(config["amount"] * Decimal(1_000_000))
+    payment_session_id = str(uuid.uuid4())
+    db.add(PaymentCheckoutSession(
+        id=payment_session_id, client_session_id="admin-payment-test", username=current_user.username,
+        purpose="admin_payment_test", plan="Admin test", amount_usdc=format(config["amount"], ".2f"),
+        amount_atomic=str(amount_atomic), onboarding=False, payment_mode=config["mode"], status="pending", created_at=now_ts,
+    ))
+    db.commit()
+    return {
+        "status": "success", "payment_session_id": payment_session_id,
+        "payment": {
+            "network": config["network"], "chain_id": config["chain_id"], "asset": "USDC",
+            "decimals": 6, "contract": config["usdc_contract"], "receiver": config["receiver"],
+            "amount": format(config["amount"], ".2f"),
+        },
+    }
+
+
+@app.post("/api/admin/payment-test/confirm")
+async def confirm_admin_payment_test_session(
+    req: PaymentSessionConfirmReq,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_authenticated_user),
+):
+    """Verify the exact transfer once; no subscription is changed."""
+    require_admin_user(current_user)
+    config = get_admin_payment_test_config()
+    if not config:
+        raise HTTPException(status_code=503, detail="Admin payment test is not enabled")
+    enforce_request_rate_limit("admin-payment-test-confirm", f"{current_user.username}:{get_request_client_key(request)}", 8, 15 * 60)
+    session_data = db.query(PaymentCheckoutSession).filter(
+        PaymentCheckoutSession.id == req.payment_session_id,
+        PaymentCheckoutSession.username == current_user.username,
+        PaymentCheckoutSession.purpose == "admin_payment_test",
+    ).first()
+    if not session_data:
+        raise HTTPException(status_code=404, detail="Payment session not found")
+    clean_txid = req.txid.strip().lower()
+    if session_data.status == "confirmed_test":
+        if session_data.txid and hmac.compare_digest(session_data.txid.lower(), clean_txid):
+            return {"status": "success", "verified": True, "amount": session_data.amount_usdc}
+        raise HTTPException(status_code=409, detail="Payment TXID does not match this checkout session")
+    if session_data.status != "pending":
+        raise HTTPException(status_code=409, detail="Payment session is no longer available")
+    if int(time.time()) - session_data.created_at > PAYMENT_SESSION_TTL_SECONDS:
+        raise HTTPException(status_code=410, detail="Payment session expired. Create a new payment session.")
+    if session_data.payment_mode != config["mode"]:
+        raise HTTPException(status_code=409, detail="Payment session network changed. Create a new payment session.")
+
+    reserve_verified_usdc_payment(
+        db, clean_txid, config, int(session_data.amount_atomic), "admin_payment_test", current_user.username, commit=False,
+    )
+    session_data.status = "confirmed_test"
+    session_data.txid = clean_txid
+    session_data.paid_at = int(time.time())
+    db.commit()
+    logging.info("Admin payment test verified for %s", current_user.username)
+    return {"status": "success", "verified": True, "amount": session_data.amount_usdc}
+
+
 @app.get("/api/subscription/status")
 async def get_account_subscription_status(
     current_user: User = Depends(get_authenticated_user),
@@ -3533,11 +3833,10 @@ async def create_account_subscription_session(
     base_amount = PLAN_PRICES.get(req.plan)
     if base_amount is None:
         raise HTTPException(status_code=400, detail="Unknown plan")
-    plan_rank = {"Standard": 1, "Pro": 2, "Premium": 3}
     state = get_subscription_state(current_user)
     if (
         state["status"] == "active"
-        and plan_rank.get(req.plan, 0) < plan_rank.get(current_user.subscription_plan, 0)
+        and PLAN_RANKS.get(req.plan, 0) < PLAN_RANKS.get(current_user.subscription_plan, 0)
     ):
         raise HTTPException(status_code=409, detail="An active subscription cannot be downgraded")
 
@@ -3641,13 +3940,12 @@ async def confirm_account_subscription_session(
         if session_data.payment_mode != payment_config["mode"]:
             raise HTTPException(status_code=409, detail="Payment session network changed. Create a new payment session.")
 
-    plan_rank = {"Standard": 1, "Pro": 2, "Premium": 3}
-    if session_data.plan not in plan_rank:
+    if session_data.plan not in PLAN_RANKS:
         raise HTTPException(status_code=409, detail="Payment session contains an unknown plan")
     current_state = get_subscription_state(current_user, now_ts)
     if (
         current_state["status"] == "active"
-        and plan_rank[session_data.plan] < plan_rank.get(current_user.subscription_plan, 0)
+        and PLAN_RANKS[session_data.plan] < PLAN_RANKS.get(current_user.subscription_plan, 0)
     ):
         raise HTTPException(status_code=409, detail="An active subscription cannot be downgraded")
 
@@ -5380,53 +5678,6 @@ async def start_farming(req: StartFarmReq, db: Session = Depends(get_db), curren
         status_code=503,
         detail="Automated signing is unavailable. AIRDROP-X only prepares actions that you sign in your own wallet.",
     )
-
-@app.post("/api/scan/{username}")
-async def scan_wallets(username: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    require_owned_username(username, current_user)
-    user = current_user
-    wallets = db.query(Wallet).filter(Wallet.username == username).all()
-    
-    valid_wallets = [w for w in wallets if w.wallet_address.startswith("0x") and len(w.wallet_address) == 42]
-    
-    return {
-        "status": "success",
-        "data": {
-            "total_wallets_scanned": len(wallets),
-            "valid_wallets_checked": len(valid_wallets),
-            "found_drops": [],
-            "notice_key": "eligibility_integrations_pending",
-        }
-    }
-
-@app.get("/api/eligibility/{username}")
-async def get_airdrop_eligibility_center(
-    username: str,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    require_owned_username(username, current_user)
-    wallets = db.query(Wallet).filter(Wallet.username == username).all()
-    public_wallets = [
-        {
-            "id": wallet.id,
-            "address": wallet.wallet_address,
-            "label": wallet.label,
-        }
-        for wallet in wallets
-        if wallet.wallet_address.startswith("0x") and len(wallet.wallet_address) == 42
-    ]
-    claim_sources = db.query(OfficialOpportunitySource).filter(
-        OfficialOpportunitySource.claim_url.isnot(None)
-    ).order_by(OfficialOpportunitySource.id.asc()).all()
-
-    return {
-        "status": "success",
-        "wallets": public_wallets,
-        "claim_checks": [serialize_opportunity_source(source) for source in claim_sources],
-        "confirmed_claims": [],
-        "notice_key": "official_claim_check_required",
-    }
 
 @app.get("/api/transfer-center")
 async def get_transfer_center(

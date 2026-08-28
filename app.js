@@ -4,6 +4,40 @@ let isLoggedIn = false;
 let currentSection = 'Account';
 const localeStore = window.AIRDROP_LOCALES || {};
 const translations = localeStore;
+const OPTIONAL_STORAGE_CONSENT_KEY = 'ax_optional_storage_consent_v1';
+
+function getOptionalStorageConsent() {
+    const value = localStorage.getItem(OPTIONAL_STORAGE_CONSENT_KEY);
+    return value === 'accepted' || value === 'essential' ? value : null;
+}
+
+function applyOptionalStorageConsent(value) {
+    window.AIRDROP_X_OPTIONAL_STORAGE_CONSENT = value === 'accepted';
+    window.dispatchEvent(new CustomEvent('ax:optional-storage-consent', {
+        detail: { optionalStorageAllowed: value === 'accepted' }
+    }));
+}
+
+function setOptionalStorageConsent(value) {
+    localStorage.setItem(OPTIONAL_STORAGE_CONSENT_KEY, value);
+    applyOptionalStorageConsent(value);
+    const banner = document.getElementById('cookieConsentBanner');
+    if (banner) banner.hidden = true;
+}
+
+function initializeCookieConsent() {
+    const savedConsent = getOptionalStorageConsent();
+    if (savedConsent) {
+        applyOptionalStorageConsent(savedConsent);
+        return;
+    }
+    const banner = document.getElementById('cookieConsentBanner');
+    if (banner) banner.hidden = false;
+}
+
+window.acceptOptionalCookies = () => setOptionalStorageConsent('accepted');
+window.declineOptionalCookies = () => setOptionalStorageConsent('essential');
+window.hasOptionalStorageConsent = () => getOptionalStorageConsent() === 'accepted';
 
 function getActiveLang() {
     const savedLang = (currentLang || localStorage.getItem('ax_lang') || 'ru').toLowerCase();
@@ -93,6 +127,37 @@ function setButtonLoading(button, isLoading, text = '') {
         delete button.dataset.defaultText;
     }
 }
+
+function renderLoginRateLimitState() {
+    const remaining = Math.max(0, Math.ceil((loginRateLimitUntil - Date.now()) / 1000));
+    const submitButton = document.getElementById('loginSubmitBtn');
+    if (!remaining) {
+        if (loginRateLimitTimer) clearInterval(loginRateLimitTimer);
+        loginRateLimitTimer = null;
+        loginRateLimitUntil = 0;
+        if (submitButton && !loginRequestInFlight) {
+            submitButton.disabled = false;
+            submitButton.classList.remove('btn-loading');
+            submitButton.innerText = t('auth.login');
+        }
+        return;
+    }
+    if (submitButton) {
+        submitButton.disabled = true;
+        submitButton.classList.remove('btn-loading');
+        submitButton.innerText = t('auth.retryInSeconds').replace('{seconds}', remaining);
+    }
+    setFormError('loginErrorContainer', t('auth.loginRateLimited').replace('{seconds}', remaining));
+}
+
+function startLoginRateLimitCooldown(retryAfterSeconds) {
+    const safeSeconds = Math.min(15 * 60, Math.max(1, Number(retryAfterSeconds) || 60));
+    loginRateLimitUntil = Math.max(loginRateLimitUntil, Date.now() + (safeSeconds * 1000));
+    if (loginRateLimitTimer) clearInterval(loginRateLimitTimer);
+    renderLoginRateLimitState();
+    loginRateLimitTimer = setInterval(renderLoginRateLimitState, 1000);
+}
+
 let userPlan = 'Standard';
 let deviceFingerprint = generateDeviceFingerprint();
 let subscriptionDaysLeft = 29;
@@ -106,6 +171,9 @@ let activeSafeStartStep = 0;
 
 let codeCooldownTimer = null;
 let codeCooldownSeconds = 0;
+let loginRequestInFlight = false;
+let loginRateLimitUntil = 0;
+let loginRateLimitTimer = null;
 let confirmedRegistrationEmail = sessionStorage.getItem('ax_registration_email') || '';
 let passwordResetCooldownTimer = null;
 let passwordResetCooldownSeconds = 0;
@@ -128,7 +196,19 @@ let lastSaveTimestamp = 0;
 let lastRandomizeTimestamp = 0; 
 let cachedStatsData = { current_slots: 1, max_slots: 300, is_sold_out: false };
 
-const PLAN_PRICES = { Standard: 29, Pro: 49, Premium: 89 };
+const PLAN_PRICES = { Standard: 29, Pro: 49, Premium: 89, Whale: 149, Enterprise: 299 };
+const PLAN_RANKS = { Standard: 1, Pro: 2, Premium: 3, Whale: 4, Enterprise: 5 };
+
+function getPlanDisplayLabel(plan, locale = translations[getActiveLang()]) {
+    const labels = {
+        Standard: locale.stdName,
+        Pro: locale.proName,
+        Premium: locale.premName,
+        Whale: locale.whaleName,
+        Enterprise: locale.enterpriseName,
+    };
+    return labels[plan] || plan;
+}
 const clientSessionId = getOrCreateClientSessionId();
 let paymentAccessToken = sessionStorage.getItem('ax_payment_token') || '';
 let paymentUnlocked = sessionStorage.getItem('ax_paid_session_id') === clientSessionId && !!paymentAccessToken;
@@ -272,6 +352,7 @@ document.getElementById('main-logo-btn').addEventListener('click', function(e) {
 window.addEventListener('DOMContentLoaded', () => {
     initializeInterfaceHintsPreference();
     updateStaticText(currentLang);
+    initializeCookieConsent();
     loadPlatformStats();
     const line = document.getElementById('preloader-line');
     if(line) {
@@ -531,7 +612,10 @@ const STATIC_TEXT_BINDINGS = [
     ['p-title-modal', 'pTitleModal'], ['p-desc-modal', 'pDescModal'], ['p-std-top', 'subTop'], ['p-std-name', 'stdName'], ['p-std-per', 'stdPer'], ['p-std-f1', 'stdF1'], ['p-std-f2', 'stdF2'], ['p-std-f3', 'stdF3'], ['p-std-btn', 'stdBtn'],
     ['p-pro-badge', 'proBadge'], ['p-pro-top', 'subTop'], ['p-pro-name', 'proName'], ['p-pro-per', 'proPer'], ['p-pro-f1', 'proF1'], ['p-pro-f2', 'proF2'], ['p-pro-f3', 'proF3'], ['p-pro-f4', 'proF4'], ['p-pro-btn', 'proBtn'],
     ['p-prem-top', 'subTop'], ['p-prem-name', 'premName'], ['p-prem-per', 'premPer'], ['p-prem-f1', 'premF1'], ['p-prem-f2', 'premF2'], ['p-prem-f3', 'premF3'], ['p-prem-f4', 'premF4'], ['p-prem-btn', 'premBtn'],
-    ['footer-rights', 'footerRights'], ['footer-privacy', 'footerPrivacy'], ['footer-terms', 'footerTerms'], ['page-title', 'pageTitle']
+    ['p-whale-badge', 'whaleBadge'], ['p-whale-top', 'subTop'], ['p-whale-name', 'whaleName'], ['p-whale-per', 'whalePer'], ['p-whale-f1', 'whaleF1'], ['p-whale-f2', 'whaleF2'], ['p-whale-f3', 'whaleF3'], ['p-whale-f4', 'whaleF4'], ['p-whale-btn', 'whaleBtn'],
+    ['p-enterprise-badge', 'enterpriseBadge'], ['p-enterprise-top', 'subTop'], ['p-enterprise-name', 'enterpriseName'], ['p-enterprise-per', 'enterprisePer'], ['p-enterprise-f1', 'enterpriseF1'], ['p-enterprise-f2', 'enterpriseF2'], ['p-enterprise-f3', 'enterpriseF3'], ['p-enterprise-f4', 'enterpriseF4'], ['p-enterprise-btn', 'enterpriseBtn'],
+    ['footer-rights', 'footerRights'], ['footer-privacy', 'footerPrivacy'], ['footer-terms', 'footerTerms'], ['footer-cookies', 'footerCookies'], ['footer-support', 'footerSupport'], ['footer-support-hours', 'footerSupportHours'], ['page-title', 'pageTitle'],
+    ['cookie-consent-eyebrow', 'cookieConsentEyebrow'], ['cookie-consent-title', 'cookieConsentTitle'], ['cookie-consent-desc', 'cookieConsentDesc'], ['cookie-consent-essential', 'cookieConsentEssential'], ['cookie-consent-policy', 'cookieConsentPolicy'], ['cookie-consent-accept', 'cookieConsentAccept']
 ];
 
 function updateStaticText(lang) {
@@ -752,8 +836,8 @@ function openPricingModal() {
 
 function syncPricingModalForAccount() {
     const locale = translations[getActiveLang()];
-    const ranks = { Standard: 1, Pro: 2, Premium: 3 };
-    const planNames = { Standard: locale.stdName, Pro: locale.proName, Premium: locale.premName };
+    const ranks = PLAN_RANKS;
+    const planNames = Object.fromEntries(Object.keys(PLAN_RANKS).map((plan) => [plan, getPlanDisplayLabel(plan, locale)]));
     const status = document.getElementById('pricingAccountStatus');
     const closeButton = document.getElementById('pricingModalClose');
     if (closeButton) closeButton.setAttribute('aria-label', locale.modalCloseLabel);
@@ -761,6 +845,8 @@ function syncPricingModalForAccount() {
         ['Standard', document.getElementById('p-std-btn'), locale.stdBtn],
         ['Pro', document.getElementById('p-pro-btn'), locale.proBtn],
         ['Premium', document.getElementById('p-prem-btn'), locale.premBtn],
+        ['Whale', document.getElementById('p-whale-btn'), locale.whaleBtn],
+        ['Enterprise', document.getElementById('p-enterprise-btn'), locale.enterpriseBtn],
     ];
     buttons.forEach(([, button, defaultLabel]) => {
         if (!button) return;
@@ -855,8 +941,7 @@ window.addEventListener('keydown', (event) => {
 function selectPlanAndRegister(planName, price) {
     closePricingModal();
     if (isLoggedIn) {
-        const rank = { Standard: 1, Pro: 2, Premium: 3 };
-        if (subscriptionStatus === 'active' && rank[planName] <= rank[userPlan]) {
+        if (subscriptionStatus === 'active' && PLAN_RANKS[planName] <= PLAN_RANKS[userPlan]) {
             showNotification(translations[getActiveLang()].subscriptionDowngradeBlocked, 'warning');
             return;
         }
@@ -964,6 +1049,121 @@ function togglePasswordVisibility(fieldId, iconEl) {
     iconEl.setAttribute('aria-pressed', willShow ? 'true' : 'false');
 }
 
+function initialAdminBootstrapCopy() {
+    const lang = getActiveLang();
+    if (lang === 'zh') return {
+        entry: '首次启动：创建 Admin', title: '创建第一个 Admin 帐户', intro: '验证码只会发送到已配置的管理员邮箱。创建后该入口将自动关闭。',
+        email: '管理员邮箱', password: '设置密码', code: '邮箱验证码', send: '发送验证码', create: '创建 Admin 帐户',
+        sent: '如该邮箱获授权，验证码已发送。请检查收件箱和垃圾邮件。', success: 'Admin 帐户已创建。现在请登录。', failed: '无法完成初始设置。请检查邮箱、验证码和密码。',
+    };
+    if (lang === 'en') return {
+        entry: 'First launch: create Admin', title: 'Create the first Admin account', intro: 'A code is sent only to the configured owner email. This entry closes automatically after creation.',
+        email: 'Owner email', password: 'Set a password', code: 'Email code', send: 'Send code', create: 'Create Admin account',
+        sent: 'If this address is authorised, a code was sent. Check Inbox and Spam.', success: 'Admin account created. You can sign in now.', failed: 'Initial setup could not be completed. Check the email, code, and password.',
+    };
+    return {
+        entry: 'Первый запуск: создать Admin', title: 'Создание первого Admin-аккаунта', intro: 'Код придёт только на настроенную почту владельца. После создания этот вход автоматически закроется.',
+        email: 'Почта владельца', password: 'Задайте пароль', code: 'Код из письма', send: 'Отправить код', create: 'Создать Admin-аккаунт',
+        sent: 'Если адрес разрешён, код отправлен. Проверьте «Входящие» и «Спам».', success: 'Admin-аккаунт создан. Теперь можно войти.', failed: 'Не удалось завершить первый запуск. Проверьте почту, код и пароль.',
+    };
+}
+
+function setInitialAdminBootstrapMessage(message, type = 'error') {
+    setFormError('bootstrapAdminErrorContainer', message, type);
+}
+
+async function loadInitialAdminBootstrapOption() {
+    const button = document.getElementById('initialAdminBootstrapBtn');
+    if (!button) return;
+    try {
+        const response = await fetch('/api/bootstrap-admin/status');
+        const data = await response.json();
+        button.hidden = !response.ok || !data.available;
+    } catch (_) {
+        button.hidden = true;
+    }
+}
+
+async function openInitialAdminSetup() {
+    const copy = initialAdminBootstrapCopy();
+    try {
+        const response = await fetch('/api/bootstrap-admin/status');
+        const data = await response.json();
+        if (!response.ok || !data.available) {
+            showNotification(copy.failed, 'error');
+            return;
+        }
+    } catch (_) {
+        showNotification(copy.failed, 'error');
+        return;
+    }
+    activeAuthModalType = 'bootstrap-admin';
+    showAppModal('authModal');
+    const container = document.getElementById('modalContainer');
+    container.innerHTML = `
+        <form onsubmit="event.preventDefault(); completeInitialAdminBootstrap();">
+            <div class="modal-logo" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                <span style="font-weight:bold; font-size:16px;">${copy.title}</span>
+                <button type="button" class="icon-button-plain" onclick="requestCloseAuthModal()" aria-label="Close" style="color:#a3a3a3; font-size:18px;">✕</button>
+            </div>
+            <p style="margin:0 0 14px; color:#a3a3a3; font-size:12px; line-height:1.5;">${copy.intro}</p>
+            <div class="input-group" style="margin-bottom:10px;"><label style="font-size:11px; color:#a3a3a3; display:block; margin-bottom:4px;">${copy.email}</label><input type="email" class="auth-input" id="bootstrapAdminEmail" placeholder="name@example.com" autocomplete="email"></div>
+            <div class="input-group" style="margin-bottom:10px;"><label style="font-size:11px; color:#a3a3a3; display:block; margin-bottom:4px;">${copy.password}</label><div class="password-wrapper" style="position:relative;"><input type="password" class="auth-input" id="bootstrapAdminPassword" minlength="12" style="padding-right:35px;" autocomplete="new-password"><button type="button" class="password-toggle-icon" onclick="togglePasswordVisibility('bootstrapAdminPassword', this)" aria-label="Show or hide password" aria-pressed="false">${passwordVisibilityIcon(false)}</button></div></div>
+            <div class="input-group" style="margin-bottom:14px;"><label style="font-size:11px; color:#a3a3a3; display:block; margin-bottom:4px;">${copy.code}</label><div style="display:flex; gap:8px;"><input type="text" inputmode="numeric" maxlength="6" class="auth-input" id="bootstrapAdminCode" style="flex:1; margin:0;" oninput="sanitizeIntegerInput(this, 6)"><button type="button" id="bootstrapAdminSendCodeBtn" onclick="requestInitialAdminCode()" class="auth-input" style="width:auto; background:#1f1f1f; color:#fff; cursor:pointer; font-weight:600;">${copy.send}</button></div></div>
+            <button id="bootstrapAdminCreateBtn" type="submit" class="btn-modal-primary" style="width:100%; padding:10px;">${copy.create}</button>
+            <div id="bootstrapAdminErrorContainer" style="margin-top:10px;"></div>
+        </form>`;
+}
+
+async function requestInitialAdminCode() {
+    const copy = initialAdminBootstrapCopy();
+    const email = document.getElementById('bootstrapAdminEmail')?.value.trim() || '';
+    const button = document.getElementById('bootstrapAdminSendCodeBtn');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        setInitialAdminBootstrapMessage(t('errors.invalidEmail'));
+        return;
+    }
+    setButtonLoading(button, true, copy.send);
+    try {
+        const response = await fetch('/api/bootstrap-admin/request-code', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email }) });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'bootstrap_email_failed');
+        setInitialAdminBootstrapMessage(copy.sent, 'success');
+    } catch (error) {
+        setInitialAdminBootstrapMessage(translateBackendDetail(String(error?.message || ''), copy.failed));
+    } finally {
+        setButtonLoading(button, false, copy.send);
+    }
+}
+
+async function completeInitialAdminBootstrap() {
+    const copy = initialAdminBootstrapCopy();
+    const email = document.getElementById('bootstrapAdminEmail')?.value.trim() || '';
+    const password = document.getElementById('bootstrapAdminPassword')?.value || '';
+    const code = document.getElementById('bootstrapAdminCode')?.value.trim() || '';
+    const button = document.getElementById('bootstrapAdminCreateBtn');
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || password.length < 12 || !/^\d{6}$/.test(code)) {
+        setInitialAdminBootstrapMessage(copy.failed);
+        return;
+    }
+    setButtonLoading(button, true, copy.create);
+    try {
+        const response = await fetch('/api/bootstrap-admin/complete', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password, code }) });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'bootstrap_create_failed');
+        setInitialAdminBootstrapMessage(copy.success, 'success');
+        window.setTimeout(() => openModal('login'), 900);
+    } catch (error) {
+        setInitialAdminBootstrapMessage(translateBackendDetail(String(error?.message || ''), copy.failed));
+    } finally {
+        setButtonLoading(button, false, copy.create);
+    }
+}
+
+window.openInitialAdminSetup = openInitialAdminSetup;
+window.requestInitialAdminCode = requestInitialAdminCode;
+window.completeInitialAdminBootstrap = completeInitialAdminBootstrap;
+
 function openModal(type) {
     const modal = document.getElementById('authModal');
     const container = document.getElementById('modalContainer');
@@ -996,11 +1196,15 @@ function openModal(type) {
                         <button type="button" class="password-toggle-icon" onclick="togglePasswordVisibility('loginPass', this)" aria-label="Show or hide password" aria-pressed="false">${passwordVisibilityIcon(false)}</button>
                     </div>
                 </div>
-                <button type="submit" class="btn-modal-primary" style="width:100%; padding:12px;">${t('login')}</button>
+                <button type="submit" class="btn-modal-primary" id="loginSubmitBtn" style="width:100%; padding:12px;">${t('login')}</button>
                 <button type="button" onclick="openModal('reset')" style="width:100%; margin-top:10px; padding:6px; border:0; background:transparent; color:#c4b5fd; cursor:pointer; font-size:12px;">${t('auth.forgotPassword')}</button>
+                <button type="button" id="initialAdminBootstrapBtn" hidden onclick="openInitialAdminSetup()" style="width:100%; margin-top:4px; padding:6px; border:0; background:transparent; color:#a3a3a3; cursor:pointer; font-size:12px;"></button>
                 <div id="loginErrorContainer" style="margin-top:10px;"></div>
             </form>
         `;
+        const bootstrapButton = document.getElementById('initialAdminBootstrapBtn');
+        if (bootstrapButton) bootstrapButton.textContent = initialAdminBootstrapCopy().entry;
+        loadInitialAdminBootstrapOption();
     } else if (type === 'reset') {
         syncPasswordResetCooldown();
         const resetButtonDisabled = passwordResetCooldownSeconds > 0 ? 'disabled' : '';
@@ -1041,7 +1245,7 @@ function openModal(type) {
         const chosenPlan = localStorage.getItem('selected_plan') || 'Standard';
         const basePrice = Number(localStorage.getItem('selected_price') || PLAN_PRICES[chosenPlan] || PLAN_PRICES.Standard);
         const displayAmount = basePrice.toFixed(2);
-        const planDisplayLabel = chosenPlan === 'Standard' ? t('stdName') : chosenPlan === 'Pro' ? t('proName') : t('premName');
+        const planDisplayLabel = getPlanDisplayLabel(chosenPlan);
 
         container.innerHTML = `
             <div class="modal-logo" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
@@ -1068,7 +1272,7 @@ function openModal(type) {
         syncEmailCodeCooldown();
         const chosenPlan = localStorage.getItem('selected_plan') || 'Standard';
         const chosenPrice = Number(localStorage.getItem('selected_price') || PLAN_PRICES[chosenPlan] || PLAN_PRICES.Standard);
-        const planDisplayLabel = chosenPlan === 'Standard' ? t('stdName') : chosenPlan === 'Pro' ? t('proName') : t('premName');
+        const planDisplayLabel = getPlanDisplayLabel(chosenPlan);
         const btnText = codeCooldownSeconds > 0 ? formatCodeCooldownLabel(codeCooldownSeconds) : t('auth.sendCode');
         const btnDisabled = codeCooldownSeconds > 0 ? 'disabled' : '';
         const emailState = codeCooldownSeconds > 0 ? `readonly style="opacity: 0.7;" value="${confirmedRegistrationEmail}"` : '';
@@ -2027,6 +2231,158 @@ function updateSubscriptionPaymentSummary(payment, isTestnet) {
     }
 }
 
+function adminPaymentTestCopy() {
+    const language = getActiveLang();
+    if (language === 'zh') return {
+        title: '支付链路测试', description: '仅管理员可见：发送 1 USDC 到已配置的收款地址，验证 Base 上的真实结算。不会更改套餐。',
+        action: '在钱包中测试 1 USDC', preparing: '正在准备测试…', signing: '请在钱包中确认 1 USDC 转账。',
+        submitted: '交易已发送，正在等待 Base 确认…', waiting: '等待 Base 确认后再检查。', success: '测试通过：服务器已验证准确的 1 USDC 转账。', unavailable: '支付测试当前不可用。', completed: '支付链路测试已完成。', failed: '未能完成支付测试。', wallet: '请连接钱包后重试。', network: '请在钱包中切换到 Base 网络。', check: '检查状态',
+    };
+    if (language === 'en') return {
+        title: 'Payment path test', description: 'Visible only to the administrator: send 1 USDC to the configured receiver and verify real Base settlement. Your plan will not change.',
+        action: 'Test 1 USDC in wallet', preparing: 'Preparing test…', signing: 'Confirm the 1 USDC transfer in your wallet.',
+        submitted: 'Transaction sent. Waiting for Base confirmation…', waiting: 'Wait for Base confirmation, then check again.', success: 'Test passed: the server verified the exact 1 USDC transfer.', unavailable: 'The payment test is unavailable right now.', completed: 'Payment path test completed.', failed: 'Payment test could not be completed.', wallet: 'Connect your wallet and try again.', network: 'Switch your wallet to Base and try again.', check: 'Check status',
+    };
+    return {
+        title: 'Тест платёжного пути', description: 'Виден только администратору: отправляет 1 USDC на настроенный адрес и проверяет реальное зачисление в Base. Тариф не изменяется.',
+        action: 'Проверить 1 USDC в кошельке', preparing: 'Подготавливаем тест…', signing: 'Подтвердите перевод 1 USDC в кошельке.',
+        submitted: 'Транзакция отправлена. Ждём подтверждение Base…', waiting: 'Дождитесь подтверждения Base и проверьте статус снова.', success: 'Тест пройден: сервер подтвердил точный перевод 1 USDC.', unavailable: 'Платёжный тест сейчас недоступен.', completed: 'Тест платёжного пути уже завершён.', failed: 'Не удалось завершить платёжный тест.', wallet: 'Подключите кошелёк и попробуйте снова.', network: 'Переключите кошелёк на сеть Base и повторите.', check: 'Проверить статус',
+    };
+}
+
+function adminPaymentTestPending() {
+    try {
+        const pending = JSON.parse(sessionStorage.getItem('ax_admin_payment_test_pending') || 'null');
+        return pending?.payment_session_id && /^0x[0-9a-fA-F]{64}$/.test(pending.txid || '') ? pending : null;
+    } catch (_) {
+        return null;
+    }
+}
+
+function setAdminPaymentTestMessage(message, tone = 'info') {
+    const element = document.getElementById('adminPaymentTestMessage');
+    if (!element) return;
+    element.textContent = message;
+    element.style.color = tone === 'error' ? '#fca5a5' : tone === 'success' ? '#86efac' : '#c4b5fd';
+}
+
+async function loadAdminPaymentTest() {
+    const card = document.getElementById('adminPaymentTestCard');
+    if (!card) return;
+    const copy = adminPaymentTestCopy();
+    try {
+        const response = await fetch('/api/admin/payment-test/status');
+        if (response.status === 403) { card.hidden = true; return; }
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'admin_payment_test_unavailable');
+        card.hidden = false;
+        const button = document.getElementById('adminPaymentTestButton');
+        if (data.completed) {
+            if (button) { button.disabled = true; button.textContent = copy.completed; }
+            setAdminPaymentTestMessage(copy.completed, 'success');
+            return;
+        }
+        if (!data.available) {
+            if (button) button.disabled = true;
+            setAdminPaymentTestMessage(copy.unavailable, 'error');
+            return;
+        }
+        const pending = adminPaymentTestPending();
+        if (button && pending) button.textContent = copy.check;
+        if (pending) setAdminPaymentTestMessage(copy.submitted, 'info');
+    } catch (_) {
+        card.hidden = true;
+    }
+}
+
+async function confirmAdminPaymentTest(pending, button) {
+    const copy = adminPaymentTestCopy();
+    setButtonLoading(button, true, copy.check);
+    setAdminPaymentTestMessage(copy.submitted, 'info');
+    try {
+        const response = await fetch('/api/admin/payment-test/confirm', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...pending, client_session_id: 'admin-payment-test' }),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            const detail = String(data.detail || '');
+            setAdminPaymentTestMessage(
+                detail === 'USDC payment is waiting for Base confirmation' ? copy.waiting : translateBackendDetail(detail, copy.failed),
+                detail === 'USDC payment is waiting for Base confirmation' ? 'info' : 'error',
+            );
+            return false;
+        }
+        sessionStorage.removeItem('ax_admin_payment_test_pending');
+        setAdminPaymentTestMessage(copy.success, 'success');
+        button.disabled = true;
+        button.textContent = copy.completed;
+        showNotification(copy.success, 'success');
+        return true;
+    } catch (_) {
+        setAdminPaymentTestMessage(copy.failed, 'error');
+        return false;
+    } finally {
+        if (!button.disabled) setButtonLoading(button, false, copy.action);
+    }
+}
+
+async function startAdminPaymentTest(button) {
+    const copy = adminPaymentTestCopy();
+    if (paymentInteractionInProgress) return;
+    paymentInteractionInProgress = true;
+    try {
+        const pending = adminPaymentTestPending();
+        if (pending) { await confirmAdminPaymentTest(pending, button); return; }
+        setButtonLoading(button, true, copy.preparing);
+        setAdminPaymentTestMessage(copy.preparing, 'info');
+        const createResponse = await fetch('/api/admin/payment-test/create-session', { method: 'POST' });
+        const createData = await createResponse.json();
+        if (!createResponse.ok) throw new Error(createData.detail || 'admin_payment_test_unavailable');
+        const payment = createData.payment;
+        const provider = window.ethereum;
+        if (!provider?.request || !payment) throw new Error('payment_wallet_unavailable');
+        let accounts = await provider.request({ method: 'eth_accounts' });
+        if (!Array.isArray(accounts) || !accounts[0]) accounts = await provider.request({ method: 'eth_requestAccounts' });
+        const from = accounts?.[0];
+        if (!/^0x[0-9a-fA-F]{40}$/.test(from || '')) throw new Error('payment_wallet_unavailable');
+        await switchToBaseMainnet(provider);
+        await requestPaymentAssetVisibility(provider, payment);
+        const amountAtomic = parseUsdcAtomic(payment.amount);
+        const data = buildErc20TransferData(payment.receiver, amountAtomic);
+        if (!data || !/^0x[0-9a-fA-F]{40}$/.test(payment.contract || '')) throw new Error('payment_details_invalid');
+        setButtonLoading(button, true, copy.signing);
+        setAdminPaymentTestMessage(copy.signing, 'info');
+        const txid = await provider.request({ method: 'eth_sendTransaction', params: [{ from, to: payment.contract, data, value: '0x0' }] });
+        const nextPending = { payment_session_id: createData.payment_session_id, txid };
+        sessionStorage.setItem('ax_admin_payment_test_pending', JSON.stringify(nextPending));
+        await confirmAdminPaymentTest(nextPending, button);
+    } catch (error) {
+        const rejected = error?.code === 4001 || error?.code === 'ACTION_REJECTED';
+        const message = rejected
+            ? (translations[getActiveLang()]?.payWalletRejected || copy.failed)
+            : String(error?.message || '').includes('payment_wallet_unavailable') ? copy.wallet
+                : String(error?.message || '').includes('base_mainnet_not_selected') ? copy.network
+                    : translateBackendDetail(String(error?.message || ''), copy.failed);
+        setAdminPaymentTestMessage(message, 'error');
+    } finally {
+        paymentInteractionInProgress = false;
+        if (!button.disabled) setButtonLoading(button, false, adminPaymentTestPending() ? copy.check : copy.action);
+    }
+}
+
+// The account dashboard is rendered dynamically.  Keep the owner-only test
+// action explicitly available to both the generated markup and a direct DOM
+// listener so a stale inline-handler cache can never make the button inert.
+window.startAdminPaymentTest = startAdminPaymentTest;
+
+function bindAdminPaymentTestButton() {
+    const button = document.getElementById('adminPaymentTestButton');
+    if (!button || button.dataset.adminPaymentBound === 'true') return;
+    button.dataset.adminPaymentBound = 'true';
+    button.addEventListener('click', () => startAdminPaymentTest(button));
+}
+
 async function validateRegister() {
     const username = document.getElementById('regUsername').value.trim();
     const email = document.getElementById('regEmail').value.trim();
@@ -2119,6 +2475,11 @@ async function validateRegister() {
 }
 
 async function validateLogin() {
+    if (loginRequestInFlight) return;
+    if (Date.now() < loginRateLimitUntil) {
+        renderLoginRateLimitState();
+        return;
+    }
     const username = document.getElementById('loginUsername').value.trim();
     const pass = document.getElementById('loginPass').value.trim();
     const err = document.getElementById('loginErrorContainer');
@@ -2140,6 +2501,7 @@ async function validateLogin() {
         return;
     }
 
+    loginRequestInFlight = true;
     setButtonLoading(submitBtn, true, t('auth.login'));
 
     try {
@@ -2161,13 +2523,22 @@ async function validateLogin() {
             handleLoginSuccess();
         } else {
             let errMsg = t('errors.loginFailed');
-            if (data.detail) errMsg = translateBackendDetail(data.detail, 'errors.loginFailed');
-            setFormError('loginErrorContainer', errMsg);
+            if (res.status === 429) {
+                startLoginRateLimitCooldown(res.headers.get('Retry-After'));
+            } else {
+                if (data.detail) errMsg = translateBackendDetail(data.detail, 'errors.loginFailed');
+                setFormError('loginErrorContainer', errMsg);
+            }
         }
     } catch (error) {
         setFormError('loginErrorContainer', t('errors.networkError'));
     } finally {
-        setButtonLoading(submitBtn, false, t('auth.login'));
+        loginRequestInFlight = false;
+        if (Date.now() < loginRateLimitUntil) {
+            renderLoginRateLimitState();
+        } else {
+            setButtonLoading(submitBtn, false, t('auth.login'));
+        }
     }
 }
 
@@ -7140,27 +7511,6 @@ async function loadBridgePlans() {
     }
 }
 
-async function startScanningDrops() {
-    const log = document.getElementById('drop-logs');
-    const username = getCurrentUsername();
-    const t = translations[currentLang];
-    if (log) log.innerHTML += `<br><span style="color: var(--text-muted);">${t.lootChecking}</span>`;
-    try {
-        const res = await fetch(`/api/scan/${username}`, { method: 'POST' });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || 'scan_failed');
-        const summary = t.lootScanSummary
-            .replace('{total}', data.data.total_wallets_scanned)
-            .replace('{valid}', data.data.valid_wallets_checked);
-        if (log) {
-            log.innerHTML += `<br><span style="color: #86efac;">${summary}</span>`;
-            log.innerHTML += `<br><span style="color: #fbbf24;">${t.lootIntegrationsPending}</span>`;
-        }
-    } catch (error) {
-        if (log) log.innerHTML += `<br><span style="color: #fca5a5;">${translateBackendDetail(error.message)}</span>`;
-    }
-}
-
 async function loadOfficialOpportunities() {
     const container = document.getElementById('officialOpportunitiesContainer');
     if (!container) return;
@@ -7174,10 +7524,6 @@ async function loadOfficialOpportunities() {
         container.innerHTML = data.sources.map((source) => {
             const summary = source.summaries?.[getActiveLang()] || source.summaries?.en || t[`opportunity_${source.summary_key}`] || t.opportunitySummaryFallback;
             const status = source.status === 'official_updates' ? t.opportunityStatusOfficial : t.opportunityStatusPending;
-            const dateLocale = { ru: 'ru-RU', en: 'en-US', zh: 'zh-CN' }[getActiveLang()] || 'en-US';
-            const updatedAt = Number(source.updated_at) > 0
-                ? new Date(Number(source.updated_at) * 1000).toLocaleDateString(dateLocale, { year: 'numeric', month: 'short', day: 'numeric' })
-                : t.opportunityDateUnknown;
             const deleteButton = data.can_manage && !source.is_system
                 ? `<button type="button" class="btn-dark-sm" onclick="deleteOfficialOpportunity(${Number(source.id)})" style="white-space:nowrap; padding:8px 11px; color:#fca5a5;">${t.opportunityDelete}</button>`
                 : '';
@@ -7189,7 +7535,6 @@ async function loadOfficialOpportunities() {
                             <span class="opportunity-source-status">${escapeHtml(status)}</span>
                         </div>
                         <div class="opportunity-source-summary">${escapeHtml(summary)}</div>
-                        <div class="opportunity-source-updated">${t.opportunityUpdated}: ${escapeHtml(updatedAt)}</div>
                     </div>
                     <div class="opportunity-source-actions">
                         <a href="${escapeHtml(source.official_url)}" target="_blank" rel="noopener noreferrer" class="btn-dark-sm" style="white-space:nowrap; padding:8px 11px; text-decoration:none;">${t.opportunityOfficialLink}</a>
@@ -7222,41 +7567,6 @@ async function loadLendingWalletConnectionStatus() {
             .replace('{network}', 'Base')
         : activeWalletConnectionMessage(sessionState, locale, activeAddress);
     status.style.color = sessionState.matches ? '#86efac' : '#fbbf24';
-}
-
-async function loadAirdropEligibility() {
-    const container = document.getElementById('airdropEligibilityContainer');
-    if (!container) return;
-    const locale = translations[currentLang];
-    const username = localStorage.getItem('airdrop_username');
-    if (!username) {
-        container.innerHTML = `<div style="color:var(--text-muted); font-size:13px;">${locale.eligibilityNoWallets}</div>`;
-        return;
-    }
-    try {
-        const response = await fetch(`/api/eligibility/${encodeURIComponent(username)}`);
-        const data = await response.json();
-        if (!response.ok || !Array.isArray(data.wallets) || !Array.isArray(data.claim_checks)) {
-            throw new Error('eligibility_unavailable');
-        }
-        const wallets = data.wallets.length
-            ? `<div style="color:var(--text-muted); font-size:12px; line-height:1.5; margin-bottom:12px;">${locale.eligibilityWallets}: ${data.wallets.map((wallet) => escapeHtml(wallet.label || `${wallet.address.slice(0, 6)}…${wallet.address.slice(-4)}`)).join(', ')}</div>`
-            : `<div style="color:var(--text-muted); font-size:13px; line-height:1.5;">${locale.eligibilityNoWallets}</div>`;
-        const checks = data.claim_checks.length
-            ? data.claim_checks.map((source) => `
-                <div style="background:var(--bg-main); border:1px solid var(--border-color); border-radius:12px; padding:13px; display:flex; justify-content:space-between; gap:12px; align-items:center;">
-                    <div>
-                        <div style="color:#fff; font-size:14px; font-weight:700;">${escapeHtml(source.name)} <span style="color:var(--text-muted); font-weight:400;">(${escapeHtml(source.network)})</span></div>
-                        <div style="color:var(--text-muted); font-size:12px; margin-top:4px;">${escapeHtml(source.summaries?.[getActiveLang()] || source.summaries?.en || '')}</div>
-                    </div>
-                    <a href="${escapeHtml(source.claim_url)}" target="_blank" rel="noopener noreferrer" class="btn-dark-sm" style="white-space:nowrap; padding:8px 11px; text-decoration:none;">${locale.eligibilityOpenCheck}</a>
-                </div>
-            `).join('')
-            : `<div style="color:var(--text-muted); font-size:13px; line-height:1.5;">${locale.eligibilityNoChecks}</div>`;
-        container.innerHTML = `${wallets}<div style="display:flex; flex-direction:column; gap:10px;">${checks}</div><div style="color:#fbbf24; font-size:12px; line-height:1.5; margin-top:12px;">${locale.eligibilityCheckedNotice}</div>`;
-    } catch (error) {
-        container.innerHTML = `<div style="color:#fca5a5; font-size:13px;">${locale.eligibilityLoadError}</div>`;
-    }
 }
 
 function renderOpportunityAdminControls(canManage) {
@@ -7572,8 +7882,8 @@ function renderDashboardContent(section) {
                 : `${t.subActive} (${subscriptionDaysLeft} ${t.days})`);
         const subscriptionActionHtml = subscriptionStatus !== 'active'
             ? `<button type="button" onclick="openPricingModal()" class="btn-dark-sm">${t.subscriptionRenew}</button>`
-            : (userPlan === 'Premium'
-                ? `<p class="account-subscription-max">${t.subscriptionPremiumMax}</p>`
+            : (userPlan === 'Enterprise'
+                ? `<p class="account-subscription-max">${t.subscriptionEnterpriseMax}</p>`
                 : `<button type="button" onclick="openPricingModal()" class="btn-dark-sm">${t.btnChangePlan}</button>`);
 
         centerHtml = `
@@ -7633,6 +7943,13 @@ function renderDashboardContent(section) {
                 </div>
             </div>
 
+            <div id="adminPaymentTestCard" class="dashboard-card account-subscription-card" hidden>
+                <div class="account-section-heading"><div><div class="account-kicker">ADMIN ONLY</div><h3>${currentLang === 'ru' ? 'Проверка платежей' : currentLang === 'zh' ? '支付测试' : 'Payment verification'}</h3></div><span class="account-plan-badge">1 USDC</span></div>
+                <p>${currentLang === 'ru' ? 'Одноразовая проверка реального перевода в сети Base. Тариф и доступ не изменяются.' : currentLang === 'zh' ? '一次性验证 Base 上的真实转账。不会更改套餐或访问权限。' : 'One-time verification of a real transfer on Base. Your plan and access will not change.'}</p>
+                <button id="adminPaymentTestButton" type="button" class="btn-dark-sm">${currentLang === 'ru' ? 'Проверить 1 USDC в кошельке' : currentLang === 'zh' ? '在钱包中测试 1 USDC' : 'Test 1 USDC in wallet'}</button>
+                <p id="adminPaymentTestMessage" class="account-subscription-note" aria-live="polite"></p>
+            </div>
+
             <div class="dashboard-card account-readiness-card">
                 <div class="account-section-heading">
                     <div><div class="account-kicker">${t.accountReadinessKicker}</div><h3>${t.accountReadinessTitle}</h3></div>
@@ -7647,7 +7964,11 @@ function renderDashboardContent(section) {
                 <div id="accountOverviewActivity" class="account-activity-list"><div class="account-empty-state">${t.loading}</div></div>
             </div>
         `;
-        setTimeout(loadAccountOverview, 50);
+        setTimeout(() => {
+            bindAdminPaymentTestButton();
+            loadAccountOverview();
+            loadAdminPaymentTest();
+        }, 50);
 
 } else if (section === 'Settings') {
         const notifTransactionSubmittedChecked = localStorage.getItem('ax_notify_transactions_submitted') === 'true' ? 'checked' : '';
@@ -7762,16 +8083,9 @@ function renderDashboardContent(section) {
                         <span class="account-kicker">OFFICIAL SOURCES</span>
                         <h3>${t.lootTitle}</h3>
                     </div>
-                    <button type="button" onclick="loadOfficialOpportunities(); loadAirdropEligibility();" class="btn-dark-sm opportunity-refresh">${t.opportunityRefresh}</button>
+                    <button type="button" onclick="loadOfficialOpportunities()" class="btn-dark-sm opportunity-refresh">${t.opportunityRefresh}</button>
                 </div>
                 <p style="color: var(--text-muted); font-size: 13px; line-height: 1.5;">${t.lootDesc}</p>
-                <button type="button" onclick="startScanningDrops()" class="btn-purple-lg" style="font-size: 13px; padding: 12px 20px; width:auto; margin-top: 4px;">${t.btnScan}</button>
-                <div id="drop-logs" class="opportunity-scan-log">${t.logInitLoot}</div>
-            </div>
-            <div class="dashboard-card">
-                <h3 style="color:#fff; margin-top:0; font-size:16px;">${t.eligibilityTitle}</h3>
-                <p style="color:var(--text-muted); font-size:13px; line-height:1.5;">${t.eligibilityDesc}</p>
-                <div id="airdropEligibilityContainer" style="display:flex; flex-direction:column; gap:10px;">${t.loading}</div>
             </div>
             <div class="dashboard-card">
                 <div class="opportunity-monitor-heading">
@@ -7788,7 +8102,6 @@ function renderDashboardContent(section) {
         `;
         setTimeout(() => {
             loadOfficialOpportunities();
-            loadAirdropEligibility();
         }, 50);
         } else if (section === 'Farming') {
         const storedActivityPane = localStorage.getItem('ax_activity_pane');

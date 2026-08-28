@@ -389,6 +389,57 @@ class SubscriptionLifecycleTests(unittest.TestCase):
             ),
         )
 
+    def test_admin_payment_test_is_exact_one_time_and_never_changes_a_plan(self) -> None:
+        payment_config = {**PAYMENT_CONFIG, "amount": server.Decimal("1.00")}
+        original_admins = set(server.ADMIN_USERNAMES)
+        server.ADMIN_USERNAMES.add(self.user.username)
+        original_plan = self.user.subscription_plan
+        original_anchor = self.user.subscription_activated_at
+        try:
+            with patch.object(server, "get_admin_payment_test_config", return_value=payment_config):
+                checkout = self.await_result(
+                    server.create_admin_payment_test_session(
+                        request("/api/admin/payment-test/create-session"), self.db, self.user,
+                    )
+                )
+                self.assertEqual(checkout["payment"]["amount"], "1.00")
+                self.assertEqual(checkout["payment"]["network"], "Base")
+
+            with (
+                patch.object(server, "get_admin_payment_test_config", return_value=payment_config),
+                patch.object(server, "get_usdc_payment_verification_state", return_value="confirmed"),
+            ):
+                result = self.await_result(
+                    server.confirm_admin_payment_test_session(
+                        server.PaymentSessionConfirmReq(
+                            payment_session_id=checkout["payment_session_id"],
+                            client_session_id="admin-payment-test",
+                            txid=txid(88),
+                        ),
+                        request("/api/admin/payment-test/confirm"), self.db, self.user,
+                    )
+                )
+                self.assertTrue(result["verified"])
+
+            self.db.refresh(self.user)
+            self.assertEqual(self.user.subscription_plan, original_plan)
+            self.assertEqual(self.user.subscription_activated_at, original_anchor)
+            processed = self.db.query(server.ProcessedBlockchainTransaction).filter_by(txid=txid(88)).one()
+            self.assertEqual(processed.purpose, "admin_payment_test")
+
+            with patch.object(server, "get_admin_payment_test_config", return_value=payment_config):
+                self.assert_http_error(
+                    409,
+                    lambda: self.await_result(
+                        server.create_admin_payment_test_session(
+                            request("/api/admin/payment-test/create-session"), self.db, self.user,
+                        )
+                    ),
+                )
+        finally:
+            server.ADMIN_USERNAMES.clear()
+            server.ADMIN_USERNAMES.update(original_admins)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

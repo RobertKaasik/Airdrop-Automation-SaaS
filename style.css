@@ -3637,3 +3637,112 @@ body.mobile-sheet-open { overflow: hidden; }
     text-decoration: underline;
     text-underline-offset: 3px;
 }
+
+.cookie-consent-banner[hidden] {
+    display: none;
+}
+
+.cookie-consent-banner {
+    position: fixed;
+    z-index: 1900;
+    right: 22px;
+    bottom: 22px;
+    display: flex;
+    align-items: center;
+    gap: 22px;
+    width: min(720px, calc(100vw - 44px));
+    padding: 18px 20px;
+    border: 1px solid rgba(183, 117, 255, .38);
+    border-radius: 18px;
+    background: rgba(13, 10, 20, .96);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, .48), 0 0 42px rgba(122, 61, 222, .14);
+    backdrop-filter: blur(18px);
+}
+
+.cookie-consent-copy {
+    min-width: 0;
+    flex: 1;
+}
+
+.cookie-consent-eyebrow {
+    margin: 0 0 5px;
+    color: #c69aff;
+    font: 700 10px/1 'Space Grotesk', sans-serif;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+}
+
+.cookie-consent-copy h2 {
+    margin: 0;
+    color: #fff;
+    font: 700 16px/1.25 'Space Grotesk', sans-serif;
+}
+
+.cookie-consent-copy > p:last-child {
+    margin: 7px 0 0;
+    color: var(--text-muted);
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.cookie-consent-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+    max-width: 290px;
+}
+
+.cookie-consent-button {
+    min-height: 36px;
+    padding: 8px 12px;
+    border: 1px solid rgba(196, 137, 255, .7);
+    border-radius: 9px;
+    background: linear-gradient(135deg, #7b2ee4, #a76eff);
+    color: #fff;
+    font: 700 11px/1.1 Inter, sans-serif;
+    cursor: pointer;
+    transition: transform .18s ease, box-shadow .18s ease, background .18s ease;
+}
+
+.cookie-consent-button:hover,
+.cookie-consent-button:focus-visible {
+    transform: translateY(-1px);
+    box-shadow: 0 7px 20px rgba(130, 69, 229, .26);
+    outline: none;
+}
+
+.cookie-consent-button--secondary {
+    border-color: rgba(255, 255, 255, .16);
+    background: rgba(255, 255, 255, .055);
+    color: #ddd7e5;
+}
+
+.cookie-consent-button--link {
+    border-color: transparent;
+    background: transparent;
+    color: #c69aff;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
+@media (max-width: 700px) {
+    .cookie-consent-banner {
+        right: 12px;
+        bottom: 76px;
+        width: calc(100vw - 24px);
+        align-items: stretch;
+        flex-direction: column;
+        gap: 14px;
+        padding: 16px;
+    }
+
+    .cookie-consent-actions {
+        max-width: none;
+        justify-content: stretch;
+    }
+
+    .cookie-consent-button {
+        flex: 1 1 120px;
+    }
+}
