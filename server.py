@@ -77,6 +77,42 @@ SUBSCRIPTION_TEST_AMOUNT_USDC = Decimal("1.00")
 ADMIN_PAYMENT_TEST_ENABLED = os.getenv("ADMIN_PAYMENT_TEST_ENABLED", "false").strip().lower() == "true"
 ADMIN_PAYMENT_TEST_AMOUNT_USDC = Decimal("1.00")
 
+# ==============================================================================
+# TIER CONFIGURATION FOR AUTOMATED AGENT MODE
+# ==============================================================================
+# Tier hierarchy with numeric levels for scalable agent mode gating
+SUBSCRIPTION_TIERS = {
+    "free": {"level": 0, "name": "Free"},
+    "standard": {"level": 1, "name": "Standard"},
+    "pro farmer": {"level": 2, "name": "PRO Farmer"},
+    "premium vip": {"level": 3, "name": "Premium VIP"},
+    "vip ultimate": {"level": 4, "name": "VIP Ultimate"},
+    "whale": {"level": 5, "name": "Whale / Syndicate"},
+    "enterprise": {"level": 6, "name": "Enterprise"}
+}
+
+# Minimum tier level required for automated agent mode
+AGENT_MODE_MIN_LEVEL = 3
+
+def is_agent_mode_allowed(subscription_plan: str) -> bool:
+    """
+    Check if user subscription tier allows automated agent mode.
+    Uses numeric level comparison for scalability.
+    """
+    tier_key = subscription_plan.lower().strip()
+    tier_info = SUBSCRIPTION_TIERS.get(tier_key)
+    if not tier_info:
+        return False
+    return tier_info["level"] >= AGENT_MODE_MIN_LEVEL
+
+def get_tier_info(subscription_plan: str) -> dict:
+    """Get tier information including level and display name."""
+    tier_key = subscription_plan.lower().strip()
+    return SUBSCRIPTION_TIERS.get(tier_key, {
+        "level": 0,
+        "name": "Unknown"
+    })
+
 DEFAULT_OFFICIAL_OPPORTUNITY_SOURCES = [
     {
         "source_key": "arbitrum",
@@ -219,6 +255,8 @@ MAX_DEVICE_CHANGES_PER_WINDOW = 1
 TELEGRAM_LINK_TTL_SECONDS = 10 * 60
 TELEGRAM_TEST_COOLDOWN_SECONDS = 60
 TELEGRAM_REMINDER_RETRY_WINDOW_MINUTES = 5
+COMPANION_PAIR_CODE_TTL_SECONDS = 5 * 60
+COMPANION_SESSION_TTL_SECONDS = 30 * 24 * 60 * 60
 BASE_CHAIN_ID = 8453
 BASE_NATIVE_TOKEN_ADDRESS = "0x0000000000000000000000000000000000000000"
 BASE_USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
@@ -482,6 +520,23 @@ class AuthSession(Base):
     token_hash = Column(String, unique=True, index=True, nullable=False)
     expires_at = Column(Integer, nullable=False)
     created_at = Column(Integer, nullable=False)
+
+class DesktopCompanionPairingCode(Base):
+    """One-time code created in the web account and entered in the desktop app."""
+    __tablename__ = "desktop_companion_pairing_codes"
+    code_hash = Column(String, primary_key=True)
+    username = Column(String, index=True, nullable=False)
+    expires_at = Column(Integer, nullable=False)
+    created_at = Column(Integer, nullable=False)
+
+class DesktopCompanionSession(Base):
+    """Read-only companion credential. It cannot access wallet or payment APIs."""
+    __tablename__ = "desktop_companion_sessions"
+    token_hash = Column(String, primary_key=True)
+    username = Column(String, index=True, nullable=False)
+    expires_at = Column(Integer, nullable=False)
+    created_at = Column(Integer, nullable=False)
+    last_seen_at = Column(Integer, nullable=False)
 
 class ProcessedBlockchainTransaction(Base):
     __tablename__ = "processed_blockchain_transactions"
@@ -918,15 +973,25 @@ app.add_middleware(
     allow_origins=allowed_origins,
     allow_credentials=False,
     allow_methods=["GET", "POST", "PATCH", "DELETE"],
-    allow_headers=["Content-Type", "Authorization"],
+    allow_headers=["Content-Type", "Authorization", "X-Airdrop-X-Companion"],
 )
+
+MAINTENANCE_ALLOWED_PATHS = {
+    "/api/health",
+    # A paired Companion remains limited to schedule metadata. Keeping this
+    # narrow path available lets an already-issued one-time code be tested
+    # during staging without reopening the website, accounts, or wallets.
+    "/api/companion/pair",
+    "/api/companion/tasks",
+    "/api/companion/unpair",
+}
 
 @app.middleware("http")
 async def add_security_headers(request, call_next):
     # Keep operational health checks available while the public interface is
     # intentionally closed for a controlled release. Telegram polling and the
     # scheduler run as separate server-side processes and are unaffected.
-    if MAINTENANCE_MODE and request.url.path not in {"/api/health"}:
+    if MAINTENANCE_MODE and request.url.path not in MAINTENANCE_ALLOWED_PATHS:
         return Response(
             content=(
                 "<!doctype html><html lang='ru'><head><meta charset='utf-8'>"
@@ -1901,6 +1966,10 @@ class DirectTransferRecordCreateRequest(BaseModel):
 class WalletBatchAddRequest(BaseModel):
     wallet_addresses: List[str]
 
+class DesktopCompanionPairRequest(BaseModel):
+    code: str = Field(min_length=8, max_length=32)
+
+
 class WalletUpdateRequest(BaseModel):
     label: str
     # None means that the existing proxy remains unchanged. Credentials are
@@ -2116,6 +2185,211 @@ def get_current_user(
             detail="Subscription expired. Renew the plan to continue using paid features",
         )
     return current_user
+
+
+def get_desktop_companion_user(
+    x_airdrop_x_companion: Optional[str] = Header(default=None),
+    db: Session = Depends(get_db),
+) -> User:
+    """Authenticate the desktop companion for its read-only schedule feed only."""
+    raw_token = (x_airdrop_x_companion or "").strip()
+    if not raw_token.startswith("axc_") or len(raw_token) < 32:
+        raise HTTPException(status_code=401, detail="Desktop Companion pairing is required")
+    now_ts = int(time.time())
+    token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+    session = db.query(DesktopCompanionSession).filter(
+        DesktopCompanionSession.token_hash == token_hash,
+    ).first()
+    if not session or session.expires_at <= now_ts:
+        if session:
+            db.delete(session)
+            db.commit()
+        raise HTTPException(status_code=401, detail="Desktop Companion session expired")
+    user = db.query(User).filter(User.username == session.username).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="Desktop Companion account not found")
+    if now_ts - int(session.last_seen_at or 0) >= 300:
+        session.last_seen_at = now_ts
+        db.commit()
+    return user
+
+
+@app.post("/api/companion/pairing-code")
+async def create_desktop_companion_pairing_code(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Create a short-lived, single-use code for a keyless desktop companion."""
+    enforce_request_rate_limit("desktop_companion_pairing", get_request_client_key(request), 8, 3600)
+    now_ts = int(time.time())
+    db.query(DesktopCompanionPairingCode).filter(
+        DesktopCompanionPairingCode.username == current_user.username,
+    ).delete(synchronize_session=False)
+    code = secrets.token_hex(5).upper()
+    db.add(DesktopCompanionPairingCode(
+        code_hash=hashlib.sha256(code.encode("utf-8")).hexdigest(),
+        username=current_user.username,
+        expires_at=now_ts + COMPANION_PAIR_CODE_TTL_SECONDS,
+        created_at=now_ts,
+    ))
+    db.commit()
+    return {
+        "status": "success",
+        "code": code,
+        "expires_in": COMPANION_PAIR_CODE_TTL_SECONDS,
+        "notice": "This code pairs only a read-only Desktop Companion. It cannot sign or send transactions.",
+    }
+
+
+@app.post("/api/companion/pair")
+async def pair_desktop_companion(payload: DesktopCompanionPairRequest, request: Request, db: Session = Depends(get_db)):
+    """Exchange the one-time pairing code for a token scoped to the schedule feed."""
+    enforce_request_rate_limit("desktop_companion_pair", get_request_client_key(request), 10, 3600)
+    now_ts = int(time.time())
+    clean_code = payload.code.strip().upper().replace(" ", "")
+    code_hash = hashlib.sha256(clean_code.encode("utf-8")).hexdigest()
+    pairing = db.query(DesktopCompanionPairingCode).filter(
+        DesktopCompanionPairingCode.code_hash == code_hash,
+    ).first()
+    if not pairing or pairing.expires_at <= now_ts:
+        if pairing:
+            db.delete(pairing)
+            db.commit()
+        raise HTTPException(status_code=400, detail="Pairing code is invalid or expired")
+
+    pairing_username = pairing.username
+    
+    # Get user to retrieve subscription tier information
+    user = db.query(User).filter(User.username == pairing_username).first()
+    if not user:
+        db.delete(pairing)
+        db.commit()
+        raise HTTPException(status_code=400, detail="User not found")
+    
+    # Determine tier level and agent mode eligibility
+    subscription_plan = user.subscription_plan or "Standard"
+    tier_info = get_tier_info(subscription_plan)
+    tier_level = tier_info["level"]
+    tier_name = tier_info["name"]
+    auto_mode_allowed = is_agent_mode_allowed(subscription_plan)
+    
+    raw_token = f"axc_{secrets.token_urlsafe(32)}"
+    db.delete(pairing)
+    db.add(DesktopCompanionSession(
+        token_hash=hashlib.sha256(raw_token.encode("utf-8")).hexdigest(),
+        username=pairing_username,
+        expires_at=now_ts + COMPANION_SESSION_TTL_SECONDS,
+        created_at=now_ts,
+        last_seen_at=now_ts,
+    ))
+    db.commit()
+    return {
+        "status": "success",
+        "companion_token": raw_token,
+        "expires_at": now_ts + COMPANION_SESSION_TTL_SECONDS,
+        "capabilities": ["schedule_read", "local_notifications", "open_web_review"],
+        "notice": "The Desktop Companion never receives wallet keys and cannot sign or send transactions.",
+        "user_tier": subscription_plan.lower().strip(),
+        "tier_level": tier_level,
+        "tier_name": tier_name,
+        "auto_mode_allowed": auto_mode_allowed,
+    }
+
+
+@app.get("/api/companion/status")
+async def desktop_companion_status(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    now_ts = int(time.time())
+    db.query(DesktopCompanionSession).filter(
+        DesktopCompanionSession.expires_at <= now_ts,
+    ).delete(synchronize_session=False)
+    db.commit()
+    sessions = db.query(DesktopCompanionSession).filter(
+        DesktopCompanionSession.username == current_user.username,
+    ).order_by(DesktopCompanionSession.last_seen_at.desc()).all()
+    return {
+        "status": "success",
+        "active_sessions": len(sessions),
+        "last_seen_at": sessions[0].last_seen_at if sessions else None,
+    }
+
+
+@app.post("/api/companion/revoke")
+async def revoke_desktop_companion_sessions(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Invalidate every paired Desktop Companion for the signed-in account."""
+    revoked = db.query(DesktopCompanionSession).filter(
+        DesktopCompanionSession.username == current_user.username,
+    ).delete(synchronize_session=False)
+    db.commit()
+    return {"status": "success", "revoked": revoked}
+
+
+@app.get("/api/companion/tasks")
+async def get_desktop_companion_tasks(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_desktop_companion_user),
+):
+    """Return schedule metadata only — no keys, signatures, routes, or transaction payloads."""
+    if get_subscription_state(current_user)["status"] == "expired":
+        raise HTTPException(status_code=402, detail="Subscription expired. Renew the plan to use Desktop Companion reminders")
+    rows = (
+        db.query(WalletActionSchedule, Wallet)
+        .join(Wallet, Wallet.id == WalletActionSchedule.wallet_id)
+        .filter(
+            WalletActionSchedule.username == current_user.username,
+            WalletActionSchedule.enabled.is_(True),
+            Wallet.username == current_user.username,
+        )
+        .order_by(WalletActionSchedule.updated_at.desc())
+        .all()
+    )
+    tasks = []
+    for schedule, wallet in rows:
+        serialized = serialize_wallet_action_schedule(schedule)
+        tasks.append({
+            "schedule_id": schedule.id,
+            "wallet_id": wallet.id,
+            "wallet_label": wallet.label or f"Wallet {wallet.id}",
+            "wallet_address": f"{wallet.wallet_address[:8]}…{wallet.wallet_address[-6:]}",
+            "action_type": schedule.action_type,
+            "enabled": bool(schedule.enabled),
+            "schedule_mode": serialized["schedule_mode"],
+            "timezone": schedule.timezone,
+            "day_of_week": schedule.day_of_week,
+            "time_of_day": schedule.time_of_day,
+            "updated_at": schedule.updated_at,
+            "generated_slots": serialized["generated_slots"],
+            "custom_slots": serialized["custom_slots"],
+        })
+    return {
+        "status": "success",
+        "server_time": int(time.time()),
+        "tasks": tasks,
+        "safety": "Notifications only. Review and confirmation always happen in the user's wallet.",
+    }
+
+
+@app.post("/api/companion/unpair")
+async def unpair_desktop_companion(
+    x_airdrop_x_companion: Optional[str] = Header(default=None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_desktop_companion_user),
+):
+    """Remove only the Desktop Companion that holds the supplied read-only token."""
+    raw_token = (x_airdrop_x_companion or "").strip()
+    token_hash = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
+    db.query(DesktopCompanionSession).filter(
+        DesktopCompanionSession.token_hash == token_hash,
+        DesktopCompanionSession.username == current_user.username,
+    ).delete(synchronize_session=False)
+    db.commit()
+    return {"status": "success"}
 
 
 @app.post("/api/profiles/{profile_id}/launch")

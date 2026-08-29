@@ -1,0 +1,30 @@
+{
+  "name": "airdrop-x-desktop-companion",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Keyless local schedule reminders for AIRDROP-X",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --check main.cjs && node --check preload.cjs && node --check renderer/renderer.js && node tests/test-safe-companion.cjs",
+    "package:win": "electron-builder --win --x64"
+  },
+  "devDependencies": {
+    "electron": "^37.0.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.airdropx.desktopcompanion",
+    "productName": "AIRDROP-X Desktop Companion",
+    "icon": "build/icon.png",
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "renderer/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis"
+    }
+  }
+}

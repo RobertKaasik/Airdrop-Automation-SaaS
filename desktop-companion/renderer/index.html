@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy" 
+          content="default-src 'none'; 
+                   script-src 'self'; 
+                   style-src 'self' 'unsafe-inline'; 
+                   img-src 'self' data:; 
+                   connect-src 'none';">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>AIRDROP-X Desktop Companion</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <main class="shell">
+        <header>
+            <span class="eyebrow">LOCAL COMPANION</span>
+            <h1>AIRDROP-X</h1>
+            <p>Синхронизированные локальные напоминания. Приватные ключи не хранятся, транзакции не подписываются и не отправляются.</p>
+        </header>
+        
+        <!-- Pairing Card -->
+        <section id="pairingCard" class="card">
+            <h2>Подключить к аккаунту</h2>
+            <ol>
+                <li>На сайте откройте «Настройки».</li>
+                <li>Создайте код привязки.</li>
+                <li>Введите его здесь в течение пяти минут.</li>
+            </ol>
+            <label>Адрес сайта
+                <input id="origin" type="url" value="https://airdrop-x.com">
+            </label>
+            <label>Одноразовый код
+                <input id="pairCode" maxlength="32" autocomplete="one-time-code">
+            </label>
+            <button id="pairButton" class="primary">Подключить</button>
+            <p id="pairMessage"></p>
+        </section>
+        
+        <!-- Dashboard Card -->
+        <section id="dashboardCard" class="card hidden">
+            <div class="row">
+                <div>
+                    <h2>Календарь напоминаний</h2>
+                    <p id="syncStatus" class="muted"></p>
+                </div>
+                <span class="badge">READ-ONLY</span>
+            </div>
+            
+            <!-- Agent Mode Toggle Section -->
+            <div class="mode-toggle-section">
+                <h3>Automated Agent Mode</h3>
+                <p class="mode-description">
+                    Enable fully automated transaction signing and broadcasting
+                </p>
+                
+                <div class="toggle-container">
+                    <label class="toggle">
+                        <input 
+                            type="checkbox" 
+                            id="agent-mode-toggle"
+                            disabled
+                        >
+                        <span class="slider"></span>
+                    </label>
+                    
+                    <span id="toggle-status" class="toggle-label">Disabled</span>
+                    <span id="tier-badge" class="tier-badge">Standard</span>
+                </div>
+                
+                <div id="tier-lock-message" class="lock-message" hidden>
+                    <span class="lock-icon">🔒</span>
+                    <div class="lock-content">
+                        <p>
+                            <strong>Automated Agent Mode is locked</strong><br>
+                            <span id="tier-requirement">Requires Premium VIP (Level 3+) or higher</span>
+                        </p>
+                        <p class="current-tier">
+                            Current tier: <strong id="current-tier-name">Standard (Level 1)</strong>
+                        </p>
+                        <button id="upgrade-btn" class="upgrade-button">
+                            Upgrade to Premium VIP
+                        </button>
+                    </div>
+                </div>
+                
+                <div id="agent-mode-info" class="info-box" hidden>
+                    <p>
+                        ✓ Automated signing enabled for Premium tiers:<br>
+                        • Premium VIP (Level 3)<br>
+                        • VIP Ultimate (Level 4)<br>
+                        • Whale / Syndicate (Level 5)<br>
+                        • Enterprise (Level 6)
+                    </p>
+                </div>
+            </div>
+            
+            <div id="scheduleList" class="schedule-list"></div>
+            
+            <div class="actions">
+                <button id="syncButton" class="primary">Синхронизировать</button>
+                <button id="reviewButton">Открыть сайт для проверки</button>
+                <button id="unpairButton" class="danger">Отключить приложение</button>
+            </div>
+        </section>
+        
+        <!-- VIP Consent Dialog -->
+        <div id="vip-consent" class="modal" hidden>
+            <div class="modal-content">
+                <h2>⚠️ VIP Agent Mode - Risk Disclosure</h2>
+                <p><strong>You are about to enable fully automated transaction signing.</strong></p>
+                
+                <ul>
+                    <li>Private keys will be stored locally encrypted with OS-level protection</li>
+                    <li>Transactions will be signed and broadcast automatically</li>
+                    <li>You are responsible for reviewing schedules and gas limits</li>
+                    <li>This app cannot recover lost or stolen keys</li>
+                    <li>Malicious backend payloads could drain your wallets</li>
+                </ul>
+                
+                <p><strong>Only enable this if you fully trust the backend server.</strong></p>
+                
+                <label>
+                    <input type="checkbox" id="consent-checkbox">
+                    I understand the risks and accept full responsibility
+                </label>
+                
+                <div class="modal-actions">
+                    <button id="accept-btn" class="primary" disabled>Enable VIP Agent Mode</button>
+                    <button id="cancel-btn">Stay in Safe Mode</button>
+                </div>
+            </div>
+        </div>
+        
+        <aside class="safety">
+            <strong>Безопасность:</strong> приложение работает только с публичными расписаниями. 
+            Для обмена, моста или Lending откройте сайт, проверьте маршрут и подтвердите действие вручную в своём кошельке.
+        </aside>
+    </main>
+    <script src="renderer.js"></script>
+</body>
+</html>
