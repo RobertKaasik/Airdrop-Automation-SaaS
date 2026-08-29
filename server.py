@@ -226,7 +226,7 @@ SUBSCRIPTION_GRACE_PERIOD_SECONDS = 7 * 24 * 60 * 60
 PLAN_PRICES = {"Standard": 29, "Pro": 49, "Premium": 89, "Whale": 149, "Enterprise": 299}
 BASE_SLOT_LIMITS = {"Standard": 5, "Pro": 15, "Premium": 30, "Whale": 100, "Enterprise": 250}
 PLAN_RANKS = {"Standard": 1, "Pro": 2, "Premium": 3, "Whale": 4, "Enterprise": 5}
-MAINTENANCE_MODE = os.getenv("MAINTENANCE_MODE", "false").strip().lower() == "true"
+MAINTENANCE_MODE = False  # Maintenance mode disabled - platform fully accessible
 request_rate_limits = {}
 gas_cache = {}
 wallet_health_cache = {}
