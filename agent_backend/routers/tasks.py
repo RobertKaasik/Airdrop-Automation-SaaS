@@ -21,6 +21,7 @@ from server import (
 
 from ..models import TasksResponse, AgentTask
 from ..config import get_tier_info, AGENT_MODE_MIN_LEVEL
+from ..services.task_generator import get_task_generator
 
 router = APIRouter()
 
@@ -112,21 +113,16 @@ async def get_agent_tasks(
         WalletActionSchedule.enabled == True
     ).all()
     
-    # 5. Convert schedules to executable tasks
-    # NOTE: This is a placeholder implementation
-    # Full implementation requires integrating with payload builders from server.py
-    tasks = []
+    # 5. Fetch associated wallets
+    wallet_ids = {schedule.wallet_id for schedule in schedules}
+    wallets = db.query(Wallet).filter(Wallet.id.in_(wallet_ids)).all()
+    wallet_map = {wallet.id: wallet for wallet in wallets}
     
-    for schedule in schedules[:5]:  # Limit to 5 tasks for safety
-        # Get wallet details
-        wallet = db.query(Wallet).filter(Wallet.id == schedule.wallet_id).first()
-        if not wallet:
-            continue
-        
-        # For now, return empty task list since we need payload builders
-        # In production, this would call task_generator service to build real payloads
-        # tasks.append(generated_task)
-        pass
+    # 6. Generate executable tasks from schedules
+    task_generator = get_task_generator()
+    tasks = await task_generator.generate_tasks_from_schedules(schedules, wallet_map)
+    
+    print(f"[TaskAPI] Generated {len(tasks)} tasks for user {user.username}")
     
     return TasksResponse(
         tasks=tasks,

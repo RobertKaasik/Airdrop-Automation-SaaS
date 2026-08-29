@@ -1,3 +1,62 @@
+// ==============================================================================
+// INPUT SANITIZATION & XSS PREVENTION
+// ==============================================================================
+
+/**
+ * Sanitize HTML to prevent XSS attacks.
+ * ALWAYS use textContent for user input, never innerHTML.
+ */
+function sanitizeHTML(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
+/**
+ * Sanitize and validate URL.
+ * Only allows https:// and localhost for development.
+ */
+function sanitizeURL(url) {
+    try {
+        const parsed = new URL(url);
+        const isLocal = ['127.0.0.1', 'localhost', '::1'].includes(parsed.hostname);
+        
+        if (parsed.protocol !== 'https:' && !(parsed.protocol === 'http:' && isLocal)) {
+            throw new Error('Only HTTPS URLs are allowed (HTTP for localhost only)');
+        }
+        
+        return parsed.toString();
+    } catch (error) {
+        throw new Error('Invalid URL format');
+    }
+}
+
+/**
+ * Sanitize address input (Ethereum addresses).
+ */
+function sanitizeAddress(address) {
+    const cleaned = address.trim();
+    
+    if (!/^0x[a-fA-F0-9]{40}$/.test(cleaned)) {
+        throw new Error('Invalid Ethereum address format');
+    }
+    
+    return cleaned.toLowerCase();
+}
+
+/**
+ * Safe render: Always use textContent for untrusted data.
+ */
+function safeSetText(element, text) {
+    if (element) {
+        element.textContent = String(text);
+    }
+}
+
+// ==============================================================================
+// END INPUT SANITIZATION
+// ==============================================================================
+
 const $ = (id) => document.getElementById(id);
 
 // Global tier state

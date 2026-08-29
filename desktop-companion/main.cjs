@@ -148,8 +148,48 @@ async function syncTasks() {
 }
 
 function createWindow() {
-  const window = new BrowserWindow({ width: 900, height: 680, minWidth: 720, minHeight: 520, backgroundColor: '#0b0812', webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true } });
-  window.removeMenu(); window.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+  const window = new BrowserWindow({
+    width: 900,
+    height: 680,
+    minWidth: 720,
+    minHeight: 520,
+    backgroundColor: '#0b0812',
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.cjs'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      webSecurity: true,
+      allowRunningInsecureContent: false,
+      experimentalFeatures: false
+    }
+  });
+  
+  // CRITICAL: Set strict CSP headers to prevent XSS
+  window.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [
+          "default-src 'none'; " +
+          "script-src 'self'; " +
+          "style-src 'self' 'unsafe-inline'; " +
+          "img-src 'self' data:; " +
+          "font-src 'self'; " +
+          "connect-src 'self' https://airdrop-x.com https://*.airdrop-x.com; " +
+          "form-action 'none'; " +
+          "frame-ancestors 'none'; " +
+          "base-uri 'self'; " +
+          "object-src 'none';"
+        ]
+      }
+    });
+  });
+  
+  window.removeMenu();
+  window.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+  
+  return window;
 }
 
 ipcMain.handle('companion:state', () => publicState());
