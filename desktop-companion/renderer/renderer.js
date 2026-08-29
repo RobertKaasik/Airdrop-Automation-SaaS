@@ -149,7 +149,7 @@ async function updateModeToggleUI() {
         toggle.disabled = false;
         lockMessage.hidden = true;
         agentModeInfo.hidden = false;
-        toggleStatus.textContent = companionMode === 'agent' ? '✓ Enabled' : 'Disabled';
+        toggleStatus.textContent = companionMode === 'agent' ? '✓ Включено' : 'Отключено';
         toggleStatus.className = companionMode === 'agent' ?
             'toggle-label enabled' : 'toggle-label';
     }
@@ -162,7 +162,7 @@ function showVIPConsentDialog() {
         const acceptBtn = $('accept-btn');
         const cancelBtn = $('cancel-btn');
         
-        modal.hidden = false;
+        modal.style.display = 'flex';
         acceptBtn.disabled = true;
         checkbox.checked = false;
         
@@ -171,7 +171,7 @@ function showVIPConsentDialog() {
         });
         
         const cleanup = () => {
-            modal.hidden = true;
+            modal.style.display = 'none';
             checkbox.removeEventListener('change', null);
             acceptBtn.removeEventListener('click', null);
             cancelBtn.removeEventListener('click', null);
@@ -196,7 +196,7 @@ async function handleToggleChange(event) {
         if (consent) {
             const result = await window.companion.enableAgentMode();
             if (!result.success) {
-                alert(`Failed to enable agent mode: ${result.error}`);
+                alert(`Не удалось включить режим агента: ${result.error}`);
                 event.target.checked = false;
             } else {
                 companionMode = 'agent';
@@ -313,14 +313,14 @@ const walletCountSpan = $('wallet-count');
 
 // Open key import modal
 importKeysBtn?.addEventListener('click', () => {
-    keyImportModal.removeAttribute('hidden');
+    keyImportModal.style.display = 'flex';
     keyImportTextarea.value = '';
     importStatus.style.display = 'none';
 });
 
 // Cancel key import
 importCancelBtn?.addEventListener('click', () => {
-    keyImportModal.setAttribute('hidden', '');
+    keyImportModal.style.display = 'none';
 });
 
 // Submit key import
@@ -328,12 +328,12 @@ importSubmitBtn?.addEventListener('click', async () => {
     const text = keyImportTextarea.value.trim();
     
     if (!text) {
-        showImportStatus('Please enter at least one private key', 'error');
+        showImportStatus('Пожалуйста, введите хотя бы один приватный ключ', 'error');
         return;
     }
     
     importSubmitBtn.disabled = true;
-    importSubmitBtn.textContent = 'Importing...';
+    importSubmitBtn.textContent = 'Импортирование...';
     
     try {
         // Parse input - could be private keys (one per line) or seed phrase
@@ -353,21 +353,21 @@ importSubmitBtn?.addEventListener('click', async () => {
         }
         
         if (result.success) {
-            showImportStatus(`Successfully imported ${result.count} wallet(s)`, 'success');
+            showImportStatus(`Успешно импортировано ${result.count} кошельков`, 'success');
             keyImportTextarea.value = '';
             await updateWalletCount();
             
             setTimeout(() => {
-                keyImportModal.setAttribute('hidden', '');
+                keyImportModal.style.display = 'none';
             }, 2000);
         } else {
-            showImportStatus(`Error: ${result.error}`, 'error');
+            showImportStatus(`Ошибка: ${result.error}`, 'error');
         }
     } catch (error) {
-        showImportStatus(`Error: ${error.message}`, 'error');
+        showImportStatus(`Ошибка: ${error.message}`, 'error');
     } finally {
         importSubmitBtn.disabled = false;
-        importSubmitBtn.textContent = 'Import Keys';
+        importSubmitBtn.textContent = 'Импортировать ключи';
     }
 });
 
@@ -380,17 +380,17 @@ function showImportStatus(message, type) {
 // View wallets
 viewWalletsBtn?.addEventListener('click', async () => {
     await loadWalletsList();
-    walletsModal.removeAttribute('hidden');
+    walletsModal.style.display = 'flex';
 });
 
 // Close wallets modal
 walletsCloseBtn?.addEventListener('click', () => {
-    walletsModal.setAttribute('hidden', '');
+    walletsModal.style.display = 'none';
 });
 
 // Clear all keys
 clearAllKeysBtn?.addEventListener('click', async () => {
-    if (!confirm('Are you sure you want to clear all imported keys? This cannot be undone.')) {
+    if (!confirm('Вы уверены, что хотите удалить все импортированные ключи? Это действие нельзя отменить.')) {
         return;
     }
     
@@ -399,12 +399,12 @@ clearAllKeysBtn?.addEventListener('click', async () => {
         if (result.success) {
             await loadWalletsList();
             await updateWalletCount();
-            alert('All keys cleared successfully');
+            alert('Все ключи успешно удалены');
         } else {
-            alert(`Error: ${result.error}`);
+            alert(`Ошибка: ${result.error}`);
         }
     } catch (error) {
-        alert(`Error: ${error.message}`);
+        alert(`Ошибка: ${error.message}`);
     }
 });
 
@@ -413,21 +413,21 @@ async function loadWalletsList() {
         const result = await window.companion.listWallets();
         
         if (!result.success) {
-            walletsList.innerHTML = `<p style="color: #ff4444;">Error: ${result.error}</p>`;
+            walletsList.innerHTML = `<p style="color: #ff4444;">Ошибка: ${result.error}</p>`;
             return;
         }
         
         const addresses = result.addresses || [];
         
         if (addresses.length === 0) {
-            walletsList.innerHTML = '<p>No wallets imported yet.</p>';
+            walletsList.innerHTML = '<p>Кошельки еще не импортированы.</p>';
             return;
         }
         
         walletsList.innerHTML = addresses.map((addr, index) => `
             <div style="padding: 10px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center;">
                 <div>
-                    <strong>Wallet ${index + 1}</strong><br>
+                    <strong>Кошелек ${index + 1}</strong><br>
                     <code style="font-size: 12px;">${addr}</code>
                 </div>
                 <button 
@@ -435,7 +435,7 @@ async function loadWalletsList() {
                     style="padding: 5px 10px; font-size: 12px;"
                     onclick="removeWallet('${addr}')"
                 >
-                    Remove
+                    Удалить
                 </button>
             </div>
         `).join('');
@@ -457,7 +457,7 @@ async function updateWalletCount() {
 
 // Make removeWallet available globally for inline onclick
 window.removeWallet = async function(address) {
-    if (!confirm(`Remove wallet ${address}?`)) {
+    if (!confirm(`Удалить кошелек ${address}?`)) {
         return;
     }
     
@@ -467,10 +467,10 @@ window.removeWallet = async function(address) {
             await loadWalletsList();
             await updateWalletCount();
         } else {
-            alert(`Error: ${result.error}`);
+            alert(`Ошибка: ${result.error}`);
         }
     } catch (error) {
-        alert(`Error: ${error.message}`);
+        alert(`Ошибка: ${error.message}`);
     }
 };
 

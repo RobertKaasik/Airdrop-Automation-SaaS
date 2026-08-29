@@ -292,16 +292,6 @@ tr:hover td { background: rgba(124, 58, 237, 0.04); }
   padding: 16px;
 }
 
-.modal {
-  background: #130d21;
-  border: 1px solid #4c3671;
-  border-radius: 14px;
-  width: 100%;
-  max-width: 500px;
-  padding: 24px;
-  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
-}
-
 .modal-header {
   display: flex;
   justify-content: space-between;
@@ -523,11 +513,16 @@ tr:hover td { background: rgba(124, 58, 237, 0.04); }
     inset: 0;
     background: rgba(0, 0, 0, 0.85);
     backdrop-filter: blur(4px);
-    display: flex;
+    display: none; /* Hidden by default */
     align-items: center;
     justify-content: center;
     z-index: 1000;
     padding: 16px;
+}
+
+.modal[style*="display: flex"],
+.modal:not([style*="display: none"]):not([hidden]) {
+    display: flex; /* Show when explicitly set */
 }
 
 .modal-content {

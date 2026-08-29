@@ -85,6 +85,7 @@ SUBSCRIPTION_TIERS = {
     "free": {"level": 0, "name": "Free"},
     "standard": {"level": 1, "name": "Standard"},
     "pro farmer": {"level": 2, "name": "PRO Farmer"},
+    "premium": {"level": 3, "name": "Premium"},
     "premium vip": {"level": 3, "name": "Premium VIP"},
     "vip ultimate": {"level": 4, "name": "VIP Ultimate"},
     "whale": {"level": 5, "name": "Whale / Syndicate"},

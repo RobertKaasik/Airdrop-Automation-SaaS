@@ -50,9 +50,9 @@
             
             <!-- Agent Mode Toggle Section -->
             <div class="mode-toggle-section">
-                <h3>Automated Agent Mode</h3>
+                <h3>Автоматический режим агента</h3>
                 <p class="mode-description">
-                    Enable fully automated transaction signing and broadcasting
+                    Включить полностью автоматическое подписание и отправку транзакций
                 </p>
                 
                 <div class="toggle-container">
@@ -65,7 +65,7 @@
                         <span class="slider"></span>
                     </label>
                     
-                    <span id="toggle-status" class="toggle-label">Disabled</span>
+                    <span id="toggle-status" class="toggle-label">Отключено</span>
                     <span id="tier-badge" class="tier-badge">Standard</span>
                 </div>
                 
@@ -73,30 +73,30 @@
                     <span class="lock-icon">🔒</span>
                     <div class="lock-content">
                         <p>
-                            <strong>Automated Agent Mode is locked</strong><br>
-                            <span id="tier-requirement">Requires Premium VIP (Level 3+) or higher</span>
+                            <strong>Автоматический режим агента заблокирован</strong><br>
+                            <span id="tier-requirement">Требуется Premium VIP (Уровень 3+) или выше</span>
                         </p>
                         <p class="current-tier">
-                            Current tier: <strong id="current-tier-name">Standard (Level 1)</strong>
+                            Текущий уровень: <strong id="current-tier-name">Standard (Уровень 1)</strong>
                         </p>
                         <button id="upgrade-btn" class="upgrade-button">
-                            Upgrade to Premium VIP
+                            Перейти на Premium VIP
                         </button>
                     </div>
                 </div>
                 
                 <div id="agent-mode-info" class="info-box" hidden>
                     <p>
-                        <strong>✓ Automated Agent Mode ACTIVE</strong><br>
-                        Desktop agent will execute tasks automatically using imported private keys.
+                        <strong>✓ Автоматический режим агента АКТИВЕН</strong><br>
+                        Десктоп агент будет выполнять задачи автоматически, используя импортированные приватные ключи.
                     </p>
                     <p>
-                        Status: <span id="agent-status">Idle</span><br>
-                        Imported wallets: <span id="wallet-count">0</span>
+                        Статус: <span id="agent-status">Ожидание</span><br>
+                        Импортированных кошельков: <span id="wallet-count">0</span>
                     </p>
                     <div style="display: flex; gap: 10px; margin-top: 10px;">
-                        <button id="import-keys-btn" class="primary">Import Private Keys</button>
-                        <button id="view-wallets-btn">View Wallets</button>
+                        <button id="import-keys-btn" class="primary">Импортировать приватные ключи</button>
+                        <button id="view-wallets-btn">Посмотреть кошельки</button>
                     </div>
                 </div>
             </div>
@@ -111,50 +111,50 @@
         </section>
         
         <!-- VIP Consent Dialog -->
-        <div id="vip-consent" class="modal" hidden>
+        <div id="vip-consent" class="modal" style="display: none;">
             <div class="modal-content">
-                <h2>⚠️ VIP Agent Mode - Risk Disclosure</h2>
-                <p><strong>You are about to enable fully automated transaction signing.</strong></p>
+                <h2>⚠️ VIP режим агента - Раскрытие рисков</h2>
+                <p><strong>Вы собираетесь включить полностью автоматическое подписание транзакций.</strong></p>
                 
                 <ul>
-                    <li>Private keys will be stored locally encrypted with OS-level protection</li>
-                    <li>Transactions will be signed and broadcast automatically</li>
-                    <li>You are responsible for reviewing schedules and gas limits</li>
-                    <li>This app cannot recover lost or stolen keys</li>
-                    <li>Malicious backend payloads could drain your wallets</li>
+                    <li>Приватные ключи будут храниться локально зашифрованными с защитой на уровне ОС</li>
+                    <li>Транзакции будут подписываться и отправляться автоматически</li>
+                    <li>Вы несете ответственность за проверку расписаний и лимитов газа</li>
+                    <li>Это приложение не может восстановить потерянные или украденные ключи</li>
+                    <li>Вредоносные payload с бэкенда могут опустошить ваши кошельки</li>
                 </ul>
                 
-                <p><strong>Only enable this if you fully trust the backend server.</strong></p>
+                <p><strong>Включайте только если полностью доверяете серверу бэкенда.</strong></p>
                 
                 <label>
                     <input type="checkbox" id="consent-checkbox">
-                    I understand the risks and accept full responsibility
+                    Я понимаю риски и принимаю полную ответственность
                 </label>
                 
                 <div class="modal-actions">
-                    <button id="accept-btn" class="primary" disabled>Enable VIP Agent Mode</button>
-                    <button id="cancel-btn">Stay in Safe Mode</button>
+                    <button id="accept-btn" class="primary" disabled>Включить VIP режим агента</button>
+                    <button id="cancel-btn">Остаться в безопасном режиме</button>
                 </div>
             </div>
         </div>
         
         <!-- Key Import Dialog -->
-        <div id="key-import-modal" class="modal" hidden>
+        <div id="key-import-modal" class="modal" style="display: none;">
             <div class="modal-content">
-                <h2>🔑 Import Private Keys</h2>
-                <p><strong>Enter private keys to import (one per line)</strong></p>
-                <p class="warning">⚠️ Keys will be encrypted with OS-native encryption. Never share or expose your private keys.</p>
+                <h2>🔑 Импорт приватных ключей</h2>
+                <p><strong>Введите приватные ключи для импорта (один на строку)</strong></p>
+                <p class="warning">⚠️ Ключи будут зашифрованы с помощью шифрования на уровне ОС. Никогда не делитесь и не раскрывайте свои приватные ключи.</p>
                 
                 <textarea 
                     id="key-import-textarea" 
-                    placeholder="0x1234abcd...&#10;0x5678efgh...&#10;&#10;Or paste a 12/24-word seed phrase"
+                    placeholder="0x1234abcd...&#10;0x5678efgh...&#10;&#10;Или вставьте seed-фразу из 12/24 слов"
                     rows="8"
                     style="width: 100%; font-family: monospace; padding: 10px; box-sizing: border-box;"
                 ></textarea>
                 
                 <div class="modal-actions">
-                    <button id="import-submit-btn" class="primary">Import Keys</button>
-                    <button id="import-cancel-btn">Cancel</button>
+                    <button id="import-submit-btn" class="primary">Импортировать ключи</button>
+                    <button id="import-cancel-btn">Отмена</button>
                 </div>
                 
                 <div id="import-status" style="margin-top: 15px; display: none;">
@@ -164,15 +164,15 @@
         </div>
         
         <!-- Wallets View Dialog -->
-        <div id="wallets-modal" class="modal" hidden>
+        <div id="wallets-modal" class="modal" style="display: none;">
             <div class="modal-content">
-                <h2>💼 Imported Wallets</h2>
+                <h2>💼 Импортированные кошельки</h2>
                 <div id="wallets-list" style="max-height: 400px; overflow-y: auto;">
                     <!-- Wallet list will be populated here -->
                 </div>
                 <div class="modal-actions">
-                    <button id="wallets-close-btn" class="primary">Close</button>
-                    <button id="clear-all-keys-btn" class="danger">Clear All Keys</button>
+                    <button id="wallets-close-btn" class="primary">Закрыть</button>
+                    <button id="clear-all-keys-btn" class="danger">Удалить все ключи</button>
                 </div>
             </div>
         </div>
