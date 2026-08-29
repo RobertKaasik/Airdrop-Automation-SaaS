@@ -233,4 +233,199 @@ if (upgradeBtn) {
     });
 }
 
+// ==============================================================================
+// KEY IMPORT FUNCTIONALITY
+// ==============================================================================
+
+const importKeysBtn = $('import-keys-btn');
+const viewWalletsBtn = $('view-wallets-btn');
+const keyImportModal = $('key-import-modal');
+const importSubmitBtn = $('import-submit-btn');
+const importCancelBtn = $('import-cancel-btn');
+const keyImportTextarea = $('key-import-textarea');
+const importStatus = $('import-status');
+const importStatusText = $('import-status-text');
+
+const walletsModal = $('wallets-modal');
+const walletsCloseBtn = $('wallets-close-btn');
+const clearAllKeysBtn = $('clear-all-keys-btn');
+const walletsList = $('wallets-list');
+const walletCountSpan = $('wallet-count');
+
+// Open key import modal
+importKeysBtn?.addEventListener('click', () => {
+    keyImportModal.removeAttribute('hidden');
+    keyImportTextarea.value = '';
+    importStatus.style.display = 'none';
+});
+
+// Cancel key import
+importCancelBtn?.addEventListener('click', () => {
+    keyImportModal.setAttribute('hidden', '');
+});
+
+// Submit key import
+importSubmitBtn?.addEventListener('click', async () => {
+    const text = keyImportTextarea.value.trim();
+    
+    if (!text) {
+        showImportStatus('Please enter at least one private key', 'error');
+        return;
+    }
+    
+    importSubmitBtn.disabled = true;
+    importSubmitBtn.textContent = 'Importing...';
+    
+    try {
+        // Parse input - could be private keys (one per line) or seed phrase
+        const lines = text.split('\n').map(line => line.trim()).filter(line => line);
+        
+        // Check if it looks like a seed phrase (12 or 24 words)
+        const words = text.split(/\s+/).filter(w => w);
+        const isSeedPhrase = words.length === 12 || words.length === 24;
+        
+        let result;
+        if (isSeedPhrase) {
+            // Import as seed phrase
+            result = await window.companion.importSeedPhrase(text);
+        } else {
+            // Import as private keys
+            result = await window.companion.importPrivateKeys(lines);
+        }
+        
+        if (result.success) {
+            showImportStatus(`Successfully imported ${result.count} wallet(s)`, 'success');
+            keyImportTextarea.value = '';
+            await updateWalletCount();
+            
+            setTimeout(() => {
+                keyImportModal.setAttribute('hidden', '');
+            }, 2000);
+        } else {
+            showImportStatus(`Error: ${result.error}`, 'error');
+        }
+    } catch (error) {
+        showImportStatus(`Error: ${error.message}`, 'error');
+    } finally {
+        importSubmitBtn.disabled = false;
+        importSubmitBtn.textContent = 'Import Keys';
+    }
+});
+
+function showImportStatus(message, type) {
+    importStatusText.textContent = message;
+    importStatusText.style.color = type === 'error' ? '#ff4444' : '#44ff44';
+    importStatus.style.display = 'block';
+}
+
+// View wallets
+viewWalletsBtn?.addEventListener('click', async () => {
+    await loadWalletsList();
+    walletsModal.removeAttribute('hidden');
+});
+
+// Close wallets modal
+walletsCloseBtn?.addEventListener('click', () => {
+    walletsModal.setAttribute('hidden', '');
+});
+
+// Clear all keys
+clearAllKeysBtn?.addEventListener('click', async () => {
+    if (!confirm('Are you sure you want to clear all imported keys? This cannot be undone.')) {
+        return;
+    }
+    
+    try {
+        const result = await window.companion.clearAllKeys();
+        if (result.success) {
+            await loadWalletsList();
+            await updateWalletCount();
+            alert('All keys cleared successfully');
+        } else {
+            alert(`Error: ${result.error}`);
+        }
+    } catch (error) {
+        alert(`Error: ${error.message}`);
+    }
+});
+
+async function loadWalletsList() {
+    try {
+        const result = await window.companion.listWallets();
+        
+        if (!result.success) {
+            walletsList.innerHTML = `<p style="color: #ff4444;">Error: ${result.error}</p>`;
+            return;
+        }
+        
+        const addresses = result.addresses || [];
+        
+        if (addresses.length === 0) {
+            walletsList.innerHTML = '<p>No wallets imported yet.</p>';
+            return;
+        }
+        
+        walletsList.innerHTML = addresses.map((addr, index) => `
+            <div style="padding: 10px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <strong>Wallet ${index + 1}</strong><br>
+                    <code style="font-size: 12px;">${addr}</code>
+                </div>
+                <button 
+                    class="danger" 
+                    style="padding: 5px 10px; font-size: 12px;"
+                    onclick="removeWallet('${addr}')"
+                >
+                    Remove
+                </button>
+            </div>
+        `).join('');
+    } catch (error) {
+        walletsList.innerHTML = `<p style="color: #ff4444;">Error: ${error.message}</p>`;
+    }
+}
+
+async function updateWalletCount() {
+    try {
+        const result = await window.companion.listWallets();
+        if (result.success && walletCountSpan) {
+            walletCountSpan.textContent = result.addresses?.length || 0;
+        }
+    } catch (error) {
+        console.error('Failed to update wallet count:', error);
+    }
+}
+
+// Make removeWallet available globally for inline onclick
+window.removeWallet = async function(address) {
+    if (!confirm(`Remove wallet ${address}?`)) {
+        return;
+    }
+    
+    try {
+        const result = await window.companion.removeWallet(address);
+        if (result.success) {
+            await loadWalletsList();
+            await updateWalletCount();
+        } else {
+            alert(`Error: ${result.error}`);
+        }
+    } catch (error) {
+        alert(`Error: ${error.message}`);
+    }
+};
+
+// Update wallet count when showing state
+async function showStateWithWalletCount() {
+    await showState();
+    const agentModeInfo = $('agent-mode-info');
+    if (agentModeInfo && !agentModeInfo.hidden) {
+        await updateWalletCount();
+    }
+}
+
+// ==============================================================================
+// END KEY IMPORT FUNCTIONALITY
+// ==============================================================================
+
 showState().catch((error) => message(error.message, true));

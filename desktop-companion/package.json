@@ -9,6 +9,9 @@
     "test": "node --check main.cjs && node --check preload.cjs && node --check renderer/renderer.js && node tests/test-safe-companion.cjs",
     "package:win": "electron-builder --win --x64"
   },
+  "dependencies": {
+    "ethers": "^6.13.0"
+  },
   "devDependencies": {
     "electron": "^37.0.0",
     "electron-builder": "^26.0.12"
@@ -20,6 +23,9 @@
     "files": [
       "main.cjs",
       "preload.cjs",
+      "crypto-storage.cjs",
+      "tx-executor.cjs",
+      "task-poller.cjs",
       "renderer/**/*",
       "package.json"
     ],

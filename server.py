@@ -924,6 +924,23 @@ migrate_schedules()
 
 app = FastAPI(title="AIRDROP-X Backend API")
 
+# ==============================================================================
+# AGENT BACKEND ROUTERS
+# ==============================================================================
+# Import and mount agent backend routers for automated transaction execution
+try:
+    from agent_backend.routers.tasks import router as tasks_router
+    from agent_backend.routers.telemetry import router as telemetry_router
+    
+    app.include_router(tasks_router)
+    app.include_router(telemetry_router)
+    print("[Agent Backend] Routers mounted successfully")
+except ImportError as e:
+    print(f"[Agent Backend] Warning: Failed to load agent backend routers: {e}")
+    print("[Agent Backend] Agent mode API will not be available")
+except Exception as e:
+    print(f"[Agent Backend] Error mounting routers: {e}")
+
 # Never expose the project directory itself: it contains server code, the local
 # database, and environment files. The UI only needs this small allow-list.
 PUBLIC_STATIC_PATHS = {

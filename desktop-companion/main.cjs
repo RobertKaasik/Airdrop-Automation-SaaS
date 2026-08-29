@@ -1,6 +1,9 @@
 const { app, BrowserWindow, ipcMain, Notification, safeStorage, shell } = require('electron');
 const fs = require('fs');
 const path = require('path');
+const CryptoStorage = require('./crypto-storage.cjs');
+const TransactionExecutor = require('./tx-executor.cjs');
+const TaskPoller = require('./task-poller.cjs');
 
 const POLL_INTERVAL_MS = 60_000;
 const WEEKDAYS = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
@@ -15,6 +18,8 @@ const AGENT_MODE_MIN_LEVEL = 3;
 // Agent mode state
 let companionMode = 'safe'; // 'safe' | 'agent'
 let cryptoStorage = null;
+let transactionExecutor = null;
+let taskPoller = null;
 let autoModeAllowed = false;
 let userTier = 'standard';
 let tierLevel = 0;
@@ -223,13 +228,74 @@ ipcMain.handle('companion:enable-agent-mode', async (event) => {
   
   try {
     companionMode = 'agent';
-    // TODO: Initialize crypto storage and agent mode components
-    // This will be implemented in later phases
-    console.log('[Agent] Agent mode enabled');
+    
+    // Initialize crypto storage
+    cryptoStorage = new CryptoStorage(app.getPath('userData'));
+    await cryptoStorage.initialize();
+    console.log('[Agent] Crypto storage initialized');
+    
+    // Initialize transaction executor with RPC configuration
+    const rpcConfig = {
+      1: {
+        primary: process.env.ETH_RPC_PRIMARY || 'https://eth.llamarpc.com',
+        fallback: 'https://rpc.ankr.com/eth'
+      },
+      8453: {
+        primary: process.env.BASE_RPC_PRIMARY || 'https://mainnet.base.org',
+        fallback: 'https://base.llamarpc.com'
+      },
+      42161: {
+        primary: process.env.ARB_RPC_PRIMARY || 'https://arb1.arbitrum.io/rpc',
+        fallback: 'https://arbitrum.llamarpc.com'
+      },
+      10: {
+        primary: process.env.OP_RPC_PRIMARY || 'https://mainnet.optimism.io',
+        fallback: 'https://optimism.llamarpc.com'
+      }
+    };
+    
+    transactionExecutor = new TransactionExecutor(cryptoStorage, rpcConfig);
+    console.log('[Agent] Transaction executor initialized');
+    
+    // Initialize task poller with API client
+    const apiClient = {
+      getTasks: async () => {
+        const config = readConfig();
+        const token = getToken(config);
+        if (!config.origin || !token) {
+          throw new Error('Not paired');
+        }
+        return await requestApi(config.origin, '/api/companion/tasks', token);
+      },
+      submitTelemetry: async (telemetry) => {
+        const config = readConfig();
+        const token = getToken(config);
+        if (!config.origin || !token) {
+          throw new Error('Not paired');
+        }
+        return await requestApi(config.origin, '/api/companion/telemetry', token, {
+          method: 'POST',
+          body: JSON.stringify(telemetry)
+        });
+      }
+    };
+    
+    taskPoller = new TaskPoller(transactionExecutor, apiClient, {
+      pollInterval: 30000 // 30 seconds
+    });
+    taskPoller.setMode('agent');
+    await taskPoller.startPolling();
+    console.log('[Agent] Task poller started');
+    
+    console.log('[Agent] Agent mode fully enabled');
     
     return { success: true };
   } catch (error) {
     companionMode = 'safe';
+    cryptoStorage = null;
+    transactionExecutor = null;
+    taskPoller = null;
+    console.error('[Agent] Failed to enable agent mode:', error);
     return {
       success: false,
       error: error.message
@@ -239,11 +305,143 @@ ipcMain.handle('companion:enable-agent-mode', async (event) => {
 
 ipcMain.handle('companion:disable-agent-mode', async (event) => {
   if (companionMode === 'agent') {
-    // TODO: Shutdown agent mode components
+    // Shutdown agent mode components
+    if (taskPoller) {
+      taskPoller.stopPolling();
+      taskPoller = null;
+      console.log('[Agent] Task poller stopped');
+    }
+    
+    transactionExecutor = null;
+    cryptoStorage = null;
     companionMode = 'safe';
+    
     console.log('[Agent] Agent mode disabled');
   }
   return { success: true };
+});
+
+// ==============================================================================
+// KEY MANAGEMENT IPC HANDLERS
+// ==============================================================================
+
+ipcMain.handle('companion:import-private-keys', async (event, keys) => {
+  if (!cryptoStorage) {
+    return {
+      success: false,
+      error: 'Agent mode not enabled'
+    };
+  }
+  
+  try {
+    const result = await cryptoStorage.importPrivateKeys(keys);
+    console.log(`[KeyManagement] Imported ${result.count} private key(s)`);
+    return {
+      success: true,
+      count: result.count,
+      addresses: result.addresses
+    };
+  } catch (error) {
+    console.error('[KeyManagement] Import error:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+});
+
+ipcMain.handle('companion:import-seed-phrase', async (event, phrase) => {
+  if (!cryptoStorage) {
+    return {
+      success: false,
+      error: 'Agent mode not enabled'
+    };
+  }
+  
+  try {
+    const result = await cryptoStorage.importSeedPhrase(phrase);
+    console.log(`[KeyManagement] Imported seed phrase generating ${result.count} wallet(s)`);
+    return {
+      success: true,
+      count: result.count,
+      addresses: result.addresses
+    };
+  } catch (error) {
+    console.error('[KeyManagement] Seed import error:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+});
+
+ipcMain.handle('companion:list-wallets', async (event) => {
+  if (!cryptoStorage) {
+    return {
+      success: false,
+      error: 'Agent mode not enabled'
+    };
+  }
+  
+  try {
+    const addresses = await cryptoStorage.listAddresses();
+    return {
+      success: true,
+      addresses
+    };
+  } catch (error) {
+    console.error('[KeyManagement] List error:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+});
+
+ipcMain.handle('companion:remove-wallet', async (event, address) => {
+  if (!cryptoStorage) {
+    return {
+      success: false,
+      error: 'Agent mode not enabled'
+    };
+  }
+  
+  try {
+    await cryptoStorage.removeKey(address);
+    console.log(`[KeyManagement] Removed wallet ${address}`);
+    return {
+      success: true
+    };
+  } catch (error) {
+    console.error('[KeyManagement] Remove error:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+});
+
+ipcMain.handle('companion:clear-all-keys', async (event) => {
+  if (!cryptoStorage) {
+    return {
+      success: false,
+      error: 'Agent mode not enabled'
+    };
+  }
+  
+  try {
+    await cryptoStorage.clearAll();
+    console.log('[KeyManagement] Cleared all keys');
+    return {
+      success: true
+    };
+  } catch (error) {
+    console.error('[KeyManagement] Clear error:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
 });
 
 app.whenReady().then(async () => { createWindow(); await syncTasks().catch(() => {}); setInterval(() => syncTasks().catch(() => {}), POLL_INTERVAL_MS); app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); }); });

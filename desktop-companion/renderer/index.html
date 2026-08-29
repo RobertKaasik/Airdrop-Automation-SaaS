@@ -87,12 +87,17 @@
                 
                 <div id="agent-mode-info" class="info-box" hidden>
                     <p>
-                        ✓ Automated signing enabled for Premium tiers:<br>
-                        • Premium VIP (Level 3)<br>
-                        • VIP Ultimate (Level 4)<br>
-                        • Whale / Syndicate (Level 5)<br>
-                        • Enterprise (Level 6)
+                        <strong>✓ Automated Agent Mode ACTIVE</strong><br>
+                        Desktop agent will execute tasks automatically using imported private keys.
                     </p>
+                    <p>
+                        Status: <span id="agent-status">Idle</span><br>
+                        Imported wallets: <span id="wallet-count">0</span>
+                    </p>
+                    <div style="display: flex; gap: 10px; margin-top: 10px;">
+                        <button id="import-keys-btn" class="primary">Import Private Keys</button>
+                        <button id="view-wallets-btn">View Wallets</button>
+                    </div>
                 </div>
             </div>
             
@@ -129,6 +134,45 @@
                 <div class="modal-actions">
                     <button id="accept-btn" class="primary" disabled>Enable VIP Agent Mode</button>
                     <button id="cancel-btn">Stay in Safe Mode</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Key Import Dialog -->
+        <div id="key-import-modal" class="modal" hidden>
+            <div class="modal-content">
+                <h2>🔑 Import Private Keys</h2>
+                <p><strong>Enter private keys to import (one per line)</strong></p>
+                <p class="warning">⚠️ Keys will be encrypted with OS-native encryption. Never share or expose your private keys.</p>
+                
+                <textarea 
+                    id="key-import-textarea" 
+                    placeholder="0x1234abcd...&#10;0x5678efgh...&#10;&#10;Or paste a 12/24-word seed phrase"
+                    rows="8"
+                    style="width: 100%; font-family: monospace; padding: 10px; box-sizing: border-box;"
+                ></textarea>
+                
+                <div class="modal-actions">
+                    <button id="import-submit-btn" class="primary">Import Keys</button>
+                    <button id="import-cancel-btn">Cancel</button>
+                </div>
+                
+                <div id="import-status" style="margin-top: 15px; display: none;">
+                    <p id="import-status-text"></p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Wallets View Dialog -->
+        <div id="wallets-modal" class="modal" hidden>
+            <div class="modal-content">
+                <h2>💼 Imported Wallets</h2>
+                <div id="wallets-list" style="max-height: 400px; overflow-y: auto;">
+                    <!-- Wallet list will be populated here -->
+                </div>
+                <div class="modal-actions">
+                    <button id="wallets-close-btn" class="primary">Close</button>
+                    <button id="clear-all-keys-btn" class="danger">Clear All Keys</button>
                 </div>
             </div>
         </div>

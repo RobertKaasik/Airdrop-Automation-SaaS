@@ -668,3 +668,49 @@ tr:hover td { background: rgba(124, 58, 237, 0.04); }
     }
 }
 
+/* ==============================================================================
+   KEY IMPORT MODALS
+   ============================================================================== */
+
+/* Key import specific styles */
+.warning {
+  color: #ff9800;
+  background: rgba(255, 152, 0, 0.1);
+  padding: 10px;
+  border-radius: 4px;
+  margin: 10px 0;
+  font-size: 14px;
+}
+
+#key-import-textarea {
+  width: 100%;
+  font-family: 'Courier New', monospace;
+  padding: 10px;
+  box-sizing: border-box;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
+  border-radius: 4px;
+  resize: vertical;
+}
+
+#import-status-text {
+  padding: 10px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+#wallets-list {
+  max-height: 400px;
+  overflow-y: auto;
+  margin: 15px 0;
+}
+
+.info-box code {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+}
+
