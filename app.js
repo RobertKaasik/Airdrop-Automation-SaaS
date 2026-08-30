@@ -5127,10 +5127,6 @@ function populateWalletScheduleText() {
         if (element) element.textContent = value;
     });
     fillWalletScheduleNetworkSelects();
-    ['walletScheduleFromToken', 'walletScheduleToToken'].forEach(id => {
-        const input = document.getElementById(id);
-        if (input) input.placeholder = locale.walletScheduleTokenPlaceholder;
-    });
     syncWalletScheduleOperationFields();
     renderWalletScheduleInlineHint('walletScheduleSafety', 'wallet-schedule-safety', locale.walletScheduleSafety);
     renderWalletSchedulePreview();
@@ -5252,6 +5248,115 @@ function fillWalletScheduleNetworkSelects() {
     });
 }
 
+function scheduleTokenOptionLabel(token) {
+    const symbol = String(token.symbol || '').toUpperCase() || 'TOKEN';
+    const name = String(token.name || symbol);
+    return `${symbol} · ${name}`;
+}
+
+function filterScheduleTokenChoices(action, role, tokens) {
+    const list = Array.isArray(tokens) ? tokens.slice() : [];
+    const native = list.find((token) => String(token.address || '').toLowerCase() === UNIVERSAL_BRIDGE_NATIVE_TOKEN);
+    const usdc = list.find((token) => String(token.symbol || '').toUpperCase() === 'USDC');
+    const core = list.filter((token) => token.is_core);
+
+    if (action === 'dex') {
+        if (role === 'from') return native ? [native] : core.slice(0, 1);
+        if (usdc) return [usdc];
+        return core.filter((token) => String(token.address || '').toLowerCase() !== UNIVERSAL_BRIDGE_NATIVE_TOKEN).slice(0, 6);
+    }
+    if (action === 'lending') {
+        return usdc ? [usdc] : core.slice(0, 1);
+    }
+    const preferred = [];
+    const seen = new Set();
+    for (const token of [native, usdc, ...core]) {
+        if (!token) continue;
+        const key = String(token.address || '').toLowerCase();
+        if (!key || seen.has(key)) continue;
+        seen.add(key);
+        preferred.push(token);
+    }
+    return preferred.slice(0, 24);
+}
+
+function populateWalletScheduleTokenSelect(elementId, tokens, preferredAddress = '') {
+    const select = document.getElementById(elementId);
+    if (!select) return;
+    const locale = translations[getActiveLang()];
+    const previous = preferredAddress || select.value || '';
+    select.replaceChildren();
+    if (!tokens.length) {
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = locale.walletScheduleTokensLoading || locale.loading;
+        select.append(option);
+        select.disabled = true;
+        return;
+    }
+    for (const token of tokens) {
+        const option = document.createElement('option');
+        option.value = token.address;
+        option.textContent = scheduleTokenOptionLabel(token);
+        select.append(option);
+    }
+    const match = tokens.find((token) => String(token.address || '').toLowerCase() === String(previous).toLowerCase());
+    const native = tokens.find((token) => String(token.address || '').toLowerCase() === UNIVERSAL_BRIDGE_NATIVE_TOKEN);
+    const usdc = tokens.find((token) => String(token.symbol || '').toUpperCase() === 'USDC');
+    const fallback = elementId === 'walletScheduleToToken' ? (usdc || native || tokens[0]) : (native || usdc || tokens[0]);
+    select.value = match?.address || fallback?.address || tokens[0].address;
+    select.disabled = false;
+}
+
+async function refreshWalletScheduleTokenSelects(preferred = {}) {
+    const action = document.getElementById('walletScheduleAction')?.value || 'dex';
+    const fromNetwork = document.getElementById('walletScheduleFromNetwork')?.value || 'Base';
+    const toNetwork = document.getElementById('walletScheduleToNetwork')?.value || fromNetwork;
+    const locale = translations[getActiveLang()];
+    const fromSelect = document.getElementById('walletScheduleFromToken');
+    const toSelect = document.getElementById('walletScheduleToToken');
+    if (fromSelect) fromSelect.disabled = true;
+    if (toSelect) toSelect.disabled = true;
+    try {
+        const networks = action === 'bridge'
+            ? Array.from(new Set([fromNetwork, toNetwork]))
+            : [fromNetwork || 'Base'];
+        await Promise.all(networks.map((network) => loadUniversalBridgeTokens(network)));
+        const fromTokens = filterScheduleTokenChoices(
+            action,
+            'from',
+            universalBridgeTokensByNetwork[fromNetwork] || [],
+        );
+        const toTokens = filterScheduleTokenChoices(
+            action,
+            'to',
+            universalBridgeTokensByNetwork[action === 'bridge' ? toNetwork : fromNetwork] || [],
+        );
+        populateWalletScheduleTokenSelect('walletScheduleFromToken', fromTokens, preferred.from || '');
+        populateWalletScheduleTokenSelect('walletScheduleToToken', toTokens, preferred.to || '');
+    } catch (_) {
+        populateWalletScheduleTokenSelect('walletScheduleFromToken', [{
+            address: UNIVERSAL_BRIDGE_NATIVE_TOKEN,
+            symbol: 'ETH',
+            name: locale.walletScheduleNativeToken || 'Native',
+            is_core: true,
+        }], preferred.from || UNIVERSAL_BRIDGE_NATIVE_TOKEN);
+        populateWalletScheduleTokenSelect('walletScheduleToToken', [{
+            address: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+            symbol: 'USDC',
+            name: 'USD Coin',
+            is_core: true,
+        }], preferred.to || '');
+    }
+}
+
+function onWalletScheduleNetworkChanged() {
+    void refreshWalletScheduleTokenSelects({
+        from: document.getElementById('walletScheduleFromToken')?.value || '',
+        to: document.getElementById('walletScheduleToToken')?.value || '',
+    });
+}
+
 function setWalletScheduleFieldValue(id, value) {
     const field = document.getElementById(id);
     if (field) field.value = value ?? '';
@@ -5259,26 +5364,36 @@ function setWalletScheduleFieldValue(id, value) {
 
 function setWalletScheduleAmountMode(mode) {
     walletScheduleAmountMode = mode === 'random' ? 'random' : 'fixed';
-    syncWalletScheduleOperationFields();
+    syncWalletScheduleOperationFields({ refreshTokens: false });
 }
 
-function syncWalletScheduleOperationFields() {
+function syncWalletScheduleOperationFields(options = {}) {
+    const refreshTokens = options.refreshTokens !== false;
     const locale = translations[getActiveLang()];
     const action = document.getElementById('walletScheduleAction')?.value || 'dex';
     const isBridge = action === 'bridge';
+    const isLending = action === 'lending';
     const fixedRow = document.getElementById('walletScheduleAmountFixedRow');
     const randomRow = document.getElementById('walletScheduleAmountRandomRow');
     const toWrap = document.getElementById('walletScheduleToNetworkWrap');
+    const toTokenWrap = document.getElementById('walletScheduleToTokenWrap');
     const fixedButton = document.getElementById('walletScheduleAmountFixedMode');
     const randomButton = document.getElementById('walletScheduleAmountRandomMode');
     if (fixedRow) fixedRow.hidden = walletScheduleAmountMode !== 'fixed';
     if (randomRow) randomRow.hidden = walletScheduleAmountMode !== 'random';
     if (toWrap) toWrap.hidden = !isBridge;
+    if (toTokenWrap) toTokenWrap.hidden = isLending;
     if (fixedButton) fixedButton.classList.toggle('is-active', walletScheduleAmountMode === 'fixed');
     if (randomButton) randomButton.classList.toggle('is-active', walletScheduleAmountMode === 'random');
     const saveButton = document.getElementById('walletScheduleSave');
     if (saveButton && !walletScheduleMutationInFlight) {
         saveButton.textContent = editingWalletScheduleId ? locale.walletScheduleUpdate : locale.walletScheduleSave;
+    }
+    if (refreshTokens) {
+        void refreshWalletScheduleTokenSelects({
+            from: document.getElementById('walletScheduleFromToken')?.value || '',
+            to: document.getElementById('walletScheduleToToken')?.value || '',
+        });
     }
 }
 
@@ -5294,8 +5409,6 @@ function resetWalletScheduleForm() {
     fillWalletScheduleNetworkSelects();
     setWalletScheduleFieldValue('walletScheduleFromNetwork', 'Base');
     setWalletScheduleFieldValue('walletScheduleToNetwork', 'Arbitrum');
-    setWalletScheduleFieldValue('walletScheduleFromToken', '');
-    setWalletScheduleFieldValue('walletScheduleToToken', '');
     setWalletScheduleFieldValue('walletScheduleWeeklyMin', '3');
     setWalletScheduleFieldValue('walletScheduleWeeklyMax', '4');
     setWalletScheduleFieldValue('walletScheduleWindowStart', '10:00');
@@ -5324,9 +5437,11 @@ function populateWalletScheduleForm(schedule) {
     setWalletScheduleFieldValue('walletScheduleAmountMax', schedule.amount_max || '');
     setWalletScheduleFieldValue('walletScheduleFromNetwork', schedule.from_network || 'Base');
     setWalletScheduleFieldValue('walletScheduleToNetwork', schedule.to_network || 'Arbitrum');
-    setWalletScheduleFieldValue('walletScheduleFromToken', schedule.from_token || '');
-    setWalletScheduleFieldValue('walletScheduleToToken', schedule.to_token || '');
-    syncWalletScheduleOperationFields();
+    syncWalletScheduleOperationFields({ refreshTokens: false });
+    void refreshWalletScheduleTokenSelects({
+        from: schedule.from_token || '',
+        to: schedule.to_token || '',
+    });
 
     const mode = schedule.schedule_mode === 'custom' || schedule.schedule_mode === 'fixed' ? 'custom' : 'flexible';
     walletScheduleMode = mode;
@@ -5340,6 +5455,7 @@ function populateWalletScheduleForm(schedule) {
         if (start && schedule.window_start) start.value = schedule.window_start;
         if (end && schedule.window_end) end.value = schedule.window_end;
         walletScheduleCustomSlots = [];
+        setWalletScheduleMode('flexible');
         return;
     }
 
@@ -5350,6 +5466,7 @@ function populateWalletScheduleForm(schedule) {
         day: slot.day || slot.day_of_week,
         time: normalize24HourTime(slot.time || slot.time_of_day) || '18:00',
     })).filter(slot => /^[A-Z][a-z]{2}$/.test(slot.day));
+    setWalletScheduleMode('custom');
 }
 
 function getWalletScheduleBuilderMarkup() {
@@ -5392,16 +5509,16 @@ function getWalletScheduleBuilderMarkup() {
             </div>
             <div class="wallet-schedule-flex-grid">
                 <label><span id="walletScheduleFromNetworkLabel"></span>
-                    <select id="walletScheduleFromNetwork" class="auth-input"></select>
+                    <select id="walletScheduleFromNetwork" class="auth-input" onchange="onWalletScheduleNetworkChanged('from')"></select>
                 </label>
                 <label id="walletScheduleToNetworkWrap"><span id="walletScheduleToNetworkLabel"></span>
-                    <select id="walletScheduleToNetwork" class="auth-input"></select>
+                    <select id="walletScheduleToNetwork" class="auth-input" onchange="onWalletScheduleNetworkChanged('to')"></select>
                 </label>
-                <label><span id="walletScheduleFromTokenLabel"></span>
-                    <input id="walletScheduleFromToken" type="text" class="auth-input" spellcheck="false" autocomplete="off">
+                <label id="walletScheduleFromTokenWrap"><span id="walletScheduleFromTokenLabel"></span>
+                    <select id="walletScheduleFromToken" class="auth-input"></select>
                 </label>
-                <label><span id="walletScheduleToTokenLabel"></span>
-                    <input id="walletScheduleToToken" type="text" class="auth-input" spellcheck="false" autocomplete="off">
+                <label id="walletScheduleToTokenWrap"><span id="walletScheduleToTokenLabel"></span>
+                    <select id="walletScheduleToToken" class="auth-input"></select>
                 </label>
             </div>
         </div>
@@ -5448,6 +5565,14 @@ async function openWalletWorkspace(walletId, options = {}) {
         return;
     }
     await renderWalletWorkspace();
+}
+
+function openActionCenterFromWorkspace(walletId) {
+    const id = Number(walletId);
+    if (Number.isFinite(id) && id > 0) {
+        activeOperationWalletId = id;
+    }
+    switchMenu(null, 'Farming');
 }
 
 async function openWalletScheduleModal(walletId) {
@@ -5532,7 +5657,7 @@ async function renderWalletWorkspace() {
                 </div>
                 <div class="wallet-workspace-header-actions">
                     ${isActive ? '' : `<button type="button" class="btn-dark-sm" onclick="activateSavedWallet(${wallet.id}, '${wallet.wallet_address}')">${escapeHtml(locale.walletActivate)}</button>`}
-                    <button type="button" class="btn-dark-sm" onclick="switchMenu(null, 'Farming')">${escapeHtml(locale.walletWorkspaceDoOnce)}</button>
+                    <button type="button" class="btn-dark-sm" onclick="openActionCenterFromWorkspace(${wallet.id})">${escapeHtml(locale.walletWorkspaceDoOnce)}</button>
                 </div>
             </div>
         </div>
@@ -5623,9 +5748,11 @@ function applyPendingScheduleDraft() {
     fillWalletScheduleNetworkSelects();
     if (draft.from_network) setWalletScheduleFieldValue('walletScheduleFromNetwork', draft.from_network);
     if (draft.to_network) setWalletScheduleFieldValue('walletScheduleToNetwork', draft.to_network);
-    if (draft.from_token) setWalletScheduleFieldValue('walletScheduleFromToken', draft.from_token);
-    if (draft.to_token) setWalletScheduleFieldValue('walletScheduleToToken', draft.to_token);
-    syncWalletScheduleOperationFields();
+    syncWalletScheduleOperationFields({ refreshTokens: false });
+    void refreshWalletScheduleTokenSelects({
+        from: draft.from_token || '',
+        to: draft.to_token || '',
+    });
     renderWalletScheduleValidatePanel(null);
 }
 
@@ -9228,21 +9355,19 @@ function renderDashboardContent(section) {
         const activePane = { dex: dexPane, bridges: bridgesPane, lending: lendingPane, journal: journalPane }[activityPane];
         
         centerHtml = `
-            <div class="dashboard-card action-center-secondary" style="margin-bottom:16px;">
-                <div class="action-center-secondary__copy">
-                    <div class="account-kicker">${t.actionCenterSecondaryKicker}</div>
-                    <h3>${t.actionCenterSecondaryTitle}</h3>
-                    <p>${t.actionCenterSecondaryDesc}</p>
+            <div class="dashboard-card action-center-place" style="margin-bottom:16px;">
+                <div class="action-center-place__copy">
+                    <div class="account-kicker">${t.actionCenterHereKicker}</div>
+                    <h3>${t.activityTitle}</h3>
+                    <p>${t.activityDesc}</p>
+                    <p class="action-center-place__map">${t.actionCenterPlaceMap}</p>
                 </div>
-                <div class="action-center-secondary__actions">
-                    <button type="button" class="btn-dark-sm" onclick="switchMenu(null, 'Calendar')">${t.menuCalendar}</button>
-                    <button type="button" class="btn-dark-sm" onclick="switchMenu(null, 'Wallets')">${t.accountOverviewGoWallets}</button>
-                    <button type="button" class="btn-purple-lg action-center-save-schedule" onclick="saveCurrentOperationToSchedule()">${t.actionCenterSaveToSchedule}</button>
+                <div class="action-center-place__actions">
+                    <button type="button" class="btn-dark-sm" onclick="switchMenu(null, 'Wallets')">${t.actionCenterGoSchedule}</button>
+                    <button type="button" class="btn-dark-sm" onclick="saveCurrentOperationToSchedule()">${t.actionCenterSaveToSchedule}</button>
                 </div>
             </div>
             <div class="dashboard-card" style="margin-bottom:16px;">
-                <h3 style="color:#fff; margin:0 0 5px; font-size:17px;">${t.activityTitle}</h3>
-                <p style="color:var(--text-muted); font-size:13px; line-height:1.5; margin:0 0 14px;">${t.activityDesc}</p>
                 <div style="display:flex; flex-wrap:wrap; gap:8px;">${activityTabs}</div>
             </div>
             ${activePane}

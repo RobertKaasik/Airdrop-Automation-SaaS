@@ -3493,6 +3493,12 @@ input.auth-input {
 .wallet-workspace-ready-row.is-attention { border-color: rgba(251,191,36,.35); }
 .wallet-workspace-builder .wallet-schedule-form { margin-top: 4px; }
 .wallet-workspace-builder .wallet-schedule-save { margin-top: 12px; }
+.action-center-place { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+.action-center-place__copy { flex:1 1 280px; min-width:0; }
+.action-center-place__copy h3 { color:#fff; font-size:16px; margin:4px 0 0; }
+.action-center-place__copy p { color:var(--text-muted); font-size:12px; line-height:1.5; margin:6px 0 0; max-width:620px; }
+.action-center-place__map { color:#c4b5fd !important; }
+.action-center-place__actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
 .action-center-secondary { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-wrap:wrap; }
 .action-center-secondary__copy { flex:1 1 280px; min-width:0; }
 .action-center-secondary__copy h3 { color:#fff; font-size:16px; margin:4px 0 0; }
