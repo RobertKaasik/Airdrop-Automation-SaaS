@@ -28,7 +28,7 @@ class ExecutionWindow(BaseModel):
     """UTC-based execution time window."""
     start_utc: int
     end_utc: int
-    timezone: str
+    timezone: str = "UTC"
     
     class Config:
         json_schema_extra = {

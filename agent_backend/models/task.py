@@ -12,7 +12,7 @@ class AgentTask(BaseModel):
     schedule_id: Optional[int] = None
     chain_id: int
     to_address: str = Field(..., min_length=42, max_length=42)
-    calldata: str = Field(..., min_length=3)  # Must be at least "0x" + data
+    calldata: str = Field(..., min_length=2)  # "0x" allowed for native transfers
     value_wei: str = "0"
     max_fee_per_gas: str
     max_priority_fee_per_gas: str

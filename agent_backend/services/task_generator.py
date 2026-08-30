@@ -4,6 +4,7 @@ import time
 import asyncio
 import os
 import re
+import json
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 import pytz
@@ -35,6 +36,15 @@ from server import (
 
 from ..models import AgentTask, ExecutionWindow
 from .gas_strategy import get_gas_strategy
+from .schedule_compat import (
+    WEEKDAY_MAP,
+    ACTION_DEX,
+    ACTION_BRIDGE,
+    ACTION_LENDING,
+    ACTION_LENDING_WITHDRAW,
+    normalize_action_type,
+    protocol_for_action,
+)
 
 import requests
 
@@ -42,11 +52,7 @@ import requests
 # Environment configuration
 UNISWAP_API_KEY = os.getenv("UNISWAP_API_KEY")
 LIFI_API_KEY = os.getenv("LIFI_API_KEY")
-
-WEEKDAY_MAP = {
-    "Sun": 0, "Mon": 1, "Tue": 2, "Wed": 3, 
-    "Thu": 4, "Fri": 5, "Sat": 6
-}
+WINDOW_MINUTES = 30
 
 
 class TaskGenerator:
@@ -94,15 +100,19 @@ class TaskGenerator:
                     # Not due yet
                     continue
                 
-                # Generate task based on action type
-                task = await self._generate_task_for_schedule(
+                # Generate task(s) based on action type
+                generated = await self._generate_task_for_schedule(
                     schedule,
                     wallet,
                     execution_window
                 )
                 
-                if task:
-                    tasks.append(task)
+                if not generated:
+                    continue
+                if isinstance(generated, list):
+                    tasks.extend(generated)
+                else:
+                    tasks.append(generated)
             
             except Exception as error:
                 print(f"[TaskGen] Error generating task for schedule {schedule.id}: {error}")
@@ -116,97 +126,164 @@ class TaskGenerator:
     ) -> Optional[ExecutionWindow]:
         """
         Calculate if schedule is due and return execution window.
-        
-        Returns:
-            ExecutionWindow if schedule is due, None otherwise
+
+        Supports fixed / custom / flexible modes used by the website.
+        Weekdays follow Python datetime.weekday() (Mon=0 ... Sun=6).
         """
         now_utc = datetime.now(pytz.UTC)
-        
-        # Parse schedule time
         try:
-            schedule_tz = pytz.timezone(schedule.timezone)
+            schedule_tz = pytz.timezone(schedule.timezone or "UTC")
         except Exception:
             schedule_tz = pytz.UTC
-        
-        # Get current time in schedule's timezone
+
         now_local = now_utc.astimezone(schedule_tz)
-        
-        # Parse day of week and time
-        target_weekday = WEEKDAY_MAP.get(schedule.day_of_week)
-        if target_weekday is None:
-            print(f"[TaskGen] Invalid day_of_week: {schedule.day_of_week}")
+        mode = (schedule.schedule_mode or "fixed").lower()
+
+        if mode == "custom":
+            slots = self._parse_json_list(schedule.custom_slots)
+            for item in slots:
+                day = item.get("day") or item.get("day_of_week")
+                time_text = item.get("time") or item.get("time_of_day")
+                target_local = self._next_weekly_local(now_local, day, time_text)
+                window = self._window_if_due(target_local, now_utc, schedule.timezone)
+                if window:
+                    return window
             return None
-        
-        # Parse time of day (e.g., "14:30")
-        try:
-            hour, minute = map(int, schedule.time_of_day.split(":"))
-        except Exception:
-            print(f"[TaskGen] Invalid time_of_day: {schedule.time_of_day}")
+
+        if mode == "flexible":
+            slots = self._parse_json_list(schedule.generated_slots)
+            for item in slots:
+                target_local = self._slot_datetime_local(item, schedule_tz)
+                if not target_local:
+                    continue
+                window = self._window_if_due(target_local, now_utc, schedule.timezone)
+                if window:
+                    return window
             return None
-        
-        # Calculate next occurrence
-        days_ahead = (target_weekday - now_local.weekday()) % 7
-        if days_ahead == 0:
-            # Today - check if time has passed
-            target_time = now_local.replace(
-                hour=hour,
-                minute=minute,
-                second=0,
-                microsecond=0
-            )
-            if target_time < now_local:
-                # Already passed today, schedule for next week
-                days_ahead = 7
-        
-        target_datetime = now_local + timedelta(days=days_ahead)
-        target_datetime = target_datetime.replace(
-            hour=hour,
-            minute=minute,
-            second=0,
-            microsecond=0
+
+        target_local = self._next_weekly_local(
+            now_local, schedule.day_of_week, schedule.time_of_day
         )
-        
-        # Convert to UTC
-        target_utc = target_datetime.astimezone(pytz.UTC)
-        
-        # Execution window: ±30 minutes from target time
-        window_start = target_utc - timedelta(minutes=30)
-        window_end = target_utc + timedelta(minutes=30)
-        
-        # Check if we're in the window
+        return self._window_if_due(target_local, now_utc, schedule.timezone)
+
+    def _parse_json_list(self, raw) -> list:
+        if not raw:
+            return []
+        if isinstance(raw, list):
+            return raw
+        try:
+            parsed = json.loads(raw)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            return []
+        return parsed if isinstance(parsed, list) else []
+
+    def _next_weekly_local(self, now_local: datetime, day_code: Optional[str], time_text: Optional[str]) -> Optional[datetime]:
+        target_weekday = WEEKDAY_MAP.get(str(day_code or "").strip())
+        if target_weekday is None:
+            print(f"[TaskGen] Invalid day_of_week: {day_code}")
+            return None
+        try:
+            hour, minute = map(int, str(time_text).split(":"))
+        except Exception:
+            print(f"[TaskGen] Invalid time_of_day: {time_text}")
+            return None
+
+        days_ahead = (target_weekday - now_local.weekday()) % 7
+        candidate = now_local.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        if days_ahead == 0 and candidate < now_local:
+            days_ahead = 7
+        if days_ahead:
+            candidate = (now_local + timedelta(days=days_ahead)).replace(
+                hour=hour, minute=minute, second=0, microsecond=0
+            )
+        return candidate
+
+    def _slot_datetime_local(self, item: dict, schedule_tz) -> Optional[datetime]:
+        date_string = item.get("date")
+        time_text = item.get("time") or item.get("time_of_day")
+        if not date_string or not time_text:
+            return None
+        try:
+            hour, minute = map(int, str(time_text).split(":"))
+            year, month, day = map(int, str(date_string).split("-"))
+            naive = datetime(year, month, day, hour, minute, 0, 0)
+            return schedule_tz.localize(naive)
+        except Exception as error:
+            print(f"[TaskGen] Invalid flexible slot {item}: {error}")
+            return None
+
+    def _window_if_due(
+        self,
+        target_local: Optional[datetime],
+        now_utc: datetime,
+        timezone_name: Optional[str],
+    ) -> Optional[ExecutionWindow]:
+        if not target_local:
+            return None
+        target_utc = target_local.astimezone(pytz.UTC)
+        window_start = target_utc - timedelta(minutes=WINDOW_MINUTES)
+        window_end = target_utc + timedelta(minutes=WINDOW_MINUTES)
         if not (window_start <= now_utc <= window_end):
             return None
-        
         return ExecutionWindow(
             start_utc=int(window_start.timestamp()),
-            end_utc=int(window_end.timestamp())
+            end_utc=int(window_end.timestamp()),
+            timezone=timezone_name or "UTC",
         )
-    
+
+    def _make_agent_task(
+        self,
+        *,
+        schedule: WalletActionSchedule,
+        wallet: Wallet,
+        execution_window: ExecutionWindow,
+        chain_id: int,
+        to_address: str,
+        calldata: str,
+        value_wei: str,
+        gas_params: dict,
+        canonical_action: str,
+        task_prefix: str,
+    ) -> AgentTask:
+        return AgentTask(
+            task_id=f"{task_prefix}_{schedule.id}_{int(time.time())}",
+            wallet_id=int(schedule.wallet_id),
+            schedule_id=schedule.id,
+            chain_id=int(chain_id),
+            to_address=to_address,
+            calldata=calldata,
+            value_wei=str(value_wei or "0"),
+            max_fee_per_gas=str(gas_params["max_fee_per_gas"]),
+            max_priority_fee_per_gas=str(gas_params["max_priority_fee_per_gas"]),
+            execution_window_start_utc=execution_window.start_utc,
+            execution_window_end_utc=execution_window.end_utc,
+            protocol=protocol_for_action(canonical_action),
+            wallet_address=wallet.wallet_address,
+        )
+
     async def _generate_task_for_schedule(
         self,
         schedule: WalletActionSchedule,
         wallet: Wallet,
         execution_window: ExecutionWindow
     ) -> Optional[AgentTask]:
-        """Generate specific task based on action type."""
-        
-        action_type = schedule.action_type.lower()
-        
-        if action_type in ["swap", "base_swap"]:
+        """Generate specific task based on website action types (dex/bridge/lending)."""
+        action_type = normalize_action_type(schedule.action_type)
+
+        if action_type == ACTION_DEX:
             return await self._generate_swap_task(schedule, wallet, execution_window)
-        
-        elif action_type in ["bridge", "universal_bridge"]:
+
+        if action_type == ACTION_BRIDGE:
             return await self._generate_bridge_task(schedule, wallet, execution_window)
-        
-        elif action_type in ["aave_supply", "lending_supply"]:
+
+        if action_type == ACTION_LENDING:
             return await self._generate_aave_supply_task(schedule, wallet, execution_window)
-        
-        elif action_type in ["aave_withdraw", "lending_withdraw"]:
+
+        if action_type == ACTION_LENDING_WITHDRAW:
             return await self._generate_aave_withdraw_task(schedule, wallet, execution_window)
-        
-        else:
-            print(f"[TaskGen] Unsupported action type: {action_type}")
-            return None
+
+        print(f"[TaskGen] Unsupported action type: {schedule.action_type}")
+        return None
     
     async def _generate_swap_task(
         self,
@@ -311,19 +388,17 @@ class TaskGenerator:
             )
             
             # Step 5: Create task
-            task = AgentTask(
-                task_id=f"swap_{schedule.id}_{int(time.time())}",
-                wallet_address=wallet.wallet_address,
+            task = self._make_agent_task(
+                schedule=schedule,
+                wallet=wallet,
+                execution_window=execution_window,
                 chain_id=BASE_CHAIN_ID,
                 to_address=to_address,
                 calldata=calldata,
                 value_wei=value,
-                max_fee_per_gas=str(gas_params["max_fee_per_gas"]),
-                max_priority_fee_per_gas=str(gas_params["max_priority_fee_per_gas"]),
-                execution_window_start_utc=execution_window.start_utc,
-                execution_window_end_utc=execution_window.end_utc,
-                action_type="swap",
-                description=f"Swap {amount_eth} ETH to USDC on Base via Uniswap"
+                gas_params=gas_params,
+                canonical_action=ACTION_DEX,
+                task_prefix="swap",
             )
             
             print(f"[TaskGen] Generated swap task: {task.task_id}")
@@ -341,12 +416,12 @@ class TaskGenerator:
     ) -> Optional[AgentTask]:
         """
         Generate bridge task using LI.FI API.
-        
-        Default: 1 USDC from Base -> Arbitrum
-        In production, parse networks, token, and amount from schedule parameters.
+
+        Default: native ETH Base -> Arbitrum (no ERC-20 approval).
+        ERC-20 routes are skipped unless the quote is native-in.
         """
-        # For demo: Bridge 1 USDC from Base to Arbitrum
-        amount = "1"
+        # Small native amount for low-fee L2 testing
+        amount_eth = "0.0001"
         from_network = "Base"
         to_network = "Arbitrum"
         
@@ -359,14 +434,12 @@ class TaskGenerator:
                 print(f"[TaskGen] Invalid networks: {from_network} -> {to_network}")
                 return None
             
-            # Step 1: Get quote from LI.FI
-            # For simplicity, using USDC on both chains
-            # In production, token addresses should be fetched from LI.FI token list
-            from_token_address = BASE_USDC_ADDRESS
-            to_token_address = "0xaf88d065e77c8cC2239327C5EDb3A432268e5831"  # USDC on Arbitrum
-            
-            normalized_amount, amount_atomic = normalize_token_amount(amount, 6)  # USDC decimals
-            
+            # Native ETH on both sides — avoids a required ERC-20 approval tx
+            from_token_address = LIFI_NATIVE_TOKEN_ADDRESS
+            to_token_address = LIFI_NATIVE_TOKEN_ADDRESS
+
+            normalized_amount, amount_atomic = normalize_token_amount(amount_eth, 18)
+
             params = {
                 "fromChain": str(from_config["chain_id"]),
                 "toChain": str(to_config["chain_id"]),
@@ -378,8 +451,8 @@ class TaskGenerator:
                 "slippage": "0.005",  # 0.5%
                 "order": "CHEAPEST",
             }
-            
-            print(f"[TaskGen] Requesting LI.FI quote for {amount} USDC {from_network} -> {to_network}")
+
+            print(f"[TaskGen] Requesting LI.FI quote for {amount_eth} ETH {from_network} -> {to_network}")
             
             quote_response = requests.get(
                 f"{LIFI_API_URL}/quote",
@@ -403,17 +476,13 @@ class TaskGenerator:
                 print(f"[TaskGen] No transaction request in LI.FI quote")
                 return None
             
-            # CRITICAL: Check if ERC20 approval is required
-            # For automated execution, we only support native token bridges (ETH)
-            # or pre-approved ERC20 tokens
+            # Native-in only: ERC-20 would need a separate approval transaction
             estimate = quote_data.get("estimate", {})
             approval_address = estimate.get("approvalAddress")
-            
-            if from_token_address != LIFI_NATIVE_TOKEN_ADDRESS:
-                # ERC20 bridge - would require approval transaction first
-                # For now, skip these (TODO: implement approval handling)
-                print(f"[TaskGen] Skipping bridge task - ERC20 approval required")
-                print(f"[TaskGen] User must manually approve {approval_address} for {from_token_address}")
+            from_token = str(from_token_address).lower()
+            native = str(LIFI_NATIVE_TOKEN_ADDRESS).lower()
+            if from_token != native:
+                print(f"[TaskGen] Skipping ERC-20 bridge (approval {approval_address})")
                 return None
             
             transaction = validate_lifi_transaction_request(
@@ -429,19 +498,17 @@ class TaskGenerator:
             )
             
             # Step 4: Create task
-            task = AgentTask(
-                task_id=f"bridge_{schedule.id}_{int(time.time())}",
-                wallet_address=wallet.wallet_address,
+            task = self._make_agent_task(
+                schedule=schedule,
+                wallet=wallet,
+                execution_window=execution_window,
                 chain_id=from_config["chain_id"],
                 to_address=transaction["to"],
                 calldata=transaction["data"],
                 value_wei=transaction["value"],
-                max_fee_per_gas=str(gas_params["max_fee_per_gas"]),
-                max_priority_fee_per_gas=str(gas_params["max_priority_fee_per_gas"]),
-                execution_window_start_utc=execution_window.start_utc,
-                execution_window_end_utc=execution_window.end_utc,
-                action_type="bridge",
-                description=f"Bridge {amount} USDC from {from_network} to {to_network} via LI.FI"
+                gas_params=gas_params,
+                canonical_action=ACTION_BRIDGE,
+                task_prefix="bridge",
             )
             
             print(f"[TaskGen] Generated bridge task: {task.task_id}")
@@ -484,19 +551,17 @@ class TaskGenerator:
             )
             
             # Create task
-            task = AgentTask(
-                task_id=f"aave_supply_{schedule.id}_{int(time.time())}",
-                wallet_address=wallet.wallet_address,
+            task = self._make_agent_task(
+                schedule=schedule,
+                wallet=wallet,
+                execution_window=execution_window,
                 chain_id=BASE_CHAIN_ID,
                 to_address=AAVE_V3_BASE_POOL,
                 calldata=calldata,
                 value_wei="0",
-                max_fee_per_gas=str(gas_params["max_fee_per_gas"]),
-                max_priority_fee_per_gas=str(gas_params["max_priority_fee_per_gas"]),
-                execution_window_start_utc=execution_window.start_utc,
-                execution_window_end_utc=execution_window.end_utc,
-                action_type="aave_supply",
-                description=f"Supply {normalized_amount} USDC to Aave V3 on Base"
+                gas_params=gas_params,
+                canonical_action=ACTION_LENDING,
+                task_prefix="aave_supply",
             )
             
             print(f"[TaskGen] Generated Aave supply task: {task.task_id}")
@@ -537,19 +602,17 @@ class TaskGenerator:
             )
             
             # Create task
-            task = AgentTask(
-                task_id=f"aave_withdraw_{schedule.id}_{int(time.time())}",
-                wallet_address=wallet.wallet_address,
+            task = self._make_agent_task(
+                schedule=schedule,
+                wallet=wallet,
+                execution_window=execution_window,
                 chain_id=BASE_CHAIN_ID,
                 to_address=AAVE_V3_BASE_POOL,
                 calldata=calldata,
                 value_wei="0",
-                max_fee_per_gas=str(gas_params["max_fee_per_gas"]),
-                max_priority_fee_per_gas=str(gas_params["max_priority_fee_per_gas"]),
-                execution_window_start_utc=execution_window.start_utc,
-                execution_window_end_utc=execution_window.end_utc,
-                action_type="aave_withdraw",
-                description=f"Withdraw {normalized_amount} USDC from Aave V3 on Base"
+                gas_params=gas_params,
+                canonical_action=ACTION_LENDING_WITHDRAW,
+                task_prefix="aave_withdraw",
             )
             
             print(f"[TaskGen] Generated Aave withdraw task: {task.task_id}")

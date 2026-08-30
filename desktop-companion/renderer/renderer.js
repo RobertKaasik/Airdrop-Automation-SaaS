@@ -147,6 +147,7 @@ async function updateModeToggleUI() {
 
 function openModal(modal) {
     if (!modal) return;
+    modal.hidden = false;
     modal.classList.add('is-open');
     modal.style.display = 'flex';
 }
@@ -154,6 +155,7 @@ function openModal(modal) {
 function closeModal(modal) {
     if (!modal) return;
     modal.classList.remove('is-open');
+    modal.hidden = true;
     modal.style.display = 'none';
 }
 
