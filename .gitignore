@@ -6,6 +6,7 @@ __pycache__/
 *.py[cod]
 
 *.db
+*.db-*
 *.sqlite
 *.sqlite3
 
@@ -15,3 +16,16 @@ telegram-bot*.log
 
 .pytest_cache/
 .mypy_cache/
+.test-artifacts/
+.integration-test-artifacts/
+
+# Generated local audit/context exports and accidental command-output files.
+project_context.txt
+airdrop_x_backend_report.json
+et --hard*
+
+# Persistent Chromium data can contain authenticated browser sessions.
+browser_profiles/
+
+# Local React build tooling. The compiled UI in ui-dist is committed and served by FastAPI.
+node_modules/

@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="AIRDROP-X">
+  <defs>
+    <radialGradient id="bg" cx="32" cy="25" r="38" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1d1630"/>
+      <stop offset="1" stop-color="#07060b"/>
+    </radialGradient>
+    <linearGradient id="ring" x1="10" y1="8" x2="54" y2="56" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f1d9ff"/>
+      <stop offset=".42" stop-color="#9b63ff"/>
+      <stop offset=".75" stop-color="#62e7ff"/>
+      <stop offset="1" stop-color="#7548ff"/>
+    </linearGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="2.2" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <circle cx="32" cy="32" r="29" fill="url(#bg)" stroke="#2c2440" stroke-width="2"/>
+  <circle cx="32" cy="32" r="23" fill="none" stroke="url(#ring)" stroke-width="2.5" filter="url(#glow)"/>
+  <circle cx="32" cy="32" r="18.5" fill="none" stroke="#ffffff" stroke-opacity=".13"/>
+  <path d="M17 43 27.6 20h5.2L43 43h-6l-2.1-5.2H25.1L23 43h-6Zm10.1-10.2h5.8L30 25.6l-2.9 7.2Z" fill="#fff"/>
+  <path d="m39.3 22 3.7 5.5 3.7-5.5h5.5l-6.4 9.5 7 10.5h-5.6L43 35.7 38.8 42h-5.6l7-10.5-6.4-9.5h5.5Z" fill="url(#ring)"/>
+</svg>

@@ -10,46 +10,51 @@
     </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title id="page-title">AIRDROP-X — Cyberpunk SaaS Panel</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml">
+    <meta name="description" content="AIRDROP-X — non-custodial control center for wallet opportunities, swaps, bridges, DeFi and Telegram alerts.">
+    <meta name="theme-color" content="#07060a">
+    <title id="page-title">AIRDROP-X — Wallet Control Center</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
-    <script src="locales/ru.js"></script>
-    <script src="locales/en.js"></script>
-    <script src="locales/zh.js"></script>
-    <link rel="stylesheet" href="style.css">
+    <script src="locales/ru.js?v=20260830-calendar-v1"></script>
+    <script src="locales/en.js?v=20260830-calendar-v1"></script>
+    <script src="locales/zh.js?v=20260830-calendar-v1"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css?v=20260828-cookie-consent-1">
 </head>
 <body>
+
+    <div id="react-ambient-root"></div>
+    <div id="pixel-snow-root" aria-hidden="true"></div>
 
     <div id="preloader-line"></div>
 
     <div class="header">
         <div class="logo-container" id="main-logo-btn">
-            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="width: 26px; height: 26px; pointer-events: none; flex-shrink: 0;">
-                <ellipse cx="12" cy="20" rx="10" ry="3" stroke="#c77dff" stroke-width="2" fill="#9d4edd" fill-opacity="0.25"/>
-                <path d="M2 20c0 1.66 4.48 3 10 3s10-1.34 10-3" stroke="#c77dff" stroke-width="2"/>
-                <ellipse cx="12" cy="20" rx="5" ry="1.5" stroke="#e0aaff" stroke-width="1" stroke-opacity="0.6"/>
-                <path d="M12 3L7 5.5L12 8L17 5.5L12 3Z" fill="#ffffff"/>
-                <path d="M7 5.5V10.5L12 13V8L7 5.5Z" fill="#d8b4fe"/>
-                <path d="M17 5.5V10.5L12 13V8L17 5.5Z" fill="#c084fc"/>
-                <path d="M12 14V17" stroke="#e0aaff" stroke-width="2" stroke-linecap="round"/>
-                <path d="M8 11.5V14" stroke="#c77dff" stroke-width="1.5" stroke-linecap="round" stroke-opacity="0.7"/>
-                <path d="M16 11.5V14" stroke="#c77dff" stroke-width="1.5" stroke-linecap="round" stroke-opacity="0.7"/>
-            </svg>
-            <span style="pointer-events: none;">AIRDROP-X</span>
+            <span class="brand-mark" aria-hidden="true"><i>AX</i></span>
+            <span class="brand-wordmark" style="pointer-events: none;">AIRDROP<span>—X</span></span>
         </div>
+        <nav class="header-nav" id="header-nav" aria-label="Главная навигация">
+            <button type="button" id="nav-features" onclick="scrollToFeatures()">Возможности</button>
+            <button type="button" id="nav-safe-start" onclick="document.getElementById('safe-start')?.scrollIntoView({behavior:'smooth'})">Безопасный старт</button>
+            <button type="button" id="nav-how" onclick="document.getElementById('instr-title')?.scrollIntoView({behavior:'smooth'})">Как работает</button>
+            <button type="button" id="nav-pricing" onclick="openPricingModal()">Тарифы</button>
+        </nav>
         <div class="header-actions">
-            <button id="login-btn" class="btn-dark-sm" onclick="openModal('login')">Войти</button>
+            <button type="button" id="login-btn" class="btn-dark-sm glow-button-target" onclick="openModal('login')">Войти</button>
             
             <div class="lang-dropdown-wrapper">
-                <button class="btn-dark-sm" id="lang-btn" onclick="toggleLangMenu(event)">
+                <button type="button" class="btn-dark-sm" id="lang-btn" onclick="toggleLangMenu(event)">
                     <span style="color: #c77dff; font-size: 11px; font-weight: bold; background: rgba(157,78,221,0.2); padding: 2px 5px; border-radius: 6px;" id="current-lang-badge">RU</span>
                     <span id="current-lang-text">RU</span>
                 </button>
                 <div class="lang-menu" id="langMenu">
-                    <button class="lang-option" onclick="changeLanguage('en')"><span style="color: #c77dff; font-size: 11px; font-weight: bold; background: rgba(157,78,221,0.2); padding: 2px 5px; border-radius: 6px;">US</span> English</button>
-                    <button class="lang-option" onclick="changeLanguage('zh')"><span style="color: #c77dff; font-size: 11px; font-weight: bold; background: rgba(157,78,221,0.2); padding: 2px 5px; border-radius: 6px;">CN</span> 中文</button>
-                    <button class="lang-option" onclick="changeLanguage('ru')"><span style="color: #c77dff; font-size: 11px; font-weight: bold; background: rgba(157,78,221,0.2); padding: 2px 5px; border-radius: 6px;">RU</span> Русский</button>
+                    <button type="button" class="lang-option" onclick="changeLanguage('en')"><span style="color: #c77dff; font-size: 11px; font-weight: bold; background: rgba(157,78,221,0.2); padding: 2px 5px; border-radius: 6px;">US</span> English</button>
+                    <button type="button" class="lang-option" onclick="changeLanguage('zh')"><span style="color: #c77dff; font-size: 11px; font-weight: bold; background: rgba(157,78,221,0.2); padding: 2px 5px; border-radius: 6px;">CN</span> 中文</button>
+                    <button type="button" class="lang-option" onclick="changeLanguage('ru')"><span style="color: #c77dff; font-size: 11px; font-weight: bold; background: rgba(157,78,221,0.2); padding: 2px 5px; border-radius: 6px;">RU</span> Русский</button>
                 </div>
             </div>
         </div>
@@ -57,73 +62,104 @@
 
     <!-- Модальное окно выбора тарифов -->
     <div class="modal-overlay" id="pricingModal" onclick="handlePricingOverlayClick(event)">
-        <div class="auth-modal" style="max-width: 950px; width: 95%;">
+        <div class="auth-modal" style="max-width: 1320px; width: min(96vw, 1320px);">
             <div class="modal-logo">
                 <span id="p-title-modal">⚡ Выберите тарифный план AIRDROP-X</span>
-                <span onclick="closePricingModal()" style="cursor: pointer; color: #b19cd9; font-size: 20px;">✕</span>
+                <button type="button" id="pricingModalClose" class="icon-button-plain" onclick="closePricingModal()" aria-label="Закрыть окно" style="color: #b19cd9; font-size: 20px;">✕</button>
             </div>
             <div class="modal-desc" id="p-desc-modal" style="text-align: center; margin-bottom: 24px;">
                 Ежемесячная подписка без обязательного активационного платежа.
             </div>
+            <div id="pricingAccountStatus" class="pricing-account-status" role="status" aria-live="polite" hidden></div>
 
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(235px, 1fr)); gap: 16px; align-items: stretch;">
                 
                 <!-- Стандарт -->
-                <div style="background: #07050c; border: 1px solid rgba(157,78,221,0.3); border-radius: 18px; padding: 22px; display: flex; flex-direction: column; justify-content: space-between;">
+                <div class="pricing-card" style="background: #07050c; border: 1px solid rgba(157,78,221,0.3); border-radius: 18px; padding: 22px; display: flex; flex-direction: column; justify-content: space-between;">
                     <div>
                         <div id="p-std-top" style="font-size: 14px; font-weight: bold; color: #b19cd9; margin-bottom: 6px;">ВХОД + ПОДПИСКА</div>
                         <div id="p-std-name" style="font-size: 22px; font-weight: 800; color: #fff; margin-bottom: 4px;">Стандарт</div>
                         <div style="font-size: 26px; font-weight: 800; color: #e0aaff; margin-bottom: 16px;">$29 <span id="p-std-per" style="font-size: 13px; color: #b19cd9; font-weight: normal;">/ мес</span></div>
                         
                         <div style="border-top: 1px solid rgba(157,78,221,0.2); padding-top: 14px; display: flex; flex-direction: column; gap: 10px; font-size: 13px; color: #b19cd9;">
-                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-std-f1">Лимит: до 5 кошельков (воркеров)</span></div>
-                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-std-f2">Только сеть Base L2</span></div>
-                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-std-f3">Базовый Claim Looter и Anti-Sybil</span></div>
+                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-std-f1">До 5 профилей кошельков</span></div>
+                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-std-f2">Мониторинг публичных EVM-адресов</span></div>
+                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-std-f3">Ручное подтверждение операций в кошельке</span></div>
                         </div>
                     </div>
-                    <button type="button" id="p-std-btn" onclick="selectPlanAndRegister('Standard', 29)" class="btn-dark-lg" style="margin-top: 20px; width: 100%; padding: 12px; font-size: 13px;">Выбрать за $29/мес</button>
+                    <button type="button" id="p-std-btn" onclick="selectPlanAndRegister('Standard', 29)" class="btn-dark-lg glow-button-target" style="margin-top: 20px; width: 100%; padding: 12px; font-size: 13px;">Выбрать за $29/мес</button>
                 </div>
 
                 <!-- PRO -->
-                <div style="background: linear-gradient(135deg, #120c22, #18102e); border: 2px solid #c77dff; border-radius: 18px; padding: 22px; display: flex; flex-direction: column; justify-content: space-between; position: relative; box-shadow: 0 0 30px rgba(157,78,221,0.3);">
-                    <div id="p-pro-badge" style="position: absolute; top: -12px; right: 20px; background: linear-gradient(135deg, #7b2cbf, #9d4edd); color: #fff; font-size: 10px; font-weight: bold; padding: 4px 10px; border-radius: 10px; text-transform: uppercase;">Рекомендуемый</div>
+                <div class="pricing-card pricing-card--pro" style="background: linear-gradient(135deg, rgba(30, 20, 50, 0.7), rgba(24, 24, 27, 0.8)); border: 1px solid rgba(139, 92, 246, 0.5); backdrop-filter: blur(12px); border-radius: 18px; padding: 22px; display: flex; flex-direction: column; justify-content: space-between; position: relative; box-shadow: 0 0 30px rgba(139,92,246,0.2);">
+                    <div id="p-pro-badge" style="position: absolute; top: -12px; right: 20px; background: linear-gradient(135deg, #7c3aed, #9333ea); color: #fff; font-size: 10px; font-weight: bold; padding: 4px 10px; border-radius: 10px; text-transform: uppercase;">Рекомендуемый</div>
                     <div>
                         <div id="p-pro-top" style="font-size: 14px; font-weight: bold; color: #c77dff; margin-bottom: 6px;">ВХОД + ПОДПИСКА</div>
-                        <div id="p-pro-name" style="font-size: 22px; font-weight: 800; color: #fff; margin-bottom: 4px;">PRO Фермер</div>
+                        <div id="p-pro-name" style="font-size: 22px; font-weight: 800; color: #fff; margin-bottom: 4px;">PRO</div>
                         <div style="font-size: 26px; font-weight: 800; color: #e0aaff; margin-bottom: 16px;">$49 <span id="p-pro-per" style="font-size: 13px; color: #b19cd9; font-weight: normal;">/ мес</span></div>
                         
                         <div style="border-top: 1px solid rgba(157,78,221,0.2); padding-top: 14px; display: flex; flex-direction: column; gap: 10px; font-size: 13px; color: #b19cd9;">
-                            <div style="display: flex; align-items: flex-start; gap: 8px; color: #fff;"><span>✓</span> <span id="p-pro-f1"><b>Лимит до 15 кошельков</b> (воркеров)</span></div>
-                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-pro-f2">Все сети кроме Solana (Arbitrum, ZkSync, Scroll...)</span></div>
-                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-pro-f3">Автоматический фоновый планировщик</span></div>
-                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-pro-f4">Приоритетная поддержка 24/7</span></div>
+                            <div style="display: flex; align-items: flex-start; gap: 8px; color: #fff;"><span>✓</span> <span id="p-pro-f1"><b>До 15 профилей кошельков</b></span></div>
+                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-pro-f2">Расписания и мониторинг EVM-сетей</span></div>
+                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-pro-f3">Telegram-уведомления</span></div>
+                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-pro-f4">Приоритетная поддержка</span></div>
                         </div>
                     </div>
-                    <button type="button" id="p-pro-btn" onclick="selectPlanAndRegister('Pro', 49)" class="btn-purple-lg" style="margin-top: 20px; width: 100%; padding: 12px; font-size: 13px;">Выбрать за $49/мес</button>
+                    <button type="button" id="p-pro-btn" onclick="selectPlanAndRegister('Pro', 49)" class="btn-purple-lg glow-button-target" style="margin-top: 20px; width: 100%; padding: 12px; font-size: 13px;">Выбрать за $49/мес</button>
                 </div>
 
                 <!-- Premium -->
-                <div style="background: #07050c; border: 1px solid rgba(157,78,221,0.3); border-radius: 18px; padding: 22px; display: flex; flex-direction: column; justify-content: space-between;">
+                <div class="pricing-card pricing-card--premium electric-border" style="background: rgba(24, 24, 27, 0.6); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 18px; padding: 22px; display: flex; flex-direction: column; justify-content: space-between;">
                     <div>
                         <div id="p-prem-top" style="font-size: 14px; font-weight: bold; color: #00d95f; margin-bottom: 6px;">ВХОД + ПОДПИСКА</div>
                         <div id="p-prem-name" style="font-size: 22px; font-weight: 800; color: #fff; margin-bottom: 4px;">Premium VIP</div>
                         <div style="font-size: 26px; font-weight: 800; color: #e0aaff; margin-bottom: 16px;">$89 <span id="p-prem-per" style="font-size: 13px; color: #b19cd9; font-weight: normal;">/ мес</span></div>
                         
                         <div style="border-top: 1px solid rgba(157,78,221,0.2); padding-top: 14px; display: flex; flex-direction: column; gap: 10px; font-size: 13px; color: #b19cd9;">
-                            <div style="display: flex; align-items: flex-start; gap: 8px; color: #00d95f;"><span>✓</span> <span id="p-prem-f1"><b>Лимит до 30 слотов</b> кошельков</span></div>
-                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-prem-f2">Все текущие и будущие блокчейны</span></div>
-                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-prem-f3">Telegram Webhook пуш-уведомления</span></div>
-                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-prem-f4">Личный менеджер и ранний доступ</span></div>
+                            <div style="display: flex; align-items: flex-start; gap: 8px; color: #00d95f;"><span>✓</span> <span id="p-prem-f1"><b>До 30 профилей кошельков</b></span></div>
+                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-prem-f2">Расширенный центр действий для поддерживаемых сетей</span></div>
+                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-prem-f3">Тонкая настройка Telegram-уведомлений</span></div>
+                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-prem-f4">Ранний доступ к совместимым интеграциям</span></div>
                         </div>
                     </div>
-                    <button type="button" id="p-prem-btn" onclick="selectPlanAndRegister('Premium', 89)" class="btn-dark-lg" style="margin-top: 20px; width: 100%; padding: 12px; font-size: 13px;">Выбрать за $89/мес</button>
+                    <button type="button" id="p-prem-btn" onclick="selectPlanAndRegister('Premium', 89)" class="btn-dark-lg glow-button-target" style="margin-top: 20px; width: 100%; padding: 12px; font-size: 13px;">Выбрать за $89/мес</button>
+                </div>
+
+                <!-- Whale -->
+                <div class="pricing-card pricing-card--whale" style="background: linear-gradient(145deg, rgba(7,24,39,.92), rgba(22,16,54,.88)); border: 1px solid rgba(56, 189, 248, .56); border-radius: 18px; padding: 22px; display: flex; flex-direction: column; justify-content: space-between; position: relative; box-shadow: 0 16px 38px rgba(14, 165, 233, .13), inset 0 1px 0 rgba(255,255,255,.08);">
+                    <div id="p-whale-badge" style="position: absolute; top: -12px; right: 18px; background: linear-gradient(135deg, #0891b2, #2563eb); color: #ecfeff; font-size: 10px; font-weight: 800; padding: 4px 10px; border-radius: 10px; letter-spacing: .04em;">РАСШИРЕННЫЙ МАСШТАБ</div>
+                    <div>
+                        <div id="p-whale-top" style="font-size: 14px; font-weight: bold; color: #67e8f9; margin-bottom: 6px;">ЕЖЕМЕСЯЧНАЯ ПОДПИСКА</div>
+                        <div id="p-whale-name" style="font-size: 22px; font-weight: 800; color: #fff; margin-bottom: 4px;">Whale</div>
+                        <div style="font-size: 28px; font-weight: 800; color: #7dd3fc; margin-bottom: 16px;">$149 <span id="p-whale-per" style="font-size: 13px; color: #a5c9db; font-weight: normal;">/ мес</span></div>
+                        <div style="border-top: 1px solid rgba(103,232,249,.22); padding-top: 14px; display: flex; flex-direction: column; gap: 10px; font-size: 13px; color: #c1dbe8;">
+                            <div style="display: flex; align-items: flex-start; gap: 8px; color: #fff;"><span>✓</span> <span id="p-whale-f1"><b>До 100 профилей кошельков</b></span></div>
+                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-whale-f2">Индивидуальные расписания для каждого профиля</span></div>
+                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-whale-f3">Расширенная очередь уведомлений Telegram</span></div>
+                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-whale-f4">Каждая операция подтверждается в вашем кошельке</span></div>
+                        </div>
+                    </div>
+                    <button type="button" id="p-whale-btn" onclick="selectPlanAndRegister('Whale', 149)" class="btn-dark-lg glow-button-target" style="margin-top: 20px; width: 100%; padding: 12px; font-size: 13px; border-color: rgba(56,189,248,.6); color:#dff8ff;">Выбрать за $149/мес</button>
+                </div>
+
+                <!-- Enterprise -->
+                <div class="pricing-card pricing-card--enterprise" style="background: linear-gradient(145deg, rgba(52,22,7,.88), rgba(38,12,33,.9)); border: 1px solid rgba(251, 191, 36, .58); border-radius: 18px; padding: 22px; display: flex; flex-direction: column; justify-content: space-between; position: relative; box-shadow: 0 18px 44px rgba(245, 158, 11, .15), inset 0 1px 0 rgba(255,255,255,.08);">
+                    <div id="p-enterprise-badge" style="position: absolute; top: -12px; right: 18px; background: linear-gradient(135deg, #b45309, #eab308); color: #fff7d6; font-size: 10px; font-weight: 800; padding: 4px 10px; border-radius: 10px; letter-spacing: .07em;">MAX SCALE</div>
+                    <div>
+                        <div id="p-enterprise-top" style="font-size: 14px; font-weight: bold; color: #fcd34d; margin-bottom: 6px;">ЕЖЕМЕСЯЧНАЯ ПОДПИСКА</div>
+                        <div id="p-enterprise-name" style="font-size: 22px; font-weight: 800; color: #fff; margin-bottom: 4px;">Enterprise</div>
+                        <div style="font-size: 28px; font-weight: 800; color: #facc15; margin-bottom: 16px;">$299 <span id="p-enterprise-per" style="font-size: 13px; color: #e7c778; font-weight: normal;">/ мес</span></div>
+                        <div style="border-top: 1px solid rgba(252,211,77,.26); padding-top: 14px; display: flex; flex-direction: column; gap: 10px; font-size: 13px; color: #f0ddae;">
+                            <div style="display: flex; align-items: flex-start; gap: 8px; color: #fff;"><span>✓</span> <span id="p-enterprise-f1"><b>До 250 профилей кошельков</b></span></div>
+                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-enterprise-f2">Централизованный мониторинг большого портфеля</span></div>
+                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-enterprise-f3">Приоритетное подключение совместимых сетей</span></div>
+                            <div style="display: flex; align-items: flex-start; gap: 8px;"><span>✓</span> <span id="p-enterprise-f4">Без хранения ключей и без автоподписей</span></div>
+                        </div>
+                    </div>
+                    <button type="button" id="p-enterprise-btn" onclick="selectPlanAndRegister('Enterprise', 299)" class="btn-dark-lg glow-button-target" style="margin-top: 20px; width: 100%; padding: 12px; font-size: 13px; border-color: rgba(251,191,36,.65); color:#fff1bd;">Выбрать за $299/мес</button>
                 </div>
 
             </div>
-            <label style="display:flex; align-items:flex-start; gap:10px; margin-top:18px; padding:14px; border:1px solid rgba(157,78,221,0.3); border-radius:12px; cursor:pointer; color:#b19cd9;">
-                <input type="checkbox" id="onboardingOption" style="margin-top:3px; accent-color:#9d4edd;">
-                <span><b id="onboarding-title" style="color:#fff;">Опциональный onboarding — $49</b><br><span id="onboarding-desc">Персональная настройка и чек-лист безопасности.</span></span>
-            </label>
         </div>
     </div>
 
@@ -132,11 +168,98 @@
         <div class="auth-modal" id="modalContainer"></div>
     </div>
 
+    <div class="modal-overlay" id="antiSybilModal" onclick="if (event.target.id === 'antiSybilModal') closeAntiSybilModal();">
+        <div class="auth-modal" style="max-width: 540px; width: calc(100% - 32px); background: linear-gradient(145deg, #0f0f0f, #1a1a1a); border: 1px solid rgba(139, 92, 246, 0.4); box-shadow: 0 24px 70px rgba(0,0,0,.8), 0 0 32px rgba(139, 92, 246, 0.15);">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:16px;">
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <div style="width:40px; height:40px; display:flex; align-items:center; justify-content:center; background:rgba(139, 92, 246, 0.15); border:1px solid rgba(168, 85, 247, 0.3); border-radius:10px; font-size:20px;">🛡️</div>
+                    <div style="font-size:18px; color:#fff; font-weight:800;">Anti-Sybil защита</div>
+                </div>
+                <button type="button" onclick="closeAntiSybilModal()" aria-label="Close" style="background:transparent; border:0; color:#a78bfa; cursor:pointer; font-size:20px; line-height:1; padding:4px 6px; transition:0.2s;" onmouseover="this.style.color='#e9d5ff'" onmouseout="this.style.color='#a78bfa'">×</button>
+            </div>
+            <div style="padding:16px 18px; border-radius:12px; background: rgba(124,58,237,.08); border:1px solid rgba(168, 85, 247, 0.25); color:#e9d5ff; font-size:13px; line-height:1.7; margin-bottom:18px;">
+                Система анализирует повторяющиеся паттерны активности, связанные кошельки и риск сибил-атаки до подтверждения действия. Это помогает снизить вероятность блокировок, жалоб и ложных срабатываний при работе с адресами и сетями.
+            </div>
+            <div style="display:grid; gap:12px; margin-bottom:18px;">
+                <div style="display:flex; align-items:flex-start; gap:10px; padding:12px 14px; background:rgba(34,197,94,.05); border:1px solid rgba(34,197,94,.2); border-radius:10px;">
+                    <span style="color:#22c55e; font-size:16px; flex-shrink:0;">✓</span>
+                    <div style="color:#a7f3d0; font-size:12px; line-height:1.5;"><b style="color:#86efac;">Проверка связей</b> между кошельками и транзакционными шаблонами</div>
+                </div>
+                <div style="display:flex; align-items:flex-start; gap:10px; padding:12px 14px; background:rgba(59,130,246,.05); border:1px solid rgba(59,130,246,.2); border-radius:10px;">
+                    <span style="color:#3b82f6; font-size:16px; flex-shrink:0;">✓</span>
+                    <div style="color:#bfdbfe; font-size:12px; line-height:1.5;"><b style="color:#93c5fd;">Случайная маршрутизация</b> и задержки для имитации реального поведения</div>
+                </div>
+                <div style="display:flex; align-items:flex-start; gap:10px; padding:12px 14px; background:rgba(168,85,247,.05); border:1px solid rgba(168,85,247,.2); border-radius:10px;">
+                    <span style="color:#a855f7; font-size:16px; flex-shrink:0;">✓</span>
+                    <div style="color:#e9d5ff; font-size:12px; line-height:1.5;"><b style="color:#c4b5fd;">Контроль риска</b> и уведомления до критичных операций</div>
+                </div>
+            </div>
+
+            <!-- Блок-инструкция OKX -->
+            <div style="margin-top: 14px; border-top: 1px solid rgba(168, 85, 247, 0.2); padding-top: 14px; margin-bottom:18px;">
+                <div style="font-size: 14px; color: #fff; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 8px;">
+                    <span>🏦</span> Правила работы с субсчетами OKX
+                </div>
+                <div style="display:grid; gap:8px; font-size:12px; line-height:1.5; color:#c4b5fd;">
+                    <div style="padding: 10px; background: rgba(168, 85, 247, 0.04); border: 1px solid rgba(168, 85, 247, 0.15); border-radius: 8px;">
+                        <ul style="margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px;">
+                            <li><b>Использование субсчетов:</b> Настоятельно рекомендуется создавать отдельные субсчета (Sub-accounts) для каждого кошелька.</li>
+                            <li><b>Уникальные адреса депозита:</b> Сгенерируйте свои уникальные адреса пополнения на OKX для каждого вашего адреса кошелька, чтобы избежать пересечения балансов (связывания).</li>
+                            <li><b>Рандомизация сумм:</b> Выводите случайные суммы со слегка отличающимися задержками по времени, чтобы размыть сходства.</li>
+                            <li><b>Строгий запрет:</b> Никогда не делайте прямые транзакции перевода средств между своими кошельками фермы!</li>
+                        </ul>
+                    </div>
+                    <div style="font-size: 11px; color: #fbbf24; background: rgba(251, 191, 36, 0.05); border: 1px solid rgba(251, 191, 36, 0.2); padding: 10px; border-radius: 8px; line-height: 1.4;">
+                        ⚠️ <b>Дисклеймер:</b> Пользователь должен самостоятельно регистрироваться на бирже и создавать субсчета. Наш проект не предоставляет личные или готовые аккаунты OKX.
+                    </div>
+                </div>
+            </div>
+
+            <div style="display:flex; justify-content:flex-end;">
+                <button type="button" onclick="closeAntiSybilModal()" class="btn-purple-lg" style="width:auto; padding:11px 18px; font-size:13px; box-shadow: 0 0 16px rgba(157, 78, 221, 0.3);">Понятно</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно настройки кошельков по очереди -->
+    <div class="modal-overlay" id="walletConfigModal">
+        <div class="auth-modal" style="max-width: 480px; width: calc(100% - 32px); background: linear-gradient(145deg, #0f0f0f, #1a1a1a); border: 1px solid rgba(139, 92, 246, 0.4); box-shadow: 0 24px 70px rgba(0,0,0,.8), 0 0 32px rgba(139, 92, 246, 0.15);">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:16px;">
+                <div style="font-size:18px; color:#fff; font-weight:800; display:flex; align-items:center; gap:8px;">⚙️ <span>Настройка кошелька</span></div>
+            </div>
+            <div style="margin-bottom: 16px;">
+                <div style="font-size:11px; color:var(--text-muted); margin-bottom:6px; text-transform: uppercase; font-weight:bold; letter-spacing:0.05em;">Импортируемый адрес:</div>
+                <div id="walletConfigAddressDisplay" style="font-size:13px; color:#fff; font-family:monospace; background:rgba(0,0,0,0.5); padding:10px 12px; border-radius:8px; border:1px solid var(--border-color); word-break:break-all; box-shadow:inset 0 1px 3px rgba(0,0,0,0.5);">0x000...</div>
+            </div>
+            
+            <div style="display:flex; flex-direction:column; gap:14px; margin-bottom:20px;">
+                <div class="input-group" style="margin-bottom:0;">
+                    <label style="font-size:11px; color:#a3a3a3; display:block; margin-bottom:6px; font-weight:600;">Название кошелька (обязательно)</label>
+                    <input type="text" id="walletConfigLabelInput" class="auth-input" placeholder="Например, OKX Worker 1" oninput="validateWalletConfigInputs()">
+                </div>
+                <div class="input-group" style="margin-bottom:0;">
+                    <label style="font-size:11px; color:#a3a3a3; display:block; margin-bottom:6px; font-weight:600;">Прокси-сервер (обязательно)</label>
+                    <input type="text" id="walletConfigProxyInput" class="auth-input" placeholder="http://user:pass@ip:port или ip:port" oninput="validateWalletConfigInputs()">
+                </div>
+                <div style="display:flex; gap:8px; align-items:flex-start; padding:10px 12px; border:1px solid rgba(139,92,246,.25); background:rgba(139,92,246,.06); border-radius:8px; color:#c4b5fd; font-size:11px; line-height:1.4;">
+                    <span style="font-weight:bold;">Сетевой профиль:</span><span>Для расписания и запуска изолированной сессии нужен отдельный прокси. Рекомендуется стабильный мобильный или резидентный прокси нужного региона.</span>
+                </div>
+            </div>
+
+            <div style="display:flex; gap:10px; justify-content:flex-end;">
+                <button type="button" id="walletConfigCancelBtn" onclick="cancelWalletConfigModal()" class="btn-dark-sm" style="padding:10px 16px; border-color:rgba(239, 68, 68, 0.3); color:#fca5a5;">Отмена</button>
+                <button type="button" id="walletConfigSaveBtn" onclick="saveWalletConfigModal()" class="btn-purple-lg" style="width:auto; padding:10px 20px; box-shadow:0 0 12px rgba(157,78,221,0.2);" disabled>Сохранить</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Schedule builder lives in Wallet Workspace (Wallets section), not a separate modal. -->
+
     <div class="modal-overlay" id="walletConnectModal" onclick="handleWalletConnectOverlayClick(event)">
         <div class="auth-modal" style="max-width: 380px; text-align:center;">
             <div class="modal-logo" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
                 <span id="walletConnectModalTitle"></span>
-                <span onclick="closeWalletConnectModal()" style="cursor:pointer; color:#b19cd9; font-size:18px;">✕</span>
+                <button type="button" class="icon-button-plain" onclick="closeWalletConnectModal()" aria-label="Close" style="color:#b19cd9; font-size:18px;">✕</button>
             </div>
             <p id="walletConnectModalDesc" style="color:var(--text-muted); font-size:13px; line-height:1.5; margin:0 0 14px;"></p>
             <div id="walletConnectQrCode" style="display:flex; justify-content:center; background:#fff; border-radius:12px; padding:12px; margin:0 auto 14px; width:230px; height:230px; box-sizing:border-box;"></div>
@@ -168,7 +291,21 @@
         </div>
     </div>
 
-    <!-- Мобильное нижнее меню -->
+    <div class="modal-overlay" id="appConfirmModal" onclick="handleAppConfirmOverlayClick(event)">
+        <div class="auth-modal" style="max-width:390px; width:calc(100% - 32px); border:1px solid rgba(239,68,68,.45); box-shadow:0 22px 70px rgba(0,0,0,.65), 0 0 28px rgba(239,68,68,.1);">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:14px; margin-bottom:12px;">
+                <div id="appConfirmTitle" style="font-size:17px; color:#fff; font-weight:800;"></div>
+                <button type="button" onclick="finishAppConfirm(false)" aria-label="Close" style="background:transparent; border:0; color:#b19cd9; cursor:pointer; font-size:22px; line-height:1; padding:2px 5px;">×</button>
+            </div>
+            <div id="appConfirmMessage" style="background:rgba(239,68,68,.07); border:1px solid rgba(239,68,68,.24); color:#fecaca; border-radius:10px; padding:11px 12px; font-size:13px; line-height:1.5;"></div>
+            <div style="display:flex; gap:10px; justify-content:flex-end; margin-top:18px;">
+                <button type="button" onclick="finishAppConfirm(false)" id="appConfirmCancel" class="btn-dark-sm" style="padding:10px 14px;"></button>
+                <button type="button" onclick="finishAppConfirm(true)" id="appConfirmProceed" class="btn-dark-sm" style="padding:10px 14px; border-color:#ef4444; color:#fecaca; background:rgba(239,68,68,.1);"></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Дополнительные разделы на мобильных устройствах -->
     <div class="bottom-sheet-overlay" id="bottomSheetOverlay" onclick="handleSheetOverlayClick(event)">
         <div class="bottom-sheet" id="bottomSheetContent">
             <div class="sheet-handle"></div>
@@ -177,53 +314,207 @@
     </div>
 
     <div id="main-content">
-        <div class="hero">
-            <h1 id="hero-title">Универсальный инструмент<br>для автоматизации и сбора Airdrop.</h1>
-            <p id="hero-desc">Фармите поинты, сканируйте кошельки на наличие распределений и клеймите аирдропы в один клик с защитой Anti-Sybil.</p>
-            
-            <div class="hero-buttons">
-                <button id="farm-btn" class="btn-purple-lg" onclick="openPricingModal()">Получить доступ</button>
-                <button id="settings-btn" class="btn-dark-lg" onclick="scrollToFeatures()">Подробнее</button>
-            </div>
-        </div>
+        <section class="hero" aria-labelledby="hero-title">
+            <div id="hero-light-beam"></div>
+            <div class="hero-shell">
+                <div class="hero-copy">
+                    <div class="hero-kicker"><span></span> ONE WALLET · ONE CONTROL CENTER</div>
+                    <h1 id="hero-title">Крипто-активность.<br><em>Под вашим контролем.</em></h1>
+                    <p id="hero-desc">Единое пространство для кошелька: проверка возможностей, обмены, мосты, DeFi, планирование и Telegram-уведомления — без передачи приватного ключа.</p>
 
-        <div style="width: 100%; max-width: 900px; margin: 0 auto; padding: 0 16px;">
+                    <div class="hero-buttons">
+                        <button type="button" id="farm-btn" class="btn-purple-lg glow-button-target specular-button" onclick="openPricingModal()">Получить доступ <span class="btn-arrow">→</span></button>
+                        <button type="button" id="settings-btn" class="btn-dark-lg glow-button-target" onclick="scrollToFeatures()">Посмотреть платформу <span class="btn-arrow">↘</span></button>
+                    </div>
+
+                    <div class="hero-proof" id="hero-proof" aria-label="Ключевые принципы">
+                    <span><i></i> Non-custodial</span>
+                    <span><i></i><span id="hero-signing">Подпись в кошельке</span></span>
+                        <span><i></i> Base + EVM</span>
+                    </div>
+                </div>
+
+                <div class="hero-visual" aria-hidden="true">
+                    <div class="laser-column"></div>
+                    <div class="orbit orbit--one"></div>
+                    <div class="orbit orbit--two"></div>
+                    <div class="retro-coin">
+                        <div class="retro-coin__rim"></div>
+                        <div class="retro-coin__face">
+                            <span class="retro-coin__signal"></span>
+                            <strong>AX</strong>
+                            <small>RETRODROP ACCESS</small>
+                        </div>
+                    </div>
+                    <div class="hero-visual__label hero-visual__label--top">LIVE · BASE</div>
+                    <div class="hero-visual__label hero-visual__label--bottom">SECURE SIGNING</div>
+                </div>
+            </div>
+            <div class="hero-marquee" aria-hidden="true">
+                <div>BASE <span>◆</span> ARBITRUM <span>◆</span> OPTIMISM <span>◆</span> POLYGON <span>◆</span> LINEA <span>◆</span> BNB CHAIN <span>◆</span> BASE <span>◆</span> ARBITRUM <span>◆</span> OPTIMISM <span>◆</span> POLYGON</div>
+            </div>
+        </section>
+
+        <div class="status-wrap">
             <div class="status-banner">
-            <div class="status-left">
-                <span id="core-status-label">🛡️ Статус ядра:</span>
-                <span style="color: #22c55e; font-weight: bold;" id="core-status-val">Защищено / Онлайн</span>
-            </div>
-            <div class="status-right" id="slots-counter-text">Приватное ПО с ограниченным количеством слотов. Загрузка...</div>
-        </div>
-        </div>
-
-        <div class="section-title" id="features-heading">Возможности платформы</div>
-        <div class="features-grid">
-            <div class="feature-card">
-                <div class="card-icon">🔍</div>
-                <h3 id="c1-t">Drop Scanner & Looter</h3>
-                <p id="c1-d">Автоматический поиск доступных для клейма аирдропов и ретродропов по всем подключенным кошелькам.</p>
-            </div>
-            <div class="feature-card">
-                <div class="card-icon">⚡</div>
-                <h3 id="c2-t">Multi-Chain Swaps & Bridges</h3>
-                <p id="c2-d">Рандомизированные кроссчейн свапы и транзакции в сетях LayerZero, Base, Arbitrum и ZkSync для набива объемов.</p>
-            </div>
-            <div class="feature-card">
-                <div class="card-icon">🛡️</div>
-                <h3 id="c3-t">Sybil Shield</h3>
-                <p id="c3-d">Имитация паттернов реального пользователя и интеллектуальное распределение газа без связей между кошельками.</p>
+                <div class="status-left">
+                    <span class="status-pulse" aria-hidden="true"></span>
+                    <span id="core-status-label">Статус платформы:</span>
+                    <span id="core-status-val">Онлайн</span>
+                </div>
+                <div class="status-right" id="slots-counter-text">Загрузка доступности...</div>
             </div>
         </div>
 
-        <!-- Раздел инструкции -->
-        <div class="section-title" id="instr-title">Как работает AIRDROP-X (Инструкция)</div>
+        <section class="product-section" aria-labelledby="features-heading">
+            <div class="section-eyebrow">AIRDROP-X / PRODUCT</div>
+            <div class="section-heading-row">
+                <div>
+                    <div class="section-title" id="features-heading">Всё необходимое.<br>В одном интерфейсе.</div>
+                    <p id="features-desc">Собрали основные действия одного кошелька по отдельным, понятным модулям.</p>
+                </div>
+                <div class="section-index">01 — 08</div>
+            </div>
+
+            <div class="features-grid bento-grid">
+                <article class="feature-card feature-card--wide border-glow-card">
+                    <div class="feature-card__top"><span class="feature-number">01</span><div class="card-icon">⌁</div></div>
+                    <div class="feature-visual feature-visual--scanner">
+                        <div class="scanner-ring"></div><div class="scanner-ring"></div><div class="scanner-dot"></div>
+                    </div>
+                    <h3 id="c1-t">Opportunity Scanner</h3>
+                    <p id="c1-d">Проверка официальных источников и доступных возможностей для подключённого публичного адреса.</p>
+                </article>
+                <article class="feature-card border-glow-card">
+                    <div class="feature-card__top"><span class="feature-number">02</span><div class="card-icon">⇄</div></div>
+                    <h3 id="c2-t">Swaps & Bridges</h3>
+                    <p id="c2-d">Котировка, маршрут и итоговые параметры операции до подтверждения в MetaMask или WalletConnect.</p>
+                    <div class="route-preview"><span>ETH</span><i></i><span>USDC</span></div>
+                </article>
+                <article class="feature-card border-glow-card">
+                    <div class="feature-card__top"><span class="feature-number">03</span><div class="card-icon">◇</div></div>
+                    <h3 id="c3-t">Non-custodial Security</h3>
+                    <p id="c3-d">Приватный ключ остаётся в кошельке, а каждое действие требует вашей подписи.</p>
+                    <div class="security-orbit"><span>YOUR KEY</span></div>
+                </article>
+                <article class="feature-card feature-card--tall border-glow-card">
+                    <div class="feature-card__top"><span class="feature-number">04</span><div class="card-icon">◫</div></div>
+                    <h3 id="c4-t">DeFi overview</h3>
+                    <p id="c4-d">Позиции Aave, текущая ставка и ориентировочная доходность в спокойном, читаемом виде.</p>
+                    <div class="mini-chart"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+                </article>
+                <article class="feature-card route-lab-card border-glow-card" id="route-lab-card">
+                    <div class="feature-card__top"><span class="feature-number">05</span><div class="card-icon">FLOW</div></div>
+                    <h3 id="c8-t">Маршрут до подписи</h3>
+                    <p id="c8-d">Переключите сценарий и посмотрите, какие этапы AIRDROP-X показывает до открытия кошелька.</p>
+                    <div class="route-lab" id="route-lab" aria-label="Интерактивный пример маршрута">
+                        <div class="route-lab__tabs" role="group">
+                            <button type="button" id="route-tab-swap" class="active" data-route-mode="swap" aria-pressed="true">Обмен</button>
+                            <button type="button" id="route-tab-bridge" data-route-mode="bridge" aria-pressed="false">Мост</button>
+                            <button type="button" id="route-tab-defi" data-route-mode="defi" aria-pressed="false">DeFi</button>
+                        </div>
+                        <div class="route-lab__flow">
+                            <span id="route-lab-from">ETH</span><i></i><span id="route-lab-to">USDC</span>
+                        </div>
+                        <small id="route-lab-status">Котировка → проверка → подпись</small>
+                    </div>
+                </article>
+                <article class="feature-card feature-card--wide border-glow-card">
+                    <div class="feature-card__top"><span class="feature-number">06</span><div class="card-icon">◷</div></div>
+                    <h3 id="c6-t">Planner & Gas Monitor</h3>
+                    <p id="c6-d">Планируйте напоминания и смотрите уровень газа по сетям до создания операции.</p>
+                    <div class="gas-bars"><span style="--bar:32%"></span><span style="--bar:58%"></span><span style="--bar:41%"></span><span style="--bar:76%"></span><span style="--bar:49%"></span></div>
+                </article>
+                <article class="feature-card border-glow-card">
+                    <div class="feature-card__top"><span class="feature-number">07</span><div class="card-icon">↗</div></div>
+                    <h3 id="c7-tg-t">Telegram signal</h3>
+                    <p id="c7-tg-d">Выбирайте важные уведомления и получайте статусы без лишнего шума.</p>
+                    <div class="telegram-preview"><b>AB</b><span id="telegram-preview-title">Операция подтверждена<small id="telegram-preview-meta">Base · только что</small></span></div>
+                </article>
+                <article class="feature-card feature-card--full environment-card border-glow-card">
+                    <div class="feature-card__top"><span class="feature-number">08</span><div class="card-icon">SYNC</div></div>
+                    <h3 id="c7-t">Стабильный профиль среды</h3>
+                    <p id="c7-d">Отдельные параметры сети, хранилища и отображения сохраняются для повторяемых сессий и снижения ложных конфликтов.</p>
+                    <div class="environment-preview" aria-hidden="true"><span>NETWORK</span><i></i><span>STORAGE</span><i></i><span>DISPLAY</span><b>CONSISTENT</b></div>
+                </article>
+            </div>
+        </section>
+
+        <section class="interface-preview" id="interface-preview" aria-label="Предпросмотр интерфейса">
+            <div class="interface-preview__copy">
+                <span class="section-eyebrow">CONTROL SURFACE</span>
+                <h2 id="preview-title">Один экран.<br><em>Полная картина.</em></h2>
+                <p id="preview-desc">Баланс, сеть, активный кошелёк, статус операций и история — без прыжков между десятками вкладок.</p>
+                <div class="interface-preview__metrics"><span><b>9</b> <span id="preview-networks">сетей</span></span><span><b>24/7</b> <span id="preview-statuses">статусы</span></span><span><b id="preview-no-keys">Без хранения</b> <span id="preview-private-keys">приватных ключей</span></span></div>
+            </div>
+            <div class="product-window">
+                <div class="product-window__bar"><i></i><i></i><i></i><span>airdrop-x / control center</span></div>
+                <div class="product-window__body">
+                    <aside><b>AX</b><span class="active"></span><span></span><span></span><span></span></aside>
+                    <div class="product-window__content">
+                        <div class="window-stat"><small>ACTIVE WALLET</small><b>0x5e53…fc66</b><em>connected</em></div>
+                        <div class="window-grid">
+                            <div><small>PORTFOLIO</small><b>$1,248.32</b><span class="chart-line"></span></div>
+                            <div><small>NETWORK GAS</small><b>Low</b><span class="gas-dot"></span></div>
+                        </div>
+                        <div class="window-actions"><span>Swap</span><span>Bridge</span><span>DeFi</span><span>Journal</span></div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="safe-start-section" id="safe-start" aria-labelledby="safe-start-title">
+            <div class="safe-start__laser" aria-hidden="true"><i></i></div>
+            <div class="safe-start__heading">
+                <div class="section-eyebrow" id="safe-start-eyebrow">SAFE START / 04 STEPS</div>
+                <div>
+                    <h2 id="safe-start-title">Безопасный старт</h2>
+                    <p id="safe-start-desc">Короткий маршрут: от аккаунта до первого осознанного действия в сети. Никаких seed-фраз и автоматических подписей.</p>
+                </div>
+                <div class="safe-start__counter"><b id="safe-start-current">01</b><span>/ 04</span></div>
+            </div>
+
+            <div class="safe-stepper" id="safe-stepper" role="tablist" aria-label="Шаги безопасного старта">
+                <button type="button" class="safe-step active" data-safe-step="0" role="tab" aria-selected="true"><span>01</span><b id="safe-step-label-1">Аккаунт</b></button>
+                <button type="button" class="safe-step" data-safe-step="1" role="tab" aria-selected="false"><span>02</span><b id="safe-step-label-2">Кошелёк</b></button>
+                <button type="button" class="safe-step" data-safe-step="2" role="tab" aria-selected="false"><span>03</span><b id="safe-step-label-3">Проверка</b></button>
+                <button type="button" class="safe-step" data-safe-step="3" role="tab" aria-selected="false"><span>04</span><b id="safe-step-label-4">Уведомления</b></button>
+            </div>
+
+            <div class="safe-start-panel" id="safe-start-panel" role="tabpanel">
+                <div class="safe-start-panel__copy">
+                    <span class="safe-start-panel__number" id="safe-shot-number">01</span>
+                    <h3 id="safe-shot-title">Создайте и защитите аккаунт</h3>
+                    <p id="safe-shot-desc">Используйте уникальный пароль и доступный email. Восстановление доступа проходит через подтверждение почты.</p>
+                    <ul id="safe-shot-list"></ul>
+                    <div class="safe-start-panel__actions">
+                        <button type="button" class="safe-step-control" id="safe-step-prev"></button>
+                        <button type="button" class="safe-step-control safe-step-control--next" id="safe-step-next"></button>
+                    </div>
+                </div>
+                <div class="safe-shot" aria-label="Статичный пример экрана AIRDROP-X">
+                    <div class="safe-shot__bar"><span></span><span></span><span></span><b>AIRDROP-X</b></div>
+                    <div class="safe-shot__body">
+                        <div class="safe-shot__side"><i class="active"></i><i></i><i></i><i></i></div>
+                        <div class="safe-shot__content">
+                            <small id="safe-shot-brow">ACCOUNT SECURITY</small>
+                            <strong id="safe-shot-screen-title">Добро пожаловать</strong>
+                            <p id="safe-shot-screen-desc">Подтвердите email, чтобы завершить настройку.</p>
+                            <div class="safe-shot__rows"><span id="safe-shot-row-1"></span><span id="safe-shot-row-2"></span><span id="safe-shot-row-3"></span></div>
+                            <div class="safe-shot__status"><i></i><span id="safe-shot-status"></span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <div class="section-title" id="instr-title">Как работает AIRDROP-X</div>
         <div class="showcase-section">
             
             <!-- Карточка 1 -->
             <div class="showcase-card">
                 <div class="showcase-content">
-                    <h3 id="sc1-t">🌾 1. Авто-фарм и Anti-Sybil Ядро</h3>
+                    <h3 id="sc1-t">1. Газ и бюджет до подписи</h3>
                     <p id="sc1-d1" style="font-size: 15px; line-height: 1.6;"><b style="color:#fff;" id="sc1-b1">Что это и почему это выгодно:</b> Ручное выполнение сотен транзакций в день отнимает уйму сил и времени. Наш авто-фарминг через встроенное ядро полностью имитирует активность живого пользователя.</p>
                     <p id="sc1-d2" style="font-size: 15px; line-height: 1.6;">Софт рандомизирует задержки, порядок кошельков и суммы транзакций, защищая от сибил-банов.</p>
                     
@@ -240,14 +531,14 @@
                     </div>
                 </div>
                 <div class="media-placeholder" style="padding: 0; overflow: hidden;">
-                    <img src="autofarm.gif" alt="Auto-farm process" style="width: 100%; height: 100%; object-fit: cover; border-radius: 12px;">
+                    <img id="demo-gas-media" src="demo-gas-ru.gif?v=20260820" alt="Демонстрация газа и бюджета" style="width: 100%; height: 100%; object-fit: cover; border-radius: 12px;">
                 </div>
             </div>
 
             <!-- Карточка 2 -->
             <div class="showcase-card">
                 <div class="showcase-content">
-                    <h3 id="sc2-t">👥 2. Лимиты и добавление кошельков</h3>
+                    <h3 id="sc2-t">2. Лимиты и добавление кошельков</h3>
                     <p id="sc2-d1" style="font-size: 15px; line-height: 1.6;"><b style="color:#fff;" id="sc2-b1">Удобство и защита тарифов:</b> Тариф Standard позволяет запустить до 5 кошельков (для теста), PRO открывает до 15 слотов, а Premium расширяет лимит до 30 кошельков.</p>
                     <p id="sc2-d2" style="font-size: 15px; line-height: 1.6;">Импортируйте ключи и прокси в один клик, управляя всей фермой из единой панели.</p>
                     
@@ -264,14 +555,14 @@
                     </div>
                 </div>
                 <div class="media-placeholder" style="padding: 0; overflow: hidden;">
-                    <img src="wallets.gif" alt="Wallets import" style="width: 100%; height: 100%; object-fit: cover; border-radius: 12px;">
+                    <img id="demo-wallets-media" src="demo-wallets-ru.gif?v=20260820" alt="Демонстрация профилей кошельков" style="width: 100%; height: 100%; object-fit: cover; border-radius: 12px;">
                 </div>
             </div>
 
             <!-- Карточка 3 -->
             <div class="showcase-card">
                 <div class="showcase-content">
-                    <h3 id="sc3-t">📦 3. Автоматический сбор лута (Claim Looter)</h3>
+                    <h3 id="sc3-t">3. Официальные проверки eligibility</h3>
                     <p id="sc3-d1" style="font-size: 15px; line-height: 1.6;"><b style="color:#fff;" id="sc3-b1">Когда и как это происходит:</b> Как только проект объявляет раздачу ретродропа, сканер находит распределенные токены.</p>
                     <p id="sc3-d2" style="font-size: 15px; line-height: 1.6;">Поддерживаются Base, Arbitrum, ZkSync, Scroll, Solana и др. Один клик — и награды у вас.</p>
                     
@@ -288,14 +579,14 @@
                     </div>
                 </div>
                 <div class="media-placeholder" style="padding: 0; overflow: hidden;">
-                    <img src="looter.gif" alt="Claim Looter" style="width: 100%; height: 100%; object-fit: cover; border-radius: 12px;">
+                    <img id="demo-checks-media" src="demo-checks-ru.gif?v=20260820" alt="Демонстрация официальных проверок" style="width: 100%; height: 100%; object-fit: cover; border-radius: 12px;">
                 </div>
             </div>
 
             <!-- Карточка 4 -->
             <div class="showcase-card">
                 <div class="showcase-content">
-                    <h3 id="sc4-t">🔔 4. Система уведомлений и планировщик</h3>
+                    <h3 id="sc4-t">4. Telegram-уведомления и планировщик</h3>
                     <p id="sc4-d1" style="font-size: 15px; line-height: 1.6;"><b style="color:#fff;" id="sc4-b1">Контроль и отчеты в реальном времени:</b> Получайте детальные отчеты о каждой сессии фарма, расходе газа, статусе прокси и найденном луте прямо в Telegram-бот.</p>
                     
                     <ul style="list-style: none; padding: 0; margin: 26px 0 0 0; display: flex; flex-direction: column; gap: 14px;">
@@ -311,7 +602,7 @@
                     </div>
                 </div>
                 <div class="media-placeholder" style="padding: 0; overflow: hidden;">
-                    <img src="support.gif" alt="Support Bot Report" style="width: 100%; height: 100%; object-fit: cover; border-radius: 12px;">
+                    <img id="demo-telegram-media" src="demo-telegram-ru.gif?v=20260820" alt="Демонстрация Telegram-уведомлений" style="width: 100%; height: 100%; object-fit: cover; border-radius: 12px;">
                 </div>
             </div>
 
@@ -319,51 +610,66 @@
 
         <div id="faq-heading" class="section-title">Часто задаваемые вопросы</div>
         <div class="faq-section">
-            <div class="faq-item" onclick="toggleFaq(this)">
-                <div class="faq-question"><span id="q1">Как работает авто-клейм аирдропов?</span> <span>+</span></div>
-                <div class="faq-answer" id="a1">Софт сканирует смарт-контракты и чекеры проектов, находит распределенные на ваши кошельки токены и безопасно подписывает транзакции сбора.</div>
+            <div class="faq-item">
+                <button type="button" class="faq-question" onclick="toggleFaq(this.closest('.faq-item'))" aria-expanded="false" aria-controls="a1"><span id="q1">Как работает авто-клейм аирдропов?</span> <span class="faq-toggle" aria-hidden="true">+</span></button>
+                <div class="faq-answer" id="a1" role="region" aria-labelledby="q1">Софт сканирует смарт-контракты и чекеры проектов, находит распределенные на ваши кошельки токены и безопасно подписывает транзакции сбора.</div>
             </div>
-            <div class="faq-item" onclick="toggleFaq(this)">
-                <div class="faq-question"><span id="q2">В чем разница между Standard и PRO?</span> <span>+</span></div>
-                <div class="faq-answer" id="a2">Standard ограничен 5 кошельками и сетью Base. PRO дает до 15 кошельков, доступ к сетям Arbitrum и ZkSync, а также фоновый планировщик. Premium открывает 30 кошельков и эксклюзивный доступ к Solana.</div>
+            <div class="faq-item">
+                <button type="button" class="faq-question" onclick="toggleFaq(this.closest('.faq-item'))" aria-expanded="false" aria-controls="a2"><span id="q2">В чем разница между Standard и PRO?</span> <span class="faq-toggle" aria-hidden="true">+</span></button>
+                <div class="faq-answer" id="a2" role="region" aria-labelledby="q2">Standard ограничен 5 кошельками и сетью Base. PRO дает до 15 кошельков, доступ к сетям Arbitrum и ZkSync, а также фоновый планировщик. Premium открывает 30 кошельков и эксклюзивный доступ к Solana.</div>
             </div>
-            <div class="faq-item" onclick="toggleFaq(this)">
-                <div class="faq-question"><span id="q3">Нужно ли настраивать прокси для каждого кошелька?</span> <span>+</span></div>
-                <div class="faq-answer" id="a3">Да, софт поддерживает привязку индивидуальных HTTP/Socks5 прокси к каждому адресу.</div>
+            <div class="faq-item">
+                <button type="button" class="faq-question" onclick="toggleFaq(this.closest('.faq-item'))" aria-expanded="false" aria-controls="a3"><span id="q3">Нужно ли настраивать прокси для каждого кошелька?</span> <span class="faq-toggle" aria-hidden="true">+</span></button>
+                <div class="faq-answer" id="a3" role="region" aria-labelledby="q3">Да, софт поддерживает привязку индивидуальных HTTP/Socks5 прокси к каждому адресу.</div>
             </div>
-            <div class="faq-item" onclick="toggleFaq(this)">
-                <div class="faq-question"><span id="q4">Как получить доступ к софту?</span> <span>+</span></div>
-                <div class="faq-answer" id="a4">Выберите тариф вверху сайта, оформите подписку и залогиньтесь. Количество мест ограничено.</div>
+            <div class="faq-item">
+                <button type="button" class="faq-question" onclick="toggleFaq(this.closest('.faq-item'))" aria-expanded="false" aria-controls="a4"><span id="q4">Как получить доступ к софту?</span> <span class="faq-toggle" aria-hidden="true">+</span></button>
+                <div class="faq-answer" id="a4" role="region" aria-labelledby="q4">Выберите тариф вверху сайта, оформите подписку и залогиньтесь. Количество мест ограничено.</div>
             </div>
         </div>
     </div>
 
     <div id="dashboard-content" style="display: none;" class="dashboard-wrapper"></div>
 
-    <div class="mobile-nav-bar" id="mobileNavBar" style="display: none;">
-        <button class="mobile-nav-item active" onclick="switchMobileNav('Looter', this)"><span class="icon">📦</span><span id="mn-looter">Looter</span></button>
-        <button class="mobile-nav-item" onclick="switchMobileNav('Farming', this)"><span class="icon">🌾</span><span id="mn-farm">Фарм</span></button>
-        <button class="mobile-nav-item" onclick="switchMobileNav('Proxy', this)"><span class="icon">🌐</span><span id="mn-proxy">Прокси</span></button>
-        <button class="mobile-nav-item" onclick="switchMobileNav('Statistics', this)"><span class="icon">📊</span><span id="mn-stats">Статистика</span></button>
-        <button class="mobile-nav-item" onclick="openBottomSheetMenu()"><span class="icon">☰</span><span id="mn-more">Ещё</span></button>
+    <div class="mobile-nav-bar" id="mobileNavBar" style="display: none;" aria-label="Mobile navigation">
+        <button type="button" class="mobile-nav-item" data-mobile-section="Account" onclick="switchMobileNav('Account', this)"><span id="mn-account">Account</span></button>
+        <button type="button" class="mobile-nav-item" data-mobile-section="Farming" onclick="switchMobileNav('Farming', this)"><span id="mn-farming">Action center</span></button>
+        <button type="button" class="mobile-nav-item" data-mobile-section="Wallets" onclick="switchMobileNav('Wallets', this)"><span id="mn-wallets">Wallets</span></button>
+        <button type="button" class="mobile-nav-item" data-mobile-section="Networks" onclick="switchMobileNav('Networks', this)"><span id="mn-networks">Networks</span></button>
+        <button type="button" class="mobile-nav-item" data-mobile-section="more" onclick="openBottomSheetMenu(this)"><span id="mn-more">More</span></button>
     </div>
 
     <footer class="footer" style="border-top: 1px solid var(--border-color); padding: 24px 20px; display: flex; justify-content: space-between; align-items: center; background: var(--bg-main); color: var(--text-muted); font-size: 13px;">
     <div id="footer-rights"></div>
-    <div style="display: flex; gap: 20px; align-items: center;">
-        <span onclick="openLegalModal('privacy')" style="cursor: pointer; transition: 0.2s;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--text-muted)'" id="footer-privacy"></span>
-        <span onclick="openLegalModal('terms')" style="cursor: pointer; transition: 0.2s;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--text-muted)'" id="footer-terms"></span>
-        <a href="https://t.me" target="_blank" style="color: var(--text-muted); text-decoration: none; transition: 0.2s;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--text-muted)'">Telegram</a>
-        <a href="https://github.com" target="_blank" style="color: var(--text-muted); text-decoration: none; transition: 0.2s;" onmouseover="this.style.color='#fff'" onmouseout="this.style.color='var(--text-muted)'">GitHub</a>
+    <div style="display: flex; gap: 20px; align-items: center; flex-wrap: wrap; justify-content: center;">
+        <button type="button" class="footer-link-button" onclick="openLegalModal('privacy')" id="footer-privacy"></button>
+        <button type="button" class="footer-link-button" onclick="openLegalModal('terms')" id="footer-terms"></button>
+        <button type="button" class="footer-link-button" onclick="openLegalModal('cookies')" id="footer-cookies"></button>
+        <a href="mailto:airdrop.x.support@gmail.com" class="footer-link-button" id="footer-support"></a>
+        <span id="footer-support-hours" style="font-size: 12px;"></span>
     </div>
+    <div class="footer-wordmark" aria-hidden="true">AIRDROP—X</div>
 </footer>
+
+<section id="cookieConsentBanner" class="cookie-consent-banner" role="dialog" aria-modal="false" aria-labelledby="cookie-consent-title" aria-describedby="cookie-consent-desc" hidden>
+    <div class="cookie-consent-copy">
+        <p class="cookie-consent-eyebrow" id="cookie-consent-eyebrow"></p>
+        <h2 id="cookie-consent-title"></h2>
+        <p id="cookie-consent-desc"></p>
+    </div>
+    <div class="cookie-consent-actions">
+        <button type="button" class="cookie-consent-button cookie-consent-button--secondary" id="cookie-consent-essential" onclick="declineOptionalCookies()"></button>
+        <button type="button" class="cookie-consent-button cookie-consent-button--link" id="cookie-consent-policy" onclick="openLegalModal('cookies')"></button>
+        <button type="button" class="cookie-consent-button" id="cookie-consent-accept" onclick="acceptOptionalCookies()"></button>
+    </div>
+</section>
 
 <!-- Модальное окно для юридических документов -->
 <div id="legalModal" class="modal-overlay" onclick="closeLegalModal(event)">
     <div class="auth-modal" style="max-width: 680px; max-height: 85vh; overflow-y: auto;">
         <div class="modal-logo">
             <span id="legalModalTitle" style="font-size: 16px; font-weight: bold; color: #fff;"></span>
-            <span onclick="document.getElementById('legalModal').classList.remove('show')" style="cursor: pointer; color: var(--text-muted); font-size: 18px;">✕</span>
+            <button type="button" class="icon-button-plain" onclick="hideAppModal('legalModal')" aria-label="Close" style="color: var(--text-muted); font-size: 18px;">✕</button>
         </div>
         <div id="legalModalContent" style="color: var(--text-muted); font-size: 12px; line-height: 1.6;"></div>
     </div>
@@ -376,18 +682,20 @@
         const content = document.getElementById('legalModalContent');
         if (!modal || !title || !content) return;
 
-        const prefix = type === 'terms' ? 'legal.terms' : 'legal.privacy';
+        const prefix = type === 'terms' ? 'legal.terms' : (type === 'cookies' ? 'legal.cookies' : 'legal.privacy');
         title.innerText = window.t(`${prefix}Title`);
-        content.innerHTML = window.t(`${prefix}Content`);
-        modal.classList.add('show');
+        content.innerHTML = `${window.t(`${prefix}Content`)}<p style="margin-top:16px; padding-top:12px; border-top:1px solid var(--border-color);"><strong>${window.t('legalSupportTitle')}</strong><br><a href="mailto:airdrop.x.support@gmail.com" style="color:#c77dff;">airdrop.x.support@gmail.com</a><br><span style="color:var(--text-muted);">${window.t('legalSupportHours')}</span></p>`;
+        showAppModal('legalModal');
     }
 
     function closeLegalModal(event) {
         if (event.target.id === 'legalModal') {
-            document.getElementById('legalModal').classList.remove('show');
+            hideAppModal('legalModal');
         }
     }
 </script>
-<script src="app.js"></script>
+<script type="module" src="ui-dist/react-ui.js"></script>
+    <script src="wallet-session-state.js?v=20260827-wallet-session-1"></script>
+    <script src="app.js?v=20260828-pricing-v2"></script>
 </body>
 </html>
