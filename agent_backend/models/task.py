@@ -66,7 +66,7 @@ class TelemetryReport(BaseModel):
 
 
 class TasksResponse(BaseModel):
-    """Response model for GET /api/companion/tasks."""
+    """Response model for GET /api/companion/agent/tasks."""
     tasks: list[AgentTask]
     tier_level: int
     auto_mode_allowed: bool

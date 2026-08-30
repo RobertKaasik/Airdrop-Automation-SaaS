@@ -1,29 +1,26 @@
-"""Payload builder service - reuses existing protocol builders."""
+"""Payload builder service - thin wrappers used by TaskGenerator."""
+
+from typing import Optional
 
 
 class PayloadBuilder:
     """
-    Reuses transaction building logic from server.py for:
-    - Uniswap (Base swap)
-    - LI.FI (bridge)
-    - Aave V3 (lending)
+    Thin facade kept for modularity. Real calldata generation lives in
+    TaskGenerator (Uniswap / LI.FI / Aave) to avoid duplicate network calls.
     """
-    
+
     async def build_uniswap_payload(
         self,
         from_address: str,
         token_in: str,
         token_out: str,
         amount_in: str,
-        slippage: float = 0.5
-    ) -> dict:
-        """
-        Build Uniswap swap transaction payload.
-        Reuses logic from server.py lines ~2000-2500.
-        """
-        # TODO: Import and adapt Uniswap building logic from server.py
-        pass
-    
+        slippage: float = 0.5,
+    ) -> Optional[dict]:
+        raise NotImplementedError(
+            "Use TaskGenerator._generate_swap_task — Uniswap Trade API integration lives there."
+        )
+
     async def build_lifi_payload(
         self,
         from_chain: int,
@@ -31,25 +28,19 @@ class PayloadBuilder:
         from_token: str,
         to_token: str,
         amount: str,
-        from_address: str
-    ) -> dict:
-        """
-        Build LI.FI bridge transaction payload.
-        Reuses logic from server.py lines ~3000-3500.
-        """
-        # TODO: Import and adapt LI.FI building logic from server.py
-        pass
-    
+        from_address: str,
+    ) -> Optional[dict]:
+        raise NotImplementedError(
+            "Use TaskGenerator._generate_bridge_task — LI.FI integration lives there."
+        )
+
     async def build_aave_payload(
         self,
-        action: str,  # "supply" or "withdraw"
+        action: str,
         asset: str,
         amount: str,
-        from_address: str
-    ) -> dict:
-        """
-        Build Aave V3 transaction payload.
-        Reuses logic from server.py lines ~4000-4500.
-        """
-        # TODO: Import and adapt Aave building logic from server.py
-        pass
+        from_address: str,
+    ) -> Optional[dict]:
+        raise NotImplementedError(
+            "Use TaskGenerator Aave helpers — supply/withdraw calldata is built inline."
+        )

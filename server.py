@@ -80,19 +80,22 @@ ADMIN_PAYMENT_TEST_AMOUNT_USDC = Decimal("1.00")
 # ==============================================================================
 # TIER CONFIGURATION FOR AUTOMATED AGENT MODE
 # ==============================================================================
-# Tier hierarchy with numeric levels for scalable agent mode gating
+# Tier hierarchy aligned with PLAN_PRICES / PLAN_RANKS billing plans
+# (Standard, Pro, Premium, Whale, Enterprise) plus legacy aliases.
 SUBSCRIPTION_TIERS = {
     "free": {"level": 0, "name": "Free"},
     "standard": {"level": 1, "name": "Standard"},
+    "pro": {"level": 2, "name": "Pro"},
     "pro farmer": {"level": 2, "name": "PRO Farmer"},
     "premium": {"level": 3, "name": "Premium"},
     "premium vip": {"level": 3, "name": "Premium VIP"},
     "vip ultimate": {"level": 4, "name": "VIP Ultimate"},
-    "whale": {"level": 5, "name": "Whale / Syndicate"},
-    "enterprise": {"level": 6, "name": "Enterprise"}
+    "whale": {"level": 4, "name": "Whale"},
+    "whale / syndicate": {"level": 4, "name": "Whale / Syndicate"},
+    "enterprise": {"level": 5, "name": "Enterprise"},
 }
 
-# Minimum tier level required for automated agent mode
+# Minimum tier level required for automated agent mode (Premium+)
 AGENT_MODE_MIN_LEVEL = 3
 
 def is_agent_mode_allowed(subscription_plan: str) -> bool:
@@ -100,19 +103,21 @@ def is_agent_mode_allowed(subscription_plan: str) -> bool:
     Check if user subscription tier allows automated agent mode.
     Uses numeric level comparison for scalability.
     """
-    tier_key = subscription_plan.lower().strip()
-    tier_info = SUBSCRIPTION_TIERS.get(tier_key)
-    if not tier_info:
-        return False
-    return tier_info["level"] >= AGENT_MODE_MIN_LEVEL
+    return get_tier_info(subscription_plan)["level"] >= AGENT_MODE_MIN_LEVEL
 
 def get_tier_info(subscription_plan: str) -> dict:
     """Get tier information including level and display name."""
-    tier_key = subscription_plan.lower().strip()
-    return SUBSCRIPTION_TIERS.get(tier_key, {
-        "level": 0,
-        "name": "Unknown"
-    })
+    tier_key = (subscription_plan or "Standard").lower().strip()
+    if tier_key in SUBSCRIPTION_TIERS:
+        return SUBSCRIPTION_TIERS[tier_key]
+    # Fallback: match billing plan titles from PLAN_RANKS at runtime
+    try:
+        for plan, rank in PLAN_RANKS.items():
+            if plan.lower() == tier_key:
+                return {"level": int(rank), "name": plan}
+    except NameError:
+        pass
+    return {"level": 0, "name": "Unknown"}
 
 DEFAULT_OFFICIAL_OPPORTUNITY_SOURCES = [
     {
@@ -1001,6 +1006,8 @@ MAINTENANCE_ALLOWED_PATHS = {
     # during staging without reopening the website, accounts, or wallets.
     "/api/companion/pair",
     "/api/companion/tasks",
+    "/api/companion/agent/tasks",
+    "/api/companion/telemetry",
     "/api/companion/unpair",
 }
 
@@ -2385,11 +2392,17 @@ async def get_desktop_companion_tasks(
             "generated_slots": serialized["generated_slots"],
             "custom_slots": serialized["custom_slots"],
         })
+    subscription_plan = current_user.subscription_plan or "Standard"
+    tier_info = get_tier_info(subscription_plan)
     return {
         "status": "success",
         "server_time": int(time.time()),
         "tasks": tasks,
         "safety": "Notifications only. Review and confirmation always happen in the user's wallet.",
+        "user_tier": subscription_plan.lower().strip(),
+        "tier_level": tier_info["level"],
+        "tier_name": tier_info["name"],
+        "auto_mode_allowed": is_agent_mode_allowed(subscription_plan),
     }
 
 

@@ -3,16 +3,6 @@
 // ==============================================================================
 
 /**
- * Sanitize HTML to prevent XSS attacks.
- * ALWAYS use textContent for user input, never innerHTML.
- */
-function sanitizeHTML(str) {
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
-}
-
-/**
  * Sanitize and validate URL.
  * Only allows https:// and localhost for development.
  */
@@ -139,10 +129,10 @@ async function updateModeToggleUI() {
         toggle.checked = false;
         lockMessage.hidden = false;
         agentModeInfo.hidden = true;
-        toggleStatus.textContent = '🔒 Locked';
+        toggleStatus.textContent = '🔒 Заблокировано';
         toggleStatus.className = 'toggle-label locked';
         if (currentTierName) {
-            currentTierName.textContent = `${tierName} (Level ${tierLevel})`;
+            currentTierName.textContent = `${tierName} (Уровень ${tierLevel})`;
         }
     } else {
         // Enable toggle for premium users (level 3+)
@@ -155,6 +145,18 @@ async function updateModeToggleUI() {
     }
 }
 
+function openModal(modal) {
+    if (!modal) return;
+    modal.classList.add('is-open');
+    modal.style.display = 'flex';
+}
+
+function closeModal(modal) {
+    if (!modal) return;
+    modal.classList.remove('is-open');
+    modal.style.display = 'none';
+}
+
 function showVIPConsentDialog() {
     return new Promise((resolve) => {
         const modal = $('vip-consent');
@@ -162,19 +164,18 @@ function showVIPConsentDialog() {
         const acceptBtn = $('accept-btn');
         const cancelBtn = $('cancel-btn');
         
-        modal.style.display = 'flex';
+        openModal(modal);
         acceptBtn.disabled = true;
         checkbox.checked = false;
         
-        checkbox.addEventListener('change', () => {
+        const onCheck = () => {
             acceptBtn.disabled = !checkbox.checked;
-        });
+        };
+        checkbox.addEventListener('change', onCheck);
         
         const cleanup = () => {
-            modal.style.display = 'none';
-            checkbox.removeEventListener('change', null);
-            acceptBtn.removeEventListener('click', null);
-            cancelBtn.removeEventListener('click', null);
+            closeModal(modal);
+            checkbox.removeEventListener('change', onCheck);
         };
         
         acceptBtn.addEventListener('click', () => {
@@ -216,6 +217,17 @@ async function sync() {
     $('syncStatus').textContent = 'Синхронизация…';
     try {
         const data = await window.companion.sync();
+        if (data.tierInfo) {
+            autoModeAllowed = data.tierInfo.auto_mode_allowed || false;
+            userTier = data.tierInfo.user_tier || 'standard';
+            tierLevel = data.tierInfo.tier_level || 0;
+            tierName = data.tierInfo.tier_name || 'Standard';
+            await updateModeToggleUI();
+            const toggle = $('agent-mode-toggle');
+            if (toggle && autoModeAllowed && tierLevel >= 3) {
+                toggle.onchange = handleToggleChange;
+            }
+        }
         renderSchedules(data.schedules);
         $('syncStatus').textContent = `Синхронизировано: ${new Date(data.lastSyncedAt).toLocaleString('ru-RU')}`;
     } catch (error) {
@@ -239,7 +251,7 @@ async function showState() {
         
         // Set up toggle listener for premium users
         if (autoModeAllowed && tierLevel >= 3) {
-            $('agent-mode-toggle').addEventListener('change', handleToggleChange);
+            $('agent-mode-toggle').onchange = handleToggleChange;
         }
     }
     
@@ -313,14 +325,14 @@ const walletCountSpan = $('wallet-count');
 
 // Open key import modal
 importKeysBtn?.addEventListener('click', () => {
-    keyImportModal.style.display = 'flex';
+    openModal(keyImportModal);
     keyImportTextarea.value = '';
     importStatus.style.display = 'none';
 });
 
 // Cancel key import
 importCancelBtn?.addEventListener('click', () => {
-    keyImportModal.style.display = 'none';
+    closeModal(keyImportModal);
 });
 
 // Submit key import
@@ -358,7 +370,7 @@ importSubmitBtn?.addEventListener('click', async () => {
             await updateWalletCount();
             
             setTimeout(() => {
-                keyImportModal.style.display = 'none';
+                closeModal(keyImportModal);
             }, 2000);
         } else {
             showImportStatus(`Ошибка: ${result.error}`, 'error');
@@ -380,12 +392,12 @@ function showImportStatus(message, type) {
 // View wallets
 viewWalletsBtn?.addEventListener('click', async () => {
     await loadWalletsList();
-    walletsModal.style.display = 'flex';
+    openModal(walletsModal);
 });
 
 // Close wallets modal
 walletsCloseBtn?.addEventListener('click', () => {
-    walletsModal.style.display = 'none';
+    closeModal(walletsModal);
 });
 
 // Clear all keys
@@ -413,34 +425,54 @@ async function loadWalletsList() {
         const result = await window.companion.listWallets();
         
         if (!result.success) {
-            walletsList.innerHTML = `<p style="color: #ff4444;">Ошибка: ${result.error}</p>`;
+            walletsList.textContent = '';
+            const err = document.createElement('p');
+            err.style.color = '#ff4444';
+            err.textContent = `Ошибка: ${result.error}`;
+            walletsList.appendChild(err);
             return;
         }
         
-        const addresses = result.addresses || [];
+        const addresses = (result.addresses || []).map((item) =>
+            typeof item === 'string' ? item : (item && item.address) || ''
+        ).filter(Boolean);
         
         if (addresses.length === 0) {
-            walletsList.innerHTML = '<p>Кошельки еще не импортированы.</p>';
+            walletsList.textContent = '';
+            const empty = document.createElement('p');
+            empty.textContent = 'Кошельки еще не импортированы.';
+            walletsList.appendChild(empty);
             return;
         }
         
-        walletsList.innerHTML = addresses.map((addr, index) => `
-            <div style="padding: 10px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center;">
-                <div>
-                    <strong>Кошелек ${index + 1}</strong><br>
-                    <code style="font-size: 12px;">${addr}</code>
-                </div>
-                <button 
-                    class="danger" 
-                    style="padding: 5px 10px; font-size: 12px;"
-                    onclick="removeWallet('${addr}')"
-                >
-                    Удалить
-                </button>
-            </div>
-        `).join('');
+        walletsList.textContent = '';
+        addresses.forEach((addr, index) => {
+            const row = document.createElement('div');
+            row.style.cssText = 'padding: 10px; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center;';
+            const info = document.createElement('div');
+            const title = document.createElement('strong');
+            title.textContent = `Кошелек ${index + 1}`;
+            const code = document.createElement('code');
+            code.style.fontSize = '12px';
+            code.textContent = addr;
+            info.appendChild(title);
+            info.appendChild(document.createElement('br'));
+            info.appendChild(code);
+            const btn = document.createElement('button');
+            btn.className = 'danger';
+            btn.style.cssText = 'padding: 5px 10px; font-size: 12px;';
+            btn.textContent = 'Удалить';
+            btn.addEventListener('click', () => window.removeWallet(addr));
+            row.appendChild(info);
+            row.appendChild(btn);
+            walletsList.appendChild(row);
+        });
     } catch (error) {
-        walletsList.innerHTML = `<p style="color: #ff4444;">Error: ${error.message}</p>`;
+        walletsList.textContent = '';
+        const p = document.createElement('p');
+        p.style.color = '#ff4444';
+        p.textContent = `Ошибка: ${error.message}`;
+        walletsList.appendChild(p);
     }
 }
 

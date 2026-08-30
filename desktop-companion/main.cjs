@@ -32,6 +32,13 @@ function configPath() { return path.join(app.getPath('userData'), 'companion.jso
 function readConfig() { try { return JSON.parse(fs.readFileSync(configPath(), 'utf8')); } catch (_) { return {}; } }
 function writeConfig(value) { fs.writeFileSync(configPath(), JSON.stringify(value, null, 2), { encoding: 'utf8', mode: 0o600 }); }
 
+function hydrateTierFromConfig(config = readConfig()) {
+  autoModeAllowed = Boolean(config.autoModeAllowed);
+  userTier = config.userTier || 'standard';
+  tierLevel = Number(config.tierLevel) || 0;
+  tierName = config.tierName || 'Standard';
+}
+
 function normalizeOrigin(value) {
   const url = new URL(String(value || '').trim());
   const local = ['127.0.0.1', 'localhost', '::1'].includes(url.hostname);
@@ -143,8 +150,32 @@ async function syncTasks() {
   if (!config.origin || !token) return { paired: false, schedules: [] };
   const data = await requestApi(config.origin, '/api/companion/tasks', token);
   const schedules = scheduleRows(Array.isArray(data.tasks) ? data.tasks : []);
+
+  // Refresh tier gating on every sync so Premium unlocks without re-pair
+  if (typeof data.auto_mode_allowed === 'boolean') {
+    autoModeAllowed = data.auto_mode_allowed;
+    userTier = data.user_tier || userTier;
+    tierLevel = Number.isFinite(data.tier_level) ? data.tier_level : tierLevel;
+    tierName = data.tier_name || tierName;
+    config.autoModeAllowed = autoModeAllowed;
+    config.userTier = userTier;
+    config.tierLevel = tierLevel;
+    config.tierName = tierName;
+  }
+
   config.lastSyncedAt = new Date().toISOString(); writeConfig(config); planNotifications(schedules);
-  return { paired: true, schedules, lastSyncedAt: config.lastSyncedAt, safety: 'Только напоминания. Подпись всегда выполняется вручную в кошельке.' };
+  return {
+    paired: true,
+    schedules,
+    lastSyncedAt: config.lastSyncedAt,
+    safety: 'Только напоминания. Подпись всегда выполняется вручную в кошельке.',
+    tierInfo: {
+      auto_mode_allowed: config.autoModeAllowed || false,
+      user_tier: config.userTier || 'standard',
+      tier_level: config.tierLevel || 0,
+      tier_name: config.tierName || 'Standard'
+    }
+  };
 }
 
 function createWindow() {
@@ -247,12 +278,14 @@ ipcMain.handle('companion:unpair', async () => {
 
 // Agent mode IPC handlers
 ipcMain.handle('companion:enable-agent-mode', async (event) => {
+  // Prefer fresh values from disk (sync may have updated Premium status)
+  hydrateTierFromConfig();
   // CRITICAL: Validate tier level before allowing mode change
   if (!autoModeAllowed || tierLevel < AGENT_MODE_MIN_LEVEL) {
     console.error(`[Security] Rejected agent mode activation - tier level ${tierLevel} < ${AGENT_MODE_MIN_LEVEL}`);
     return {
       success: false,
-      error: `Premium VIP subscription (Level ${AGENT_MODE_MIN_LEVEL}+) required for agent mode`,
+      error: `Premium subscription (Level ${AGENT_MODE_MIN_LEVEL}+) required for agent mode`,
       current_tier: userTier,
       current_level: tierLevel,
       required_level: AGENT_MODE_MIN_LEVEL
@@ -305,7 +338,7 @@ ipcMain.handle('companion:enable-agent-mode', async (event) => {
         if (!config.origin || !token) {
           throw new Error('Not paired');
         }
-        return await requestApi(config.origin, '/api/companion/tasks', token);
+        return await requestApi(config.origin, '/api/companion/agent/tasks', token);
       },
       submitTelemetry: async (telemetry) => {
         const config = readConfig();
@@ -484,5 +517,11 @@ ipcMain.handle('companion:clear-all-keys', async (event) => {
   }
 });
 
-app.whenReady().then(async () => { createWindow(); await syncTasks().catch(() => {}); setInterval(() => syncTasks().catch(() => {}), POLL_INTERVAL_MS); app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); }); });
+app.whenReady().then(async () => {
+  hydrateTierFromConfig();
+  createWindow();
+  await syncTasks().catch(() => {});
+  setInterval(() => syncTasks().catch(() => {}), POLL_INTERVAL_MS);
+  app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow(); });
+});
 app.on('window-all-closed', () => { clearNotifications(); if (process.platform !== 'darwin') app.quit(); });

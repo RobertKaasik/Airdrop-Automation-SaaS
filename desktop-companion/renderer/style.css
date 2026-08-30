@@ -513,16 +513,15 @@ tr:hover td { background: rgba(124, 58, 237, 0.04); }
     inset: 0;
     background: rgba(0, 0, 0, 0.85);
     backdrop-filter: blur(4px);
-    display: none; /* Hidden by default */
+    display: none;
     align-items: center;
     justify-content: center;
     z-index: 1000;
     padding: 16px;
 }
 
-.modal[style*="display: flex"],
-.modal:not([style*="display: none"]):not([hidden]) {
-    display: flex; /* Show when explicitly set */
+.modal.is-open {
+    display: flex;
 }
 
 .modal-content {
