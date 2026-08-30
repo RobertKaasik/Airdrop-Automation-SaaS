@@ -17,9 +17,9 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
-    <script src="locales/ru.js?v=20260828-pricing-v2"></script>
-    <script src="locales/en.js?v=20260828-pricing-v2"></script>
-    <script src="locales/zh.js?v=20260828-pricing-v2"></script>
+    <script src="locales/ru.js?v=20260830-calendar-v1"></script>
+    <script src="locales/en.js?v=20260830-calendar-v1"></script>
+    <script src="locales/zh.js?v=20260830-calendar-v1"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -253,61 +253,7 @@
         </div>
     </div>
 
-    <div class="modal-overlay" id="walletScheduleModal" onclick="handleWalletScheduleOverlayClick(event)">
-        <div class="auth-modal wallet-schedule-modal" role="dialog" aria-modal="true" aria-labelledby="walletScheduleTitle">
-            <div class="wallet-schedule-head">
-                <div>
-                    <div id="walletScheduleTitle" class="wallet-schedule-title"></div>
-                    <div id="walletScheduleWallet" class="wallet-schedule-wallet"></div>
-                </div>
-                <button type="button" class="wallet-schedule-close" onclick="closeWalletScheduleModal()" aria-label="Close">×</button>
-            </div>
-            <div id="walletScheduleSafety" class="wallet-schedule-notice"></div>
-            <div id="walletScheduleProxyNotice" class="wallet-schedule-proxy"></div>
-
-            <div class="wallet-schedule-form">
-                <label><span id="walletScheduleActionLabel"></span>
-                    <select id="walletScheduleAction" class="auth-input">
-                        <option value="dex" id="walletScheduleActionSwap"></option>
-                        <option value="bridge" id="walletScheduleActionBridge"></option>
-                        <option value="lending" id="walletScheduleActionDefi"></option>
-                    </select>
-                </label>
-                <label><span id="walletScheduleTimezoneLabel"></span>
-                    <input id="walletScheduleTimezone" type="text" value="UTC" readonly class="auth-input">
-                </label>
-            </div>
-            <div id="walletScheduleFlexiblePanel" class="wallet-schedule-flex-panel">
-                <div id="walletScheduleFlexibleDescription" class="wallet-schedule-flex-description"></div>
-                <div class="wallet-schedule-mode-bar" role="group" aria-label="Schedule mode">
-                    <button type="button" id="walletScheduleAutoMode" class="wallet-schedule-mode is-active" onclick="setWalletScheduleMode('flexible')"></button>
-                    <button type="button" id="walletScheduleCustomMode" class="wallet-schedule-mode" onclick="setWalletScheduleMode('custom')"></button>
-                </div>
-                <div class="wallet-schedule-flex-grid">
-                    <label><span id="walletScheduleWeeklyMinLabel"></span><input id="walletScheduleWeeklyMin" type="number" min="1" max="7" value="3" oninput="sanitizeIntegerInput(this, 1); checkInputLimit(this, 7)" class="auth-input"></label>
-                    <label><span id="walletScheduleWeeklyMaxLabel"></span><input id="walletScheduleWeeklyMax" type="number" min="1" max="7" value="4" oninput="sanitizeIntegerInput(this, 1); checkInputLimit(this, 7)" class="auth-input"></label>
-                    <label><span id="walletScheduleWindowStartLabel"></span><input id="walletScheduleWindowStart" type="text" value="10:00" placeholder="10:00" maxlength="5" inputmode="numeric" oninput="format24HourTimeInput(this)" onblur="normalize24HourTimeInput(this)" class="auth-input"></label>
-                    <label><span id="walletScheduleWindowEndLabel"></span><input id="walletScheduleWindowEnd" type="text" value="21:00" placeholder="21:00" maxlength="5" inputmode="numeric" oninput="format24HourTimeInput(this)" onblur="normalize24HourTimeInput(this)" class="auth-input"></label>
-                </div>
-                <div class="wallet-schedule-calendar-head">
-                    <div>
-                        <b id="walletSchedulePreviewTitle"></b>
-                        <span id="walletSchedulePreviewDesc"></span>
-                    </div>
-                    <button type="button" id="walletSchedulePreviewRefresh" class="wallet-schedule-preview-refresh" onclick="refreshWalletSchedulePreview()"></button>
-                </div>
-                <div id="walletScheduleGeneratedPreview" class="wallet-schedule-generated-preview" aria-live="polite"></div>
-            </div>
-            <label class="wallet-schedule-check"><input id="walletScheduleTelegram" type="checkbox" checked> <span id="walletScheduleTelegramLabel"></span></label>
-            <label class="wallet-schedule-check wallet-schedule-consent"><input id="walletScheduleAcknowledgement" type="checkbox"> <span id="walletScheduleAcknowledgementLabel"></span></label>
-            <div id="walletScheduleStatus" class="wallet-schedule-status"></div>
-            <button type="button" id="walletScheduleSave" onclick="saveWalletSchedule()" class="btn-purple-lg wallet-schedule-save"></button>
-
-            <div class="wallet-schedule-list-head" id="walletScheduleListTitle"></div>
-            <div id="walletScheduleList" class="wallet-schedule-list"></div>
-        </div>
-    </div>
-
+    <!-- Schedule builder lives in Wallet Workspace (Wallets section), not a separate modal. -->
 
     <div class="modal-overlay" id="walletConnectModal" onclick="handleWalletConnectOverlayClick(event)">
         <div class="auth-modal" style="max-width: 380px; text-align:center;">

@@ -511,6 +511,58 @@ class TelegramWalletBackendTests(unittest.TestCase):
             self.await_result(server.run_scheduled_action_reminder_job())
             sender.assert_not_called()
 
+    def test_wallet_schedule_reminder_includes_amount_route_and_review_button(self) -> None:
+        now_ts = int(time.time())
+        schedule = server.WalletActionSchedule(
+            username=self.owner.username,
+            wallet_id=self.owner_wallet.id,
+            action_type="bridge",
+            day_of_week="Mon",
+            time_of_day="12:00",
+            timezone="UTC",
+            enabled=True,
+            telegram_enabled=True,
+            acknowledgement=True,
+            schedule_mode="fixed",
+            weekly_min=3,
+            weekly_max=4,
+            window_start="10:00",
+            window_end="21:00",
+            amount_mode="random",
+            amount_min="0.01",
+            amount_max="0.05",
+            from_network="Base",
+            to_network="Arbitrum",
+            readiness_status="insufficient_balance",
+            created_at=now_ts,
+            updated_at=now_ts,
+        )
+        self.db.add(schedule)
+        self.db.commit()
+        self.db.refresh(schedule)
+
+        message, markup = server.build_wallet_schedule_reminder(
+            schedule, self.owner_wallet, "en"
+        )
+        self.assertIn("0.01–0.05", message)
+        self.assertIn("Base", message)
+        self.assertIn("Arbitrum", message)
+        self.assertIn("low balance", message.lower())
+        self.assertIn("Wallet Workspace", message)
+        self.assertNotIn("private", message.lower())
+        self.assertNotIn("calldata", message.lower())
+        button = markup["inline_keyboard"][0][0]
+        self.assertEqual(button["text"], "Open & review")
+        self.assertIn("ax_open=workspace", button["url"])
+        self.assertIn(f"wallet_id={self.owner_wallet.id}", button["url"])
+        self.assertIn(f"schedule_id={schedule.id}", button["url"])
+
+        schedule.readiness_status = "ready"
+        ready_message, _ = server.build_wallet_schedule_reminder(
+            schedule, self.owner_wallet, "en"
+        )
+        self.assertIn("ready for review", ready_message.lower())
+
     def test_wallet_ownership_and_public_responses_do_not_expose_signing_authority(self) -> None:
         self.assert_http_error(
             403,

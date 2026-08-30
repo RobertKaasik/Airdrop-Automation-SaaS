@@ -66,6 +66,14 @@ const LOCALES = {
     unknown: 'Не удалось определить', expires: 'Действует до {time}', nextSync: 'Статус обновится при синхронизации.',
     empty: 'Активных расписаний пока нет. Создайте их на сайте — здесь появятся напоминания.',
     reminder: 'Следующее напоминание: {time} ({timezone})',
+    amountLine: 'Сумма: {amount}',
+    routeLine: 'Маршрут: {route}',
+    networkLine: 'Сеть: {network}',
+    readinessReady: 'Готовность: можно проверить',
+    readinessBalance: 'Готовность: низкий баланс или газ',
+    readinessRoute: 'Готовность: маршрут изменился или недоступен',
+    readinessReview: 'Готовность: проверьте параметры ({status})',
+    openReviewRow: 'Открыть и проверить',
   },
   en: {
     intl: 'en-US', subtitle: 'Calendar and local reminders for your schedules.',
@@ -83,6 +91,14 @@ const LOCALES = {
     unknown: 'Could not determine', expires: 'Active until {time}', nextSync: 'Status will update after sync.',
     empty: 'There are no active schedules yet. Create them on the website — reminders will appear here.',
     reminder: 'Next reminder: {time} ({timezone})',
+    amountLine: 'Amount: {amount}',
+    routeLine: 'Route: {route}',
+    networkLine: 'Network: {network}',
+    readinessReady: 'Readiness: ready to review',
+    readinessBalance: 'Readiness: low balance or gas',
+    readinessRoute: 'Readiness: route changed or unavailable',
+    readinessReview: 'Readiness: review parameters ({status})',
+    openReviewRow: 'Open & review',
   },
   zh: {
     intl: 'zh-CN', subtitle: '查看日历和本地日程提醒。',
@@ -100,6 +116,14 @@ const LOCALES = {
     unknown: '无法确定', expires: '有效期至 {time}', nextSync: '同步后将更新状态。',
     empty: '暂无活跃日程。请在网站上创建，提醒将显示在这里。',
     reminder: '下次提醒：{time}（{timezone}）',
+    amountLine: '金额：{amount}',
+    routeLine: '路线：{route}',
+    networkLine: '网络：{network}',
+    readinessReady: '就绪：可复查',
+    readinessBalance: '就绪：余额或 Gas 不足',
+    readinessRoute: '就绪：路线已变化或不可用',
+    readinessReview: '就绪：请检查参数（{status}）',
+    openReviewRow: '打开并检查',
   },
 };
 
@@ -212,6 +236,16 @@ function formatWhen(epoch, timeZone) {
     }
 }
 
+function readinessLabel(status) {
+    const value = String(status || 'unknown').toLowerCase();
+    if (value === 'ready') return t('readinessReady');
+    if (value.startsWith('insufficient')) return t('readinessBalance');
+    if (value.includes('route') || value === 'quote_failed' || value === 'quote_unavailable') {
+        return t('readinessRoute');
+    }
+    return t('readinessReview', { status: value });
+}
+
 function renderSchedules(schedules = []) {
     const list = $('scheduleList');
     if (!list) return;
@@ -233,48 +267,134 @@ function renderSchedules(schedules = []) {
         address.textContent = schedule.walletAddress;
         const details = document.createElement('p');
         details.textContent = `${schedule.actionType} · ${schedule.scheduleMode} · ${schedule.timezone}`;
+        item.append(title, address, details);
+        if (schedule.amountSummary) {
+            const amount = document.createElement('p');
+            amount.textContent = t('amountLine', { amount: schedule.amountSummary });
+            item.append(amount);
+        }
+        if (schedule.fromNetwork && schedule.toNetwork && schedule.fromNetwork !== schedule.toNetwork) {
+            const route = document.createElement('p');
+            route.textContent = t('routeLine', {
+                route: `${schedule.fromNetwork} → ${schedule.toNetwork}`,
+            });
+            item.append(route);
+        } else if (schedule.fromNetwork || schedule.toNetwork) {
+            const network = document.createElement('p');
+            network.textContent = t('networkLine', {
+                network: schedule.fromNetwork || schedule.toNetwork,
+            });
+            item.append(network);
+        }
+        const readiness = document.createElement('p');
+        readiness.textContent = readinessLabel(schedule.readinessStatus);
+        item.append(readiness);
         const when = document.createElement('p');
         when.className = 'next';
         when.textContent = t('reminder', {
             time: formatWhen(schedule.nextAt, schedule.timezone),
             timezone: schedule.timezone
         });
-        item.append(title, address, details, when);
+        item.append(when);
+        const review = document.createElement('button');
+        review.type = 'button';
+        review.className = 'schedule-review';
+        review.textContent = t('openReviewRow');
+        review.addEventListener('click', () => {
+            window.companion.openReview({
+                walletId: schedule.walletId,
+                scheduleId: schedule.scheduleId,
+            });
+        });
+        item.append(review);
         list.append(item);
     });
 }
 
-async function updateModeToggleUI() {
+const PLAN_LEVELS = {
+    free: 0,
+    standard: 1,
+    pro: 2,
+    'pro farmer': 2,
+    premium: 3,
+    'premium vip': 3,
+    'vip ultimate': 4,
+    whale: 4,
+    'whale / syndicate': 4,
+    enterprise: 5,
+};
+
+function setHidden(element, hidden) {
+    if (!element) return;
+    element.hidden = hidden;
+    element.classList.toggle('hidden', hidden);
+}
+
+function applyTierFrom(info, subscription) {
+    const names = [
+        info && info.tier_name,
+        subscription && subscription.plan,
+        tierName,
+    ].filter(Boolean);
+    let bestName = names[0] || 'Standard';
+    let bestLevel = 0;
+    for (const name of names) {
+        const named = PLAN_LEVELS[String(name).toLowerCase()];
+        const level = Number.isFinite(named) ? named : 0;
+        if (level >= bestLevel) {
+            bestName = name;
+            bestLevel = level;
+        }
+    }
+    const numeric = Number(info && info.tier_level);
+    if (Number.isFinite(numeric) && numeric > bestLevel) bestLevel = numeric;
+    tierName = bestName;
+    userTier = (info && info.user_tier) || String(bestName).toLowerCase();
+    tierLevel = bestLevel;
+    autoModeAllowed = Boolean((info && info.auto_mode_allowed) || tierLevel >= 3);
+}
+
+function updateModeToggleUI() {
     const toggle = $('agent-mode-toggle');
     const lockMessage = $('tier-lock-message');
     const toggleStatus = $('toggle-status');
     const tierBadge = $('tier-badge');
     const currentTierName = $('current-tier-name');
     const agentModeInfo = $('agent-mode-info');
-    
-    // Update tier badge
-    tierBadge.textContent = tierName;
-    tierBadge.style.backgroundColor = TIER_COLORS[tierLevel] || '#999';
-    
-    if (!autoModeAllowed || tierLevel < 3) {
-        // Show locked state for non-premium users (level 0-2)
-        toggle.disabled = true;
-        toggle.checked = false;
-        lockMessage.hidden = false;
-        agentModeInfo.hidden = true;
-        toggleStatus.textContent = '🔒 Заблокировано';
-        toggleStatus.className = 'toggle-label locked';
+    const agentOn = companionMode === 'agent';
+    const canUseAgent = autoModeAllowed && tierLevel >= 3;
+
+    if (tierBadge) {
+        tierBadge.textContent = tierName;
+        tierBadge.style.backgroundColor = TIER_COLORS[tierLevel] || '#999';
+    }
+
+    if (!canUseAgent) {
+        if (toggle) {
+            toggle.disabled = true;
+            toggle.checked = false;
+        }
+        setHidden(lockMessage, false);
+        setHidden(agentModeInfo, true);
+        if (toggleStatus) {
+            toggleStatus.textContent = '🔒 Заблокировано';
+            toggleStatus.className = 'toggle-label locked';
+        }
         if (currentTierName) {
             currentTierName.textContent = `${tierName} (Уровень ${tierLevel})`;
         }
-    } else {
-        // Enable toggle for premium users (level 3+)
+        return;
+    }
+
+    if (toggle) {
         toggle.disabled = false;
-        lockMessage.hidden = true;
-        agentModeInfo.hidden = false;
-        toggleStatus.textContent = companionMode === 'agent' ? '✓ Включено' : 'Отключено';
-        toggleStatus.className = companionMode === 'agent' ?
-            'toggle-label enabled' : 'toggle-label';
+        toggle.checked = agentOn;
+    }
+    setHidden(lockMessage, true);
+    setHidden(agentModeInfo, !agentOn);
+    if (toggleStatus) {
+        toggleStatus.textContent = agentOn ? 'Авторежим' : 'Ручной режим';
+        toggleStatus.className = agentOn ? 'toggle-label enabled' : 'toggle-label';
     }
 }
 
@@ -326,6 +446,11 @@ function showVIPConsentDialog() {
 }
 
 async function handleToggleChange(event) {
+    if (!autoModeAllowed || tierLevel < 3) {
+        event.target.checked = false;
+        updateModeToggleUI();
+        return;
+    }
     if (event.target.checked) {
         // Show VIP consent dialog
         const consent = await showVIPConsentDialog();
@@ -336,7 +461,8 @@ async function handleToggleChange(event) {
                 event.target.checked = false;
             } else {
                 companionMode = 'agent';
-                await updateModeToggleUI();
+                updateModeToggleUI();
+                updateWalletCount();
             }
         } else {
             event.target.checked = false;
@@ -344,7 +470,7 @@ async function handleToggleChange(event) {
     } else {
         await window.companion.disableAgentMode();
         companionMode = 'safe';
-        await updateModeToggleUI();
+        updateModeToggleUI();
     }
 }
 
@@ -353,16 +479,9 @@ async function sync() {
     $('syncStatus').textContent = t('syncing');
     try {
         const data = await window.companion.sync();
-        if (data.tierInfo) {
-            autoModeAllowed = data.tierInfo.auto_mode_allowed || false;
-            userTier = data.tierInfo.user_tier || 'standard';
-            tierLevel = data.tierInfo.tier_level || 0;
-            tierName = data.tierInfo.tier_name || 'Standard';
-            await updateModeToggleUI();
-            const toggle = $('agent-mode-toggle');
-            if (toggle && autoModeAllowed && tierLevel >= 3) {
-                toggle.onchange = handleToggleChange;
-            }
+        if (data.tierInfo || data.subscription) {
+            applyTierFrom(data.tierInfo, data.subscription);
+            updateModeToggleUI();
         }
         latestSubscription = (data.subscription && data.subscription.plan)
             ? data.subscription
@@ -386,28 +505,14 @@ async function sync() {
 async function showState() {
     const state = await window.companion.getState();
     
-    // Update tier information if available
-    if (state.paired && state.tierInfo) {
-        autoModeAllowed = state.tierInfo.auto_mode_allowed || false;
-        userTier = state.tierInfo.user_tier || 'standard';
-        tierLevel = state.tierInfo.tier_level || 0;
-        tierName = state.tierInfo.tier_name || 'Standard';
-        
-        console.log(`[UI] Tier: ${tierName} (${userTier}), Level: ${tierLevel}, Auto allowed: ${autoModeAllowed}`);
-        
-        await updateModeToggleUI();
-        
-        // Set up toggle listener for premium users
-        if (autoModeAllowed && tierLevel >= 3) {
-            $('agent-mode-toggle').onchange = handleToggleChange;
-        }
-    }
-    
     $('origin').value = state.origin || 'https://airdrop-x.com';
     $('pairingCard').classList.toggle('hidden', state.paired);
     $('dashboardCard').classList.toggle('hidden', !state.paired);
     latestSubscription = state.subscription || latestSubscription;
     if (state.paired) {
+        if (state.companionMode) companionMode = state.companionMode;
+        applyTierFrom(state.tierInfo, latestSubscription);
+        updateModeToggleUI();
         renderSubscription(latestSubscription, state.tierInfo);
         await sync();
     }
@@ -428,11 +533,8 @@ $('pairButton').addEventListener('click', async () => {
         });
         
         // Store tier information from pairing response
-        if (result.tierInfo) {
-            autoModeAllowed = result.tierInfo.auto_mode_allowed || false;
-            userTier = result.tierInfo.user_tier || 'standard';
-            tierLevel = result.tierInfo.tier_level || 0;
-            tierName = result.tierInfo.tier_name || 'Standard';
+        if (result.tierInfo || result.subscription) {
+            applyTierFrom(result.tierInfo, result.subscription);
         }
         
         message('');
@@ -444,6 +546,7 @@ $('pairButton').addEventListener('click', async () => {
     }
 });
 
+$('agent-mode-toggle')?.addEventListener('change', handleToggleChange);
 $('syncButton').addEventListener('click', sync);
 $('reviewButton').addEventListener('click', () => window.companion.openReview());
 $('unpairButton').addEventListener('click', async () => {

@@ -92,6 +92,26 @@ class DesktopCompanionTests(unittest.TestCase):
         self.assertNotIn("private_key", task)
         self.assertNotIn("signature", task)
         self.assertNotIn("calldata", task)
+        self.assertIn("amount_mode", task)
+        self.assertIn("readiness_status", task)
+        self.assertIn("amount_summary", task)
+        self.assertNotIn("0x", str(task.get("amount_summary") or ""))
+
+        # Enrich schedule metadata and ensure the companion feed stays keyless.
+        self.schedule.amount_mode = "fixed"
+        self.schedule.amount_fixed = "0.05"
+        self.schedule.from_network = "Base"
+        self.schedule.to_network = "Arbitrum"
+        self.schedule.readiness_status = "ready"
+        self.db.commit()
+        feed_rich = self.await_result(server.get_desktop_companion_tasks(self.db, companion_user))
+        rich = feed_rich["tasks"][0]
+        self.assertEqual(rich["amount_summary"], "0.05")
+        self.assertEqual(rich["from_network"], "Base")
+        self.assertEqual(rich["to_network"], "Arbitrum")
+        self.assertEqual(rich["readiness_status"], "ready")
+        self.assertNotIn("calldata", rich)
+        self.assertNotIn("private_key", rich)
 
         self.await_result(server.unpair_desktop_companion(token, self.db, companion_user))
         with self.assertRaises(HTTPException) as unpaired:

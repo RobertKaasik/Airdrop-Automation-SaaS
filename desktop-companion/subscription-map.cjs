@@ -1,6 +1,19 @@
 'use strict';
 
 const STATUSES = new Set(['active', 'grace', 'expired']);
+const TIER_LEVELS = {
+  free: 0,
+  standard: 1,
+  pro: 2,
+  'pro farmer': 2,
+  premium: 3,
+  'premium vip': 3,
+  'vip ultimate': 4,
+  whale: 4,
+  'whale / syndicate': 4,
+  enterprise: 5,
+};
+const AGENT_MODE_MIN_LEVEL = 3;
 
 function pickStatus(...values) {
   for (const value of values) {
@@ -20,4 +33,22 @@ function normalizeSubscription(data = {}, fallbackPlan = '') {
   return { plan, status, expiresAt: expiresAt || null };
 }
 
-module.exports = { normalizeSubscription };
+function resolveTier(data = {}, fallback = {}) {
+  const nested = (data.subscription && typeof data.subscription === 'object') ? data.subscription : {};
+  const plan = String(
+    data.tier_name || nested.plan || data.user_tier || fallback.plan || fallback.tierName || ''
+  ).trim();
+  const namedLevel = TIER_LEVELS[plan.toLowerCase()];
+  const numeric = Number(data.tier_level);
+  const level = Number.isFinite(namedLevel)
+    ? namedLevel
+    : (Number.isFinite(numeric) ? numeric : Number(fallback.level) || 0);
+  return {
+    plan: plan || fallback.plan || 'Standard',
+    userTier: String(data.user_tier || plan || fallback.userTier || 'standard').toLowerCase(),
+    level,
+    allowed: data.auto_mode_allowed === true || level >= AGENT_MODE_MIN_LEVEL,
+  };
+}
+
+module.exports = { normalizeSubscription, resolveTier, AGENT_MODE_MIN_LEVEL };

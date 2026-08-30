@@ -28,6 +28,7 @@ from email.message import EmailMessage
 from pathlib import Path
 from urllib.parse import urlparse
 from dotenv import load_dotenv
+from telegram_locales import get_text as telegram_text
 
 # Securely load environment variables from .env
 BASE_DIR = Path(__file__).resolve().parent
@@ -49,6 +50,7 @@ INITIAL_ADMIN_EMAIL = os.getenv("INITIAL_ADMIN_EMAIL", "").strip().lower()
 INITIAL_ADMIN_USERNAME = os.getenv("INITIAL_ADMIN_USERNAME", "Admin").strip() or "Admin"
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_BOT_USERNAME = os.getenv("TELEGRAM_BOT_USERNAME", "").strip().lstrip("@")
+PUBLIC_SITE_URL = os.getenv("PUBLIC_SITE_URL", "https://airdrop-x.com").strip().rstrip("/") or "https://airdrop-x.com"
 WALLETCONNECT_PROJECT_ID = os.getenv("WALLETCONNECT_PROJECT_ID", "").strip()
 UNISWAP_API_KEY = os.getenv("UNISWAP_API_KEY", "").strip()
 LIFI_API_KEY = os.getenv("LIFI_API_KEY", "").strip()
@@ -772,6 +774,19 @@ class WalletActionSchedule(Base):
     # they never contain transaction data, credentials, or signing authority.
     custom_slots = Column(String, nullable=True)
     last_sent_slot = Column(String, nullable=True)
+    amount_mode = Column(String, nullable=False, default="fixed")
+    amount_fixed = Column(String, nullable=True)
+    amount_min = Column(String, nullable=True)
+    amount_max = Column(String, nullable=True)
+    from_network = Column(String, nullable=True)
+    to_network = Column(String, nullable=True)
+    from_token = Column(String, nullable=True)
+    to_token = Column(String, nullable=True)
+    protocol = Column(String, nullable=True)
+    slippage = Column(String, nullable=True)
+    readiness_status = Column(String, nullable=False, default="unknown")
+    readiness_checked_at = Column(Integer, nullable=True)
+    last_quote_fingerprint = Column(String, nullable=True)
     created_at = Column(Integer, nullable=False)
     updated_at = Column(Integer, nullable=False)
 
@@ -859,6 +874,19 @@ def ensure_schema_columns():
             "generated_week": "VARCHAR",
             "generated_slots": "VARCHAR",
             "custom_slots": "VARCHAR",
+            "amount_mode": "VARCHAR DEFAULT 'fixed'",
+            "amount_fixed": "VARCHAR",
+            "amount_min": "VARCHAR",
+            "amount_max": "VARCHAR",
+            "from_network": "VARCHAR",
+            "to_network": "VARCHAR",
+            "from_token": "VARCHAR",
+            "to_token": "VARCHAR",
+            "protocol": "VARCHAR",
+            "slippage": "VARCHAR",
+            "readiness_status": "VARCHAR DEFAULT 'unknown'",
+            "readiness_checked_at": "INTEGER",
+            "last_quote_fingerprint": "VARCHAR",
         }
         for column_name, column_type in wallet_schedule_additions.items():
             if wallet_schedule_columns and column_name not in wallet_schedule_columns:
@@ -1074,7 +1102,11 @@ def get_db():
     finally:
         db.close()
 
-def send_telegram_notification(chat_id: str, message: str):
+def send_telegram_notification(
+    chat_id: str,
+    message: str,
+    reply_markup: Optional[Dict[str, Any]] = None,
+):
     if not TELEGRAM_BOT_TOKEN or not chat_id:
         return False
     clean_chat_id = chat_id.strip()
@@ -1084,12 +1116,96 @@ def send_telegram_notification(chat_id: str, message: str):
         "text": message,
         "parse_mode": "Markdown"
     }
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
     try:
         response = requests.post(url, json=payload, timeout=10)
         return response.status_code == 200 and response.json().get("ok", False)
     except Exception as e:
         logging.warning("Telegram notification failed: %s", e)
         return False
+
+
+def workspace_review_url(wallet_id: int, schedule_id: int) -> str:
+    """Deep-link into Wallet Workspace. Never embeds keys or calldata."""
+    return (
+        f"{PUBLIC_SITE_URL}/?ax_open=workspace"
+        f"&wallet_id={int(wallet_id)}&schedule_id={int(schedule_id)}"
+    )
+
+
+def schedule_reminder_readiness_key(readiness_status: Optional[str]) -> str:
+    status = (readiness_status or "unknown").strip().lower()
+    if status == "ready":
+        return "schedule_reminder_status_ready"
+    if status.startswith("insufficient"):
+        return "schedule_reminder_status_balance"
+    if "route" in status or status in {"quote_failed", "quote_unavailable"}:
+        return "schedule_reminder_status_route"
+    return "schedule_reminder_status_review"
+
+
+def build_wallet_schedule_reminder(
+    schedule: "WalletActionSchedule",
+    wallet: "Wallet",
+    language: Optional[str],
+) -> tuple[str, Dict[str, Any]]:
+    """Rich reminder copy + Open & review button. Metadata only — no signing data."""
+    lang = normalize_language(language)
+    wallet_name = escape_telegram_markdown_text((wallet.label or f"Wallet {wallet.id}")[:80])
+    short_address = f"{wallet.wallet_address[:8]}…{wallet.wallet_address[-6:]}"
+    action_key = f"schedule_action_{(schedule.action_type or 'dex').strip().lower()}"
+    try:
+        action_name = telegram_text(lang, action_key)
+    except KeyError:
+        action_name = escape_telegram_markdown_text(schedule.action_type or "action")
+
+    lines = [
+        telegram_text(lang, "schedule_reminder_title"),
+        telegram_text(lang, "schedule_reminder_wallet", name=wallet_name, address=short_address),
+        telegram_text(lang, "schedule_reminder_action", action=action_name),
+    ]
+    amount_summary = schedule_amount_summary(schedule)
+    if amount_summary:
+        lines.append(
+            telegram_text(
+                lang,
+                "schedule_reminder_amount",
+                amount=escape_telegram_markdown_code(amount_summary),
+            )
+        )
+    from_network = optional_schedule_text(getattr(schedule, "from_network", None))
+    to_network = optional_schedule_text(getattr(schedule, "to_network", None))
+    if from_network and to_network and from_network != to_network:
+        route = escape_telegram_markdown_code(f"{from_network} → {to_network}")
+        lines.append(telegram_text(lang, "schedule_reminder_route", route=route))
+    elif from_network or to_network:
+        network = escape_telegram_markdown_code(from_network or to_network)
+        lines.append(telegram_text(lang, "schedule_reminder_network", network=network))
+
+    readiness = (getattr(schedule, "readiness_status", None) or "unknown").strip().lower()
+    status_key = schedule_reminder_readiness_key(readiness)
+    if status_key == "schedule_reminder_status_review":
+        lines.append(
+            telegram_text(
+                lang,
+                status_key,
+                status=escape_telegram_markdown_text(readiness),
+            )
+        )
+    else:
+        lines.append(telegram_text(lang, status_key))
+    lines.append(telegram_text(lang, "schedule_reminder_cta"))
+
+    reply_markup = {
+        "inline_keyboard": [[
+            {
+                "text": telegram_text(lang, "schedule_reminder_button"),
+                "url": workspace_review_url(wallet.id, schedule.id),
+            }
+        ]]
+    }
+    return "\n".join(lines), reply_markup
 
 
 def escape_telegram_markdown_text(value: Any) -> str:
@@ -1486,11 +1602,6 @@ async def run_scheduled_action_reminder_job():
         wallet_schedules = db.query(WalletActionSchedule).filter(
             WalletActionSchedule.enabled.is_(True),
         ).all()
-        action_labels = {
-            "ru": {"dex": "DEX", "bridge": "Мост", "lending": "Кредитование"},
-            "en": {"dex": "DEX", "bridge": "Bridge", "lending": "Lending"},
-            "zh": {"dex": "DEX", "bridge": "跨链桥", "lending": "借贷"},
-        }
         for schedule in wallet_schedules:
             try:
                 local_now = datetime.datetime.now(ZoneInfo(schedule.timezone))
@@ -1564,34 +1675,12 @@ async def run_scheduled_action_reminder_job():
             if not subscription or not schedule.telegram_enabled or not subscription.notify_reminders:
                 continue
             language = normalize_language(subscription.language)
-            wallet_name = escape_telegram_markdown_text(
-                (wallet.label or f"Wallet {wallet.id}")[:80]
-            )
-            short_address = f"{wallet.wallet_address[:8]}…{wallet.wallet_address[-6:]}"
-            action_name = action_labels[language].get(schedule.action_type, schedule.action_type)
-            messages = {
-                "ru": (
-                    "🗓 *AIRDROP-X: действие по расписанию*\n"
-                    f"Кошелёк: *{wallet_name}* (`{short_address}`)\n"
-                    f"Действие: *{action_name}*\n"
-                    "Откройте Центр действий, проверьте параметры и подтвердите операцию в MetaMask или WalletConnect. "
-                    "Без подтверждения средства не перемещаются."
-                ),
-                "en": (
-                    "🗓 *AIRDROP-X: scheduled action*\n"
-                    f"Wallet: *{wallet_name}* (`{short_address}`)\n"
-                    f"Action: *{action_name}*\n"
-                    "Open the Action Center, review the parameters, and approve the operation in MetaMask or WalletConnect. "
-                    "No funds move without your confirmation."
-                ),
-                "zh": (
-                    "🗓 *AIRDROP-X：计划操作*\n"
-                    f"钱包：*{wallet_name}* (`{short_address}`)\n"
-                    f"操作：*{action_name}*\n"
-                    "请打开操作中心、检查参数，并在 MetaMask 或 WalletConnect 中确认。未经确认不会转移资金。"
-                ),
-            }
-            if not send_telegram_notification(subscription.chat_id, messages[language]):
+            message, reply_markup = build_wallet_schedule_reminder(schedule, wallet, language)
+            if not send_telegram_notification(
+                subscription.chat_id,
+                message,
+                reply_markup=reply_markup,
+            ):
                 continue
             schedule.last_sent_slot = due_slot
             schedule.updated_at = int(time.time())
@@ -1929,6 +2018,16 @@ class WalletActionScheduleRequest(BaseModel):
     window_end: str = "21:00"
     custom_slots: List[Dict[str, str]] = Field(default_factory=list)
     reroll: bool = False
+    amount_mode: str = "fixed"
+    amount_fixed: Optional[str] = None
+    amount_min: Optional[str] = None
+    amount_max: Optional[str] = None
+    from_network: Optional[str] = None
+    to_network: Optional[str] = None
+    from_token: Optional[str] = None
+    to_token: Optional[str] = None
+    protocol: Optional[str] = None
+    slippage: Optional[str] = None
 
 class BridgePlanRequest(BaseModel):
     wallet_address: str
@@ -2400,6 +2499,17 @@ async def get_desktop_companion_tasks(
             "updated_at": schedule.updated_at,
             "generated_slots": serialized["generated_slots"],
             "custom_slots": serialized["custom_slots"],
+            "amount_mode": serialized["amount_mode"],
+            "amount_fixed": serialized["amount_fixed"],
+            "amount_min": serialized["amount_min"],
+            "amount_max": serialized["amount_max"],
+            "from_network": serialized["from_network"],
+            "to_network": serialized["to_network"],
+            "from_token": serialized["from_token"],
+            "to_token": serialized["to_token"],
+            "protocol": serialized["protocol"],
+            "readiness_status": serialized["readiness_status"],
+            "amount_summary": schedule_amount_summary(schedule),
         })
     subscription_plan = current_user.subscription_plan or "Standard"
     tier_info = get_tier_info(subscription_plan)
@@ -5632,6 +5742,472 @@ def parse_custom_schedule_slots(raw_slots: Any) -> List[Dict[str, str]]:
         return []
 
 
+SCHEDULE_AMOUNT_MODES = {"fixed", "random"}
+SCHEDULE_PROTOCOLS = {"uniswap", "lifi", "aave_v3"}
+DEFAULT_SCHEDULE_PROTOCOL = {"dex": "uniswap", "bridge": "lifi", "lending": "aave_v3"}
+
+
+def optional_schedule_text(value: Optional[str]) -> Optional[str]:
+    clean = (value or "").strip()
+    return clean or None
+
+
+def parse_schedule_amount(value: Optional[str]) -> Optional[str]:
+    clean = optional_schedule_text(value)
+    if not clean:
+        return None
+    normalized, _ = normalize_token_amount(clean, 18)
+    return normalized
+
+
+def parse_schedule_token(value: Optional[str]) -> Optional[str]:
+    clean = optional_schedule_text(value)
+    if not clean:
+        return None
+    if clean.lower() == LIFI_NATIVE_TOKEN_ADDRESS.lower():
+        return LIFI_NATIVE_TOKEN_ADDRESS
+    if not is_valid_evm_address(clean):
+        raise HTTPException(status_code=422, detail="Invalid schedule token address")
+    return clean
+
+
+def parse_schedule_network(value: Optional[str]) -> Optional[str]:
+    clean = optional_schedule_text(value)
+    if not clean:
+        return None
+    if clean not in LIFI_EVM_NETWORKS:
+        raise HTTPException(status_code=422, detail="Unsupported schedule network")
+    return clean
+
+
+def parse_schedule_slippage(value: Optional[str]) -> Optional[str]:
+    clean = optional_schedule_text(value)
+    if not clean:
+        return None
+    try:
+        amount = Decimal(clean)
+    except Exception:
+        raise HTTPException(status_code=422, detail="Invalid schedule slippage")
+    if amount <= 0 or amount > Decimal("5"):
+        raise HTTPException(status_code=422, detail="Invalid schedule slippage")
+    return format(amount.normalize(), "f")
+
+
+def parse_schedule_amount_fields(payload: WalletActionScheduleRequest) -> tuple[str, Optional[str], Optional[str], Optional[str]]:
+    amount_mode = (optional_schedule_text(payload.amount_mode) or "fixed").lower()
+    if amount_mode not in SCHEDULE_AMOUNT_MODES:
+        raise HTTPException(status_code=422, detail="Unsupported schedule amount mode")
+    amount_fixed = parse_schedule_amount(payload.amount_fixed)
+    amount_min = parse_schedule_amount(payload.amount_min)
+    amount_max = parse_schedule_amount(payload.amount_max)
+    if amount_mode == "random":
+        if amount_min is None or amount_max is None:
+            raise HTTPException(status_code=422, detail="Random schedule amount requires a min and max")
+        if Decimal(amount_min) >= Decimal(amount_max):
+            raise HTTPException(status_code=422, detail="Random schedule amount min must be less than max")
+        return amount_mode, None, amount_min, amount_max
+    return amount_mode, amount_fixed, None, None
+
+
+def apply_schedule_operation_fields(schedule: WalletActionSchedule, payload: WalletActionScheduleRequest) -> None:
+    amount_mode, amount_fixed, amount_min, amount_max = parse_schedule_amount_fields(payload)
+    from_network = parse_schedule_network(payload.from_network)
+    to_network = parse_schedule_network(payload.to_network)
+    if payload.action_type == "bridge" and from_network and to_network and from_network == to_network:
+        raise HTTPException(status_code=422, detail="Bridge schedule requires two different networks")
+    protocol = optional_schedule_text(payload.protocol)
+    if protocol and protocol not in SCHEDULE_PROTOCOLS:
+        raise HTTPException(status_code=422, detail="Unsupported schedule protocol")
+    schedule.amount_mode = amount_mode
+    schedule.amount_fixed = amount_fixed
+    schedule.amount_min = amount_min
+    schedule.amount_max = amount_max
+    schedule.from_network = from_network
+    schedule.to_network = to_network
+    schedule.from_token = parse_schedule_token(payload.from_token)
+    schedule.to_token = parse_schedule_token(payload.to_token)
+    schedule.protocol = protocol or DEFAULT_SCHEDULE_PROTOCOL.get(payload.action_type)
+    schedule.slippage = parse_schedule_slippage(payload.slippage)
+    schedule.readiness_status = "unknown"
+    schedule.readiness_checked_at = None
+    schedule.last_quote_fingerprint = None
+
+
+def sample_schedule_amount(schedule: WalletActionSchedule) -> Optional[str]:
+    mode = (getattr(schedule, "amount_mode", None) or "fixed").strip().lower()
+    if mode == "random":
+        if not schedule.amount_min or not schedule.amount_max:
+            return None
+        low = Decimal(schedule.amount_min)
+        high = Decimal(schedule.amount_max)
+        if low >= high:
+            return None
+        sampled = low + (high - low) * Decimal(secrets.randbelow(10_000_001)) / Decimal(10_000_000)
+        return format(sampled.normalize(), "f")
+    return optional_schedule_text(getattr(schedule, "amount_fixed", None))
+
+
+def schedule_amount_for_checks(payload: WalletActionScheduleRequest) -> tuple[Optional[str], Optional[str], str]:
+    """Return (balance_amount, quote_amount, amount_mode). Random uses max for balance and min for quote."""
+    amount_mode, amount_fixed, amount_min, amount_max = parse_schedule_amount_fields(payload)
+    if amount_mode == "random":
+        return amount_max, amount_min, amount_mode
+    return amount_fixed, amount_fixed, amount_mode
+
+
+def build_schedule_quote_fingerprint(payload: WalletActionScheduleRequest, amount: str) -> str:
+    raw = "|".join([
+        payload.action_type,
+        (payload.amount_mode or "fixed").strip().lower(),
+        amount,
+        (payload.from_network or "").strip(),
+        (payload.to_network or "").strip(),
+        (payload.from_token or "").strip().lower(),
+        (payload.to_token or "").strip().lower(),
+        (payload.protocol or DEFAULT_SCHEDULE_PROTOCOL.get(payload.action_type, "")).strip().lower(),
+        (payload.slippage or "").strip(),
+    ])
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
+
+
+def gas_reserve_atomic(network: str, decimals: int = 18) -> int:
+    reserve = str(PUBLIC_NETWORK_BALANCE_CONFIG.get(network, {}).get("gas_reserve", "0"))
+    whole, _, fraction = reserve.partition(".")
+    return int(whole or "0") * (10 ** decimals) + int((fraction + ("0" * decimals))[:decimals] or "0")
+
+
+def read_schedule_token_balance(network: str, wallet_address: str, token_address: str) -> tuple[int, int, str]:
+    """Return (raw_balance, decimals, symbol) for a public EVM balance read."""
+    network_config = LIFI_EVM_NETWORKS.get(network)
+    if not network_config:
+        raise HTTPException(status_code=422, detail="Unsupported schedule network")
+    token_address = (token_address or LIFI_NATIVE_TOKEN_ADDRESS).strip()
+    if token_address.lower() == LIFI_NATIVE_TOKEN_ADDRESS.lower():
+        decimals = 18
+        symbol = network_config.get("native_symbol") or "ETH"
+        token_key = LIFI_NATIVE_TOKEN_ADDRESS
+    else:
+        try:
+            token = get_lifi_token(network, token_address)
+            decimals = int(token["decimals"])
+            symbol = str(token.get("symbol") or "TOKEN")
+            token_key = token["address"]
+        except HTTPException:
+            if network == "Base" and token_address.lower() == BASE_USDC_ADDRESS.lower():
+                decimals = BASE_USDC_DECIMALS
+                symbol = "USDC"
+                token_key = BASE_USDC_ADDRESS
+            else:
+                raise
+    try:
+        web3 = Web3(Web3.HTTPProvider(network_config["rpc_url"], request_kwargs={"timeout": 10}))
+        if not web3.is_connected():
+            raise RuntimeError("RPC unavailable")
+        owner = Web3.to_checksum_address(wallet_address)
+        if token_key.lower() == LIFI_NATIVE_TOKEN_ADDRESS.lower():
+            raw_balance = int(web3.eth.get_balance(owner))
+        else:
+            contract = web3.eth.contract(
+                address=Web3.to_checksum_address(token_key),
+                abi=ERC20_BALANCE_OF_ABI,
+            )
+            raw_balance = int(contract.functions.balanceOf(owner).call())
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail=f"{network} public token data is temporarily unavailable")
+    return raw_balance, decimals, symbol
+
+
+def dry_run_base_swap_quote(wallet_address: str, amount: str) -> dict:
+    normalized = normalize_eth_amount(amount)
+    quote_payload = {
+        "tokenIn": BASE_NATIVE_TOKEN_ADDRESS,
+        "tokenOut": BASE_USDC_ADDRESS,
+        "tokenInChainId": BASE_CHAIN_ID,
+        "tokenOutChainId": BASE_CHAIN_ID,
+        "type": "EXACT_INPUT",
+        "amount": eth_to_wei(normalized),
+        "swapper": wallet_address,
+        "slippageTolerance": 0.5,
+    }
+    try:
+        response = requests.post(
+            f"{UNISWAP_TRADE_API_URL}/quote",
+            headers=uniswap_headers(),
+            json=quote_payload,
+            timeout=15,
+        )
+    except requests.RequestException:
+        raise HTTPException(status_code=503, detail="Base Swap quote service is temporarily unavailable")
+    quote_response = parse_provider_json_response(
+        response,
+        provider="Uniswap quote",
+        unavailable_detail="Base Swap quote service is temporarily unavailable",
+        rejected_detail="Unable to get a Base Swap quote",
+        invalid_detail="Base Swap returned an invalid quote",
+    )
+    try:
+        quote = quote_response["quote"]
+        output = quote.get("output") if isinstance(quote, dict) else None
+        amount_out = str(output.get("amount", "")) if isinstance(output, dict) else ""
+        if not re.fullmatch(r"[1-9]\d*", amount_out):
+            raise ValueError("Invalid output amount")
+    except (KeyError, TypeError, ValueError):
+        raise HTTPException(status_code=502, detail="Base Swap returned an invalid quote")
+    return {
+        "provider": "Uniswap",
+        "amount_in": normalized,
+        "amount_out": format_token_amount(int(amount_out), BASE_USDC_DECIMALS),
+        "token_out": "USDC",
+        "network": "Base",
+    }
+
+
+def dry_run_bridge_quote(
+    wallet_address: str,
+    from_network: str,
+    to_network: str,
+    from_token_address: str,
+    to_token_address: str,
+    amount: str,
+) -> dict:
+    from_config = LIFI_EVM_NETWORKS.get(from_network)
+    to_config = LIFI_EVM_NETWORKS.get(to_network)
+    if not from_config or not to_config:
+        raise HTTPException(status_code=422, detail="Choose supported EVM networks")
+    if from_network == to_network:
+        raise HTTPException(status_code=422, detail="Choose two different networks for a bridge")
+    from_token = get_lifi_token(from_network, from_token_address)
+    to_token = get_lifi_token(to_network, to_token_address)
+    normalized_amount, from_amount_atomic = normalize_token_amount(amount, from_token["decimals"])
+    params = {
+        "fromChain": str(from_config["chain_id"]),
+        "toChain": str(to_config["chain_id"]),
+        "fromToken": from_token["address"],
+        "toToken": to_token["address"],
+        "fromAmount": from_amount_atomic,
+        "fromAddress": wallet_address,
+        "toAddress": wallet_address,
+        "slippage": "0.005",
+        "order": "CHEAPEST",
+    }
+    try:
+        response = requests.get(
+            f"{LIFI_API_URL}/quote",
+            params=params,
+            headers=lifi_headers(),
+            timeout=20,
+        )
+    except requests.RequestException:
+        raise HTTPException(status_code=503, detail="Universal bridge quote service is temporarily unavailable")
+    quote = parse_provider_json_response(
+        response,
+        provider="LI.FI quote",
+        unavailable_detail="Universal bridge quote service is temporarily unavailable",
+        rejected_detail="No current route is available for this pair and amount",
+        invalid_detail="Universal bridge returned an invalid quote",
+        rejected_status=422,
+    )
+    try:
+        estimate = quote["estimate"]
+        to_amount = str(estimate["toAmount"])
+        if not re.fullmatch(r"\d+", to_amount):
+            raise ValueError("Invalid output amount")
+    except (KeyError, TypeError, ValueError):
+        raise HTTPException(status_code=502, detail="Universal bridge returned an invalid quote")
+    return {
+        "provider": "LI.FI",
+        "amount_in": normalized_amount,
+        "amount_out": format_token_amount(int(to_amount), to_token["decimals"]),
+        "from_network": from_network,
+        "to_network": to_network,
+        "tool": str((quote.get("toolDetails") or {}).get("name") or quote.get("tool") or "LI.FI")[:80],
+    }
+
+
+def map_schedule_quote_error(error: Exception) -> tuple[str, str]:
+    if isinstance(error, HTTPException):
+        detail = str(error.detail or "")
+        lowered = detail.lower()
+        if "balance" in lowered or "exceeds" in lowered or "insufficient" in lowered:
+            return "insufficient_token", detail
+        if error.status_code in {422, 409, 502} and (
+            "route" in lowered or "quote" in lowered or "unavailable" in lowered or "pair" in lowered
+        ):
+            return "route_unavailable", detail
+        if error.status_code == 503:
+            return "route_unavailable", detail
+        return "route_unavailable", detail or "Schedule operation route is unavailable"
+    return "route_unavailable", "Schedule operation route is unavailable"
+
+
+def evaluate_schedule_readiness(wallet: Wallet, payload: WalletActionScheduleRequest) -> dict:
+    """Dry-run balance/gas/route checks. Never returns signing payloads or private key material."""
+    blockers: List[Dict[str, str]] = []
+    checked_at = int(time.time())
+    balance_amount, quote_amount, amount_mode = schedule_amount_for_checks(payload)
+    if not balance_amount or not quote_amount:
+        blockers.append({
+            "code": "amount_required",
+            "message": "Schedule amount is required before the rule can be marked ready",
+        })
+        return {
+            "readiness_status": "unknown",
+            "checked_at": checked_at,
+            "fingerprint": None,
+            "amount_mode": amount_mode,
+            "amount_for_balance": balance_amount,
+            "amount_for_quote": quote_amount,
+            "quote_preview": None,
+            "blockers": blockers,
+        }
+
+    if not wallet.proxy:
+        blockers.append({
+            "code": "proxy_missing",
+            "message": "A proxy is required before enabling a wallet schedule",
+        })
+
+    action = payload.action_type
+    from_network = parse_schedule_network(payload.from_network) or "Base"
+    to_network = parse_schedule_network(payload.to_network)
+    from_token = parse_schedule_token(payload.from_token) or LIFI_NATIVE_TOKEN_ADDRESS
+    to_token = parse_schedule_token(payload.to_token) or LIFI_NATIVE_TOKEN_ADDRESS
+    quote_preview = None
+    readiness_status = "ready"
+
+    try:
+        if action == "dex":
+            if from_network != "Base":
+                raise HTTPException(status_code=422, detail="DEX schedule quotes currently support Base only")
+            if from_token.lower() != LIFI_NATIVE_TOKEN_ADDRESS.lower():
+                raise HTTPException(status_code=422, detail="DEX schedule currently supports native ETH input only")
+            raw_balance, decimals, symbol = read_schedule_token_balance("Base", wallet.wallet_address, LIFI_NATIVE_TOKEN_ADDRESS)
+            _, amount_atomic = normalize_token_amount(balance_amount, decimals)
+            reserve = gas_reserve_atomic("Base", decimals)
+            if int(amount_atomic) + reserve > raw_balance:
+                blockers.append({
+                    "code": "insufficient_token",
+                    "message": "Schedule amount exceeds the wallet token balance",
+                })
+                readiness_status = "insufficient_token"
+            elif raw_balance < reserve:
+                blockers.append({
+                    "code": "insufficient_gas",
+                    "message": "Native gas reserve is below the required minimum",
+                })
+                readiness_status = "insufficient_gas"
+            else:
+                quote_preview = dry_run_base_swap_quote(wallet.wallet_address, quote_amount)
+        elif action == "bridge":
+            if not to_network:
+                raise HTTPException(status_code=422, detail="Bridge schedule requires a destination network")
+            if from_network == to_network:
+                raise HTTPException(status_code=422, detail="Bridge schedule requires two different networks")
+            raw_balance, decimals, symbol = read_schedule_token_balance(from_network, wallet.wallet_address, from_token)
+            _, amount_atomic = normalize_token_amount(balance_amount, decimals)
+            needed = int(amount_atomic)
+            if from_token.lower() == LIFI_NATIVE_TOKEN_ADDRESS.lower():
+                needed += gas_reserve_atomic(from_network, decimals)
+            native_raw, native_decimals, _ = read_schedule_token_balance(
+                from_network, wallet.wallet_address, LIFI_NATIVE_TOKEN_ADDRESS,
+            )
+            if native_raw < gas_reserve_atomic(from_network, native_decimals):
+                blockers.append({
+                    "code": "insufficient_gas",
+                    "message": "Native gas reserve is below the required minimum",
+                })
+                readiness_status = "insufficient_gas"
+            elif needed > raw_balance:
+                blockers.append({
+                    "code": "insufficient_token",
+                    "message": "Schedule amount exceeds the wallet token balance",
+                })
+                readiness_status = "insufficient_token"
+            else:
+                quote_preview = dry_run_bridge_quote(
+                    wallet.wallet_address,
+                    from_network,
+                    to_network,
+                    from_token,
+                    to_token,
+                    quote_amount,
+                )
+        elif action == "lending":
+            if from_network != "Base":
+                raise HTTPException(status_code=422, detail="Lending schedule quotes currently support Base only")
+            lending_token = BASE_USDC_ADDRESS
+            if from_token.lower() not in {LIFI_NATIVE_TOKEN_ADDRESS.lower(), BASE_USDC_ADDRESS.lower()}:
+                raise HTTPException(status_code=422, detail="Lending schedule currently supports USDC on Base only")
+            if from_token.lower() == LIFI_NATIVE_TOKEN_ADDRESS.lower():
+                from_token = BASE_USDC_ADDRESS
+            raw_balance, decimals, symbol = read_schedule_token_balance("Base", wallet.wallet_address, lending_token)
+            _, amount_atomic = normalize_token_amount(balance_amount, decimals)
+            native_raw, native_decimals, _ = read_schedule_token_balance(
+                "Base", wallet.wallet_address, LIFI_NATIVE_TOKEN_ADDRESS,
+            )
+            if native_raw < gas_reserve_atomic("Base", native_decimals):
+                blockers.append({
+                    "code": "insufficient_gas",
+                    "message": "Native gas reserve is below the required minimum",
+                })
+                readiness_status = "insufficient_gas"
+            elif int(amount_atomic) > raw_balance:
+                blockers.append({
+                    "code": "insufficient_token",
+                    "message": "Schedule amount exceeds the wallet token balance",
+                })
+                readiness_status = "insufficient_token"
+            else:
+                aave_quote = get_aave_v3_base_usdc_supply_quote(wallet.wallet_address, quote_amount)
+                quote_preview = {
+                    "provider": "Aave V3",
+                    "amount_in": aave_quote["amount"],
+                    "amount_out": aave_quote["amount"],
+                    "token_out": "aBasUSDC",
+                    "network": "Base",
+                    "annual_supply_rate_percent": aave_quote.get("annual_supply_rate_percent"),
+                }
+        else:
+            raise HTTPException(status_code=422, detail="Unsupported scheduled action")
+    except Exception as error:
+        code, message = map_schedule_quote_error(error)
+        blockers.append({"code": code, "message": message})
+        readiness_status = code if code in {"insufficient_token", "insufficient_gas", "route_unavailable"} else "route_unavailable"
+
+    if any(item["code"] == "proxy_missing" for item in blockers) and readiness_status == "ready":
+        readiness_status = "unknown"
+
+    fingerprint = None
+    if readiness_status == "ready":
+        fingerprint = build_schedule_quote_fingerprint(payload, quote_amount)
+
+    return {
+        "readiness_status": readiness_status,
+        "checked_at": checked_at,
+        "fingerprint": fingerprint,
+        "amount_mode": amount_mode,
+        "amount_for_balance": balance_amount,
+        "amount_for_quote": quote_amount,
+        "quote_preview": quote_preview,
+        "blockers": blockers,
+    }
+
+
+def apply_readiness_to_schedule(schedule: WalletActionSchedule, readiness: dict) -> None:
+    schedule.readiness_status = readiness.get("readiness_status") or "unknown"
+    schedule.readiness_checked_at = readiness.get("checked_at")
+    schedule.last_quote_fingerprint = readiness.get("fingerprint")
+
+
+def readiness_failure_detail(readiness: dict) -> str:
+    blockers = readiness.get("blockers") or []
+    if blockers:
+        return str(blockers[0].get("message") or "Schedule operation is not ready")
+    return "Schedule operation is not ready"
+
+
 def serialize_wallet_action_schedule(schedule: WalletActionSchedule) -> dict:
     try:
         generated_slots = json.loads(schedule.generated_slots or "[]")
@@ -5657,6 +6233,19 @@ def serialize_wallet_action_schedule(schedule: WalletActionSchedule) -> dict:
         "generated_slots": generated_slots if isinstance(generated_slots, list) else [],
         "custom_slots": custom_slots,
         "last_sent_slot": schedule.last_sent_slot,
+        "amount_mode": getattr(schedule, "amount_mode", None) or "fixed",
+        "amount_fixed": getattr(schedule, "amount_fixed", None),
+        "amount_min": getattr(schedule, "amount_min", None),
+        "amount_max": getattr(schedule, "amount_max", None),
+        "from_network": getattr(schedule, "from_network", None),
+        "to_network": getattr(schedule, "to_network", None),
+        "from_token": getattr(schedule, "from_token", None),
+        "to_token": getattr(schedule, "to_token", None),
+        "protocol": getattr(schedule, "protocol", None),
+        "slippage": getattr(schedule, "slippage", None),
+        "readiness_status": getattr(schedule, "readiness_status", None) or "unknown",
+        "readiness_checked_at": getattr(schedule, "readiness_checked_at", None),
+        "last_quote_fingerprint": getattr(schedule, "last_quote_fingerprint", None),
     }
 
 def validate_wallet_schedule_payload(payload: WalletActionScheduleRequest) -> List[Dict[str, str]]:
@@ -5737,6 +6326,160 @@ async def get_wallet_action_schedules(
         "schedules": [serialize_wallet_action_schedule(item) for item in schedules],
     }
 
+SCHEDULE_DAY_INDEX = {day: index for index, day in enumerate(SCHEDULE_DAY_CODES)}
+
+
+def schedule_amount_summary(schedule: WalletActionSchedule) -> Optional[str]:
+    mode = (getattr(schedule, "amount_mode", None) or "fixed").strip().lower()
+    if mode == "random" and schedule.amount_min and schedule.amount_max:
+        return f"{schedule.amount_min}–{schedule.amount_max}"
+    return optional_schedule_text(getattr(schedule, "amount_fixed", None))
+
+
+def current_iso_week_start(local_now: datetime.datetime) -> datetime.date:
+    iso = local_now.isocalendar()
+    return local_now.date() - datetime.timedelta(days=iso.weekday - 1)
+
+
+def slots_for_schedule_overview(schedule: WalletActionSchedule, local_now: datetime.datetime) -> List[Dict[str, str]]:
+    """Return reminder slots for the visible ISO week. Metadata only — no signing data."""
+    if schedule.schedule_mode == "flexible":
+        slots = ensure_flexible_schedule_week(schedule, local_now)
+        return [
+            {
+                "date": str(item.get("date") or ""),
+                "day": str(item.get("day") or ""),
+                "time": str(item.get("time") or ""),
+            }
+            for item in slots
+            if isinstance(item, dict) and item.get("date") and item.get("time")
+        ]
+
+    week_start = current_iso_week_start(local_now)
+    if schedule.schedule_mode == "custom":
+        custom_slots = parse_custom_schedule_slots(schedule.custom_slots)
+        slots = []
+        for item in custom_slots:
+            day = item.get("day")
+            if day not in SCHEDULE_DAY_INDEX:
+                continue
+            slot_date = week_start + datetime.timedelta(days=SCHEDULE_DAY_INDEX[day])
+            slots.append({
+                "date": slot_date.isoformat(),
+                "day": day,
+                "time": item.get("time") or "18:00",
+            })
+        return slots
+
+    day = schedule.day_of_week if schedule.day_of_week in SCHEDULE_DAY_INDEX else "Mon"
+    slot_date = week_start + datetime.timedelta(days=SCHEDULE_DAY_INDEX[day])
+    return [{
+        "date": slot_date.isoformat(),
+        "day": day,
+        "time": schedule.time_of_day or "18:00",
+    }]
+
+
+@app.get("/api/schedules/overview")
+async def get_schedules_overview(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Week overview of wallet schedule reminders across all saved wallets."""
+    rows = (
+        db.query(WalletActionSchedule, Wallet)
+        .join(Wallet, Wallet.id == WalletActionSchedule.wallet_id)
+        .filter(
+            WalletActionSchedule.username == current_user.username,
+            Wallet.username == current_user.username,
+        )
+        .order_by(WalletActionSchedule.updated_at.desc())
+        .all()
+    )
+    events: List[Dict[str, Any]] = []
+    changed = False
+    reference_now = datetime.datetime.now(datetime.timezone.utc)
+    for schedule, wallet in rows:
+        try:
+            local_now = datetime.datetime.now(ZoneInfo(schedule.timezone or "UTC"))
+        except (ZoneInfoNotFoundError, ValueError):
+            local_now = reference_now
+        previous_week = schedule.generated_week
+        previous_slots = schedule.generated_slots
+        try:
+            slots = slots_for_schedule_overview(schedule, local_now)
+        except ValueError:
+            continue
+        if schedule.schedule_mode == "flexible" and (
+            previous_week != schedule.generated_week or previous_slots != schedule.generated_slots
+        ):
+            changed = True
+        amount_summary = schedule_amount_summary(schedule)
+        for slot in slots:
+            events.append({
+                "date": slot["date"],
+                "time": slot["time"],
+                "day": slot["day"],
+                "wallet_id": wallet.id,
+                "wallet_label": wallet.label or f"Wallet {wallet.id}",
+                "wallet_address": f"{wallet.wallet_address[:8]}…{wallet.wallet_address[-6:]}",
+                "schedule_id": schedule.id,
+                "action_type": schedule.action_type,
+                "enabled": bool(schedule.enabled),
+                "timezone": schedule.timezone,
+                "schedule_mode": schedule.schedule_mode or "fixed",
+                "amount_summary": amount_summary,
+                "from_network": getattr(schedule, "from_network", None),
+                "to_network": getattr(schedule, "to_network", None),
+                "readiness_status": getattr(schedule, "readiness_status", None) or "unknown",
+            })
+    if changed:
+        db.commit()
+
+    events.sort(key=lambda item: (item["date"], item["time"], item["wallet_id"], item["schedule_id"]))
+    week_start = current_iso_week_start(reference_now).isoformat()
+    try:
+        # Prefer the first schedule timezone for the visible week bounds when available.
+        if rows:
+            local_now = datetime.datetime.now(ZoneInfo(rows[0][0].timezone or "UTC"))
+            week_start = current_iso_week_start(local_now).isoformat()
+    except (ZoneInfoNotFoundError, ValueError, IndexError):
+        pass
+    week_start_date = datetime.date.fromisoformat(week_start)
+    days = []
+    for index, day_code in enumerate(SCHEDULE_DAY_CODES):
+        day_date = (week_start_date + datetime.timedelta(days=index)).isoformat()
+        days.append({
+            "date": day_date,
+            "day": day_code,
+            "event_count": sum(1 for event in events if event["date"] == day_date and event["enabled"]),
+        })
+    return {
+        "status": "success",
+        "week_start": week_start,
+        "week_end": (week_start_date + datetime.timedelta(days=6)).isoformat(),
+        "days": days,
+        "events": events,
+        "safety": "Overview of reminder slots only. Confirmation always happens in the user's wallet.",
+    }
+
+@app.post("/api/wallets/{wallet_id}/schedules/validate")
+async def validate_wallet_action_schedule(
+    wallet_id: int,
+    payload: WalletActionScheduleRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Dry-run amount/gas/route checks for a schedule rule. Never returns calldata for signing."""
+    wallet = get_owned_wallet_or_404(db, wallet_id, current_user)
+    validate_wallet_schedule_payload(payload)
+    readiness = evaluate_schedule_readiness(wallet, payload)
+    return {
+        "status": "success",
+        "ready": readiness["readiness_status"] == "ready",
+        **readiness,
+    }
+
 @app.post("/api/wallets/{wallet_id}/schedules")
 async def create_wallet_action_schedule(
     wallet_id: int,
@@ -5748,6 +6491,9 @@ async def create_wallet_action_schedule(
     custom_slots = validate_wallet_schedule_payload(payload)
     if payload.enabled and not wallet.proxy:
         raise HTTPException(status_code=422, detail="A proxy is required before enabling a wallet schedule")
+    readiness = evaluate_schedule_readiness(wallet, payload)
+    if payload.enabled and readiness["readiness_status"] != "ready":
+        raise HTTPException(status_code=422, detail=readiness_failure_detail(readiness))
     now_ts = int(time.time())
     schedule = WalletActionSchedule(
         username=current_user.username,
@@ -5768,6 +6514,8 @@ async def create_wallet_action_schedule(
         created_at=now_ts,
         updated_at=now_ts,
     )
+    apply_schedule_operation_fields(schedule, payload)
+    apply_readiness_to_schedule(schedule, readiness)
     if payload.schedule_mode == "flexible":
         ensure_flexible_schedule_week(
             schedule,
@@ -5777,7 +6525,11 @@ async def create_wallet_action_schedule(
     db.add(schedule)
     db.commit()
     db.refresh(schedule)
-    return {"status": "success", "schedule": serialize_wallet_action_schedule(schedule)}
+    return {
+        "status": "success",
+        "schedule": serialize_wallet_action_schedule(schedule),
+        "readiness": readiness,
+    }
 
 @app.patch("/api/wallets/{wallet_id}/schedules/{schedule_id}")
 async def update_wallet_action_schedule(
@@ -5798,6 +6550,9 @@ async def update_wallet_action_schedule(
     ).first()
     if not schedule:
         raise HTTPException(status_code=404, detail="Wallet schedule not found")
+    readiness = evaluate_schedule_readiness(wallet, payload)
+    if payload.enabled and readiness["readiness_status"] != "ready":
+        raise HTTPException(status_code=422, detail=readiness_failure_detail(readiness))
     schedule.action_type = payload.action_type
     schedule.day_of_week = payload.day_of_week
     schedule.time_of_day = payload.time_of_day
@@ -5814,6 +6569,8 @@ async def update_wallet_action_schedule(
         json.dumps(custom_slots, ensure_ascii=False, separators=(",", ":"))
         if custom_slots else None
     )
+    apply_schedule_operation_fields(schedule, payload)
+    apply_readiness_to_schedule(schedule, readiness)
     if payload.schedule_mode == "flexible":
         ensure_flexible_schedule_week(
             schedule,
@@ -5827,7 +6584,11 @@ async def update_wallet_action_schedule(
     schedule.updated_at = int(time.time())
     db.commit()
     db.refresh(schedule)
-    return {"status": "success", "schedule": serialize_wallet_action_schedule(schedule)}
+    return {
+        "status": "success",
+        "schedule": serialize_wallet_action_schedule(schedule),
+        "readiness": readiness,
+    }
 
 @app.post("/api/wallets/{wallet_id}/schedules/{schedule_id}/reroll")
 async def reroll_wallet_action_schedule(

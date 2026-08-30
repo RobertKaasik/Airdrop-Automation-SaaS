@@ -26,4 +26,10 @@ assert.equal(preload.includes("contextBridge.exposeInMainWorld('companion'"), tr
 assert.equal(renderer.includes('innerHTML'), false, 'Remote schedule data must not be inserted as HTML.');
 assert.equal(main.includes('normalizeSubscription'), true, 'Sync must map tier_name into the plan card.');
 assert.equal(packageJson.includes('"ethers"'), true, 'ethers.js required for agent signing in main process.');
+assert.equal(main.includes('amountSummary'), true, 'Companion schedule rows must carry amount summary.');
+assert.equal(main.includes('readinessStatus'), true, 'Companion schedule rows must carry readiness.');
+assert.equal(main.includes('ax_open'), true, 'Open & review must deep-link into Wallet Workspace.');
+assert.equal(renderer.includes('openReviewRow'), true, 'Renderer must expose per-schedule Open & review.');
+assert.equal(renderer.includes('readinessReady'), true, 'Renderer must localize readiness states.');
+assert.equal(preload.includes('openReview: (query)'), true, 'Preload must pass Open & review query params.');
 console.log('Safe Companion checks passed.');

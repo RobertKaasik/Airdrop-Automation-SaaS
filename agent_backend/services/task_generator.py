@@ -31,7 +31,8 @@ from server import (
     lifi_headers,
     parse_provider_json_response,
     validate_lifi_transaction_request,
-    is_valid_evm_address
+    is_valid_evm_address,
+    sample_schedule_amount,
 )
 
 from ..models import AgentTask, ExecutionWindow
@@ -53,6 +54,34 @@ import requests
 UNISWAP_API_KEY = os.getenv("UNISWAP_API_KEY")
 LIFI_API_KEY = os.getenv("LIFI_API_KEY")
 WINDOW_MINUTES = 30
+
+# Legacy fallbacks when a schedule has no amount configured yet.
+DEFAULT_SWAP_AMOUNT_ETH = "0.01"
+DEFAULT_BRIDGE_AMOUNT_ETH = "0.0001"
+DEFAULT_AAVE_AMOUNT_USDC = "0.1"
+
+
+def resolve_schedule_execution_amount(
+    schedule: WalletActionSchedule,
+    *,
+    default: Optional[str] = None,
+) -> Optional[str]:
+    """Prefer schedule fixed/random amount; fall back only when unset."""
+    sampled = sample_schedule_amount(schedule)
+    if sampled:
+        return sampled
+    return default
+
+
+def schedule_network_pair(
+    schedule: WalletActionSchedule,
+    *,
+    default_from: str = "Base",
+    default_to: Optional[str] = None,
+) -> tuple[str, str]:
+    from_network = (getattr(schedule, "from_network", None) or "").strip() or default_from
+    to_network = (getattr(schedule, "to_network", None) or "").strip() or (default_to or from_network)
+    return from_network, to_network
 
 
 class TaskGenerator:
@@ -293,13 +322,21 @@ class TaskGenerator:
     ) -> Optional[AgentTask]:
         """
         Generate DEX swap task using Uniswap API.
-        
-        Default: ETH -> USDC on Base (0.01 ETH)
-        In production, parse amount and tokens from schedule parameters.
+
+        Amount comes from the wallet schedule (fixed or random min–max).
+        Default route remains native ETH -> USDC on Base when networks are unset.
         """
-        # For demo: 0.01 ETH -> USDC swap
-        amount_eth = "0.01"
-        
+        amount_eth = resolve_schedule_execution_amount(
+            schedule, default=DEFAULT_SWAP_AMOUNT_ETH
+        )
+        if not amount_eth:
+            print(f"[TaskGen] Skipping swap schedule {schedule.id}: amount not configured")
+            return None
+        from_network, _to_network = schedule_network_pair(schedule, default_from="Base")
+        if from_network != "Base":
+            print(f"[TaskGen] Swap currently supported on Base only (got {from_network})")
+            return None
+
         try:
             # Step 1: Get quote from Uniswap
             quote_payload = {
@@ -417,14 +454,22 @@ class TaskGenerator:
         """
         Generate bridge task using LI.FI API.
 
-        Default: native ETH Base -> Arbitrum (no ERC-20 approval).
-        ERC-20 routes are skipped unless the quote is native-in.
+        Amount and networks come from the wallet schedule when set.
+        Native-in only (ERC-20 routes need a separate approval tx).
         """
-        # Small native amount for low-fee L2 testing
-        amount_eth = "0.0001"
-        from_network = "Base"
-        to_network = "Arbitrum"
-        
+        amount_eth = resolve_schedule_execution_amount(
+            schedule, default=DEFAULT_BRIDGE_AMOUNT_ETH
+        )
+        if not amount_eth:
+            print(f"[TaskGen] Skipping bridge schedule {schedule.id}: amount not configured")
+            return None
+        from_network, to_network = schedule_network_pair(
+            schedule, default_from="Base", default_to="Arbitrum"
+        )
+        if from_network == to_network:
+            print(f"[TaskGen] Bridge requires different networks (got {from_network})")
+            return None
+
         try:
             # Get network configs
             from_config = LIFI_EVM_NETWORKS.get(from_network)
@@ -526,13 +571,16 @@ class TaskGenerator:
     ) -> Optional[AgentTask]:
         """
         Generate Aave USDC supply task.
-        
-        This builds the calldata directly since Aave has a simple interface.
+
+        Amount comes from the wallet schedule (fixed or random min–max).
         """
-        # For demo purposes, use a small fixed amount (0.1 USDC)
-        # In production, parse from schedule parameters
-        amount = "0.1"
-        
+        amount = resolve_schedule_execution_amount(
+            schedule, default=DEFAULT_AAVE_AMOUNT_USDC
+        )
+        if not amount:
+            print(f"[TaskGen] Skipping Aave supply schedule {schedule.id}: amount not configured")
+            return None
+
         try:
             # Normalize amount
             normalized_amount, amount_atomic = normalize_token_amount(amount, 6)  # USDC decimals
@@ -564,7 +612,7 @@ class TaskGenerator:
                 task_prefix="aave_supply",
             )
             
-            print(f"[TaskGen] Generated Aave supply task: {task.task_id}")
+            print(f"[TaskGen] Generated Aave supply task: {task.task_id} amount={amount}")
             return task
             
         except Exception as error:
@@ -579,11 +627,16 @@ class TaskGenerator:
     ) -> Optional[AgentTask]:
         """
         Generate Aave USDC withdrawal task.
+
+        Amount comes from the wallet schedule (fixed or random min–max).
         """
-        # For demo purposes, use a small fixed amount (0.1 USDC)
-        # In production, parse from schedule parameters
-        amount = "0.1"
-        
+        amount = resolve_schedule_execution_amount(
+            schedule, default=DEFAULT_AAVE_AMOUNT_USDC
+        )
+        if not amount:
+            print(f"[TaskGen] Skipping Aave withdraw schedule {schedule.id}: amount not configured")
+            return None
+
         try:
             # Normalize amount
             normalized_amount, amount_atomic = normalize_token_amount(amount, 6)  # USDC decimals
@@ -615,7 +668,7 @@ class TaskGenerator:
                 task_prefix="aave_withdraw",
             )
             
-            print(f"[TaskGen] Generated Aave withdraw task: {task.task_id}")
+            print(f"[TaskGen] Generated Aave withdraw task: {task.task_id} amount={amount}")
             return task
             
         except Exception as error:

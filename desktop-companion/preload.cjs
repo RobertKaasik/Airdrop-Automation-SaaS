@@ -4,7 +4,7 @@ contextBridge.exposeInMainWorld('companion', {
   getState: () => ipcRenderer.invoke('companion:state'),
   pair: (payload) => ipcRenderer.invoke('companion:pair', payload),
   sync: () => ipcRenderer.invoke('companion:sync'),
-  openReview: () => ipcRenderer.invoke('companion:open-review'),
+  openReview: (query) => ipcRenderer.invoke('companion:open-review', query || {}),
   unpair: () => ipcRenderer.invoke('companion:unpair'),
   
   // Agent mode methods

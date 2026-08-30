@@ -451,7 +451,13 @@ tr:hover td { background: rgba(124, 58, 237, 0.04); }
     margin-left: auto;
 }
 
-/* Lock Message */
+.lock-message[hidden],
+.info-box[hidden],
+.lock-message.hidden,
+.info-box.hidden {
+  display: none !important;
+}
+
 .lock-message {
     margin-top: 15px;
     padding: 15px;
@@ -630,6 +636,21 @@ tr:hover td { background: rgba(124, 58, 237, 0.04); }
 .schedule p.next {
     color: #c4b5fd;
     font-weight: 600;
+}
+
+.schedule-review {
+    margin-top: 10px;
+    padding: 8px 12px;
+    border: 1px solid #4c3a6e;
+    border-radius: 8px;
+    background: rgba(76, 58, 110, 0.35);
+    color: #e9e0ff;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.schedule-review:hover {
+    background: rgba(98, 74, 140, 0.5);
 }
 
 .empty {

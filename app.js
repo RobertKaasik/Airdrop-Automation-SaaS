@@ -379,6 +379,7 @@ window.addEventListener('DOMContentLoaded', () => {
         currentSection = localStorage.getItem('airdrop_current_section') || 'Account';
         renderDashboardContent(currentSection);
         void initializeWalletSessionLifecycle();
+        void consumeWorkspaceDeepLink();
     }
     syncEmailCodeCooldown();
     updateRegistrationContinueAction();
@@ -800,7 +801,7 @@ function changeLanguage(lang) {
 // --- Модальные окна и авторизация ---
 const APP_MODAL_IDS = [
     'pricingModal', 'authModal', 'antiSybilModal', 'walletConfigModal',
-    'walletConnectModal', 'baseSwapConfirmModal', 'appConfirmModal', 'walletScheduleModal', 'legalModal'
+    'walletConnectModal', 'baseSwapConfirmModal', 'appConfirmModal', 'legalModal'
 ];
 
 function syncModalScrollLock() {
@@ -2557,6 +2558,7 @@ function handleLoginSuccess() {
     currentSection = 'Account';
     renderDashboardContent('Account');
     void initializeWalletSessionLifecycle();
+    void consumeWorkspaceDeepLink();
     if (subscriptionStatus === 'grace') {
         showNotification(
             t('subscriptionGrace').replace('{days}', subscriptionGraceDaysLeft),
@@ -2567,6 +2569,24 @@ function handleLoginSuccess() {
     } else {
         showNotification("OK!");
     }
+}
+
+function consumeWorkspaceDeepLink() {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('ax_open') !== 'workspace') return;
+    const walletId = Number(params.get('wallet_id'));
+    const scheduleId = Number(params.get('schedule_id'));
+    params.delete('ax_open');
+    params.delete('wallet_id');
+    params.delete('schedule_id');
+    const nextQuery = params.toString();
+    const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}${window.location.hash || ''}`;
+    window.history.replaceState({}, '', nextUrl);
+    if (!Number.isFinite(walletId) || walletId <= 0) return;
+    const options = Number.isFinite(scheduleId) && scheduleId > 0 ? { scheduleId } : {};
+    window.setTimeout(() => {
+        void openWalletWorkspace(walletId, options);
+    }, 0);
 }
 
 function handleExpiredAuthSession() {
@@ -2906,6 +2926,7 @@ function openBottomSheetMenu(trigger) {
     const locale = translations[getActiveLang()] || translations.ru;
     items.innerHTML = `
         <div class="mobile-sheet-heading">${escapeHtml(locale.mobileNavMore)}</div>
+        <button type="button" class="mobile-sheet-item ${currentSection === 'Calendar' ? 'active' : ''}" onclick="switchMobileNav('Calendar', this)">${escapeHtml(locale.menuCalendar)}</button>
         <button type="button" class="mobile-sheet-item ${currentSection === 'Looter' ? 'active' : ''}" onclick="switchMobileNav('Looter', this)">${escapeHtml(locale.menuLooter)}</button>
         <button type="button" class="mobile-sheet-item ${currentSection === 'Settings' ? 'active' : ''}" onclick="switchMobileNav('Settings', this)">${escapeHtml(locale.menuSet)}</button>
         <button type="button" class="mobile-sheet-item mobile-sheet-item--logout" onclick="closeBottomSheetMenu(); logoutUser()">${escapeHtml(locale.menuExit)}</button>
@@ -4559,6 +4580,7 @@ async function loadWalletsFromDB() {
         const data = await res.json();
         if (!res.ok || !Array.isArray(data.wallets)) throw new Error('wallet_load_failed');
     updateSavedWalletAddressesCache(data.wallets);
+    walletWorkspaceCache = data.wallets;
     const persistedActiveAddress = getActiveBaseWalletAddress();
     if (persistedActiveAddress && !savedWalletAddressesCache.has(persistedActiveAddress.toLowerCase())) {
         clearActiveWalletState();
@@ -4602,7 +4624,7 @@ async function loadWalletsFromDB() {
                         <button type="button" onclick="activateSavedWallet(${w.id}, '${w.wallet_address}')" ${isActive ? 'disabled' : ''} style="background:${isActive ? 'rgba(34,197,94,0.12)' : 'rgba(124,58,237,0.12)'}; color:${isActive ? '#86efac' : '#c4b5fd'}; border:1px solid ${isActive ? 'rgba(34,197,94,0.28)' : 'rgba(124,58,237,0.32)'}; padding:6px 10px; border-radius:8px; font-size:12px; cursor:${isActive ? 'default' : 'pointer'};">${isActive ? t.walletActive : t.walletActivate}</button>
                         ${isActive && !isConnectedForActions ? `<button type="button" onclick="connectSavedWalletForActions('${w.wallet_address}', this)" style="background:rgba(34,197,94,.10); color:#86efac; border:1px solid rgba(34,197,94,.30); padding:6px 10px; border-radius:8px; font-size:12px; cursor:pointer;">${t.walletConnectActive.replace('{address}', shortAddress)}</button>` : ''}
                         <button type="button" onclick="toggleWalletEditor(${w.id})" style="background:rgba(255,255,255,.06); color:#e5e7eb; border:1px solid var(--border-color); padding:6px 10px; border-radius:8px; font-size:12px; cursor:pointer;">${t.walletEdit}</button>
-                        <button type="button" onclick="openWalletScheduleModal(${w.id})" style="background:rgba(124,58,237,.12); color:#ddd6fe; border:1px solid rgba(139,92,246,.38); padding:6px 10px; border-radius:8px; font-size:12px; cursor:pointer;">${t.walletScheduleButton}</button>
+                        <button type="button" onclick="openWalletWorkspace(${w.id})" style="background:rgba(124,58,237,.12); color:#ddd6fe; border:1px solid rgba(139,92,246,.38); padding:6px 10px; border-radius:8px; font-size:12px; cursor:pointer;">${t.walletWorkspaceOpen}</button>
                         <button type="button" onclick="checkWalletHealth(${w.id}, this)" style="background:rgba(59,130,246,0.1); color:#93c5fd; border:1px solid rgba(59,130,246,0.28); padding:6px 10px; border-radius:8px; font-size:12px; cursor:pointer;">${t.walletHealthCheck}</button>
                         ${w.has_proxy ? `<button type="button" onclick="testWalletProxy(${w.id}, this)" style="background: rgba(34,197,94,0.1); color: #22c55e; border: 1px solid rgba(34,197,94,0.2); padding: 6px 10px; border-radius: 8px; font-size: 12px; cursor:pointer;">${t.walletProxyTest}</button>` : ''}
                         ${!profileReady ? `<button type="button" onclick="createWalletProfile(${w.id}, this)" style="background:rgba(124,58,237,.12); color:#d8b4fe; border:1px solid rgba(124,58,237,.35); padding:6px 10px; border-radius:8px; font-size:12px; cursor:pointer;">${t.walletProfileCreate}</button>` : ''}
@@ -4630,6 +4652,7 @@ async function activateSavedWallet(walletId, walletAddress) {
     if (!/^0x[0-9a-fA-F]{40}$/.test(walletAddress || '')) return;
     setActiveBaseWalletAddress(walletAddress);
     await loadWalletsFromDB();
+    if (activeWalletWorkspaceId) await renderWalletWorkspace();
     showNotification(locale.walletActivated, 'success');
 }
 
@@ -4996,10 +5019,27 @@ function initializeInterfaceHintsPreference() {
 
 let activeWalletScheduleId = null;
 let activeWalletScheduleHasProxy = false;
+let editingWalletScheduleId = null;
+let walletScheduleItems = [];
 let walletSchedulePreviewVersion = 0;
 let walletScheduleMode = 'flexible';
+let walletScheduleAmountMode = 'fixed';
 let walletScheduleCustomSlots = [];
 let walletScheduleMutationInFlight = false;
+let activeWalletWorkspaceId = null;
+let pendingWorkspaceScheduleId = null;
+let walletWorkspaceCache = [];
+let walletWorkspaceBalanceNetwork = 'Base';
+let walletWorkspaceLastBalance = null;
+const WALLET_WORKSPACE_BALANCE_NETWORKS = [
+    'Base', 'Arbitrum', 'Optimism', 'Linea', 'Ethereum', 'Polygon', 'BNB Chain',
+    'Avalanche', 'zkSync Era', 'Scroll', 'Gnosis', 'Mantle',
+];
+const WALLET_SCHEDULE_NETWORKS = [
+    'Ethereum', 'Base', 'Arbitrum', 'Optimism', 'Polygon', 'Linea', 'BNB Chain',
+    'Avalanche', 'zkSync Era', 'Scroll', 'Gnosis', 'Mantle',
+];
+const WALLET_SCHEDULE_PROTOCOL_BY_ACTION = { dex: 'uniswap', bridge: 'lifi', lending: 'aave_v3' };
 
 function walletScheduleDayOptions(locale) {
     return [
@@ -5048,7 +5088,6 @@ function renderWalletScheduleProxyNotice(message, hasProxy) {
 function populateWalletScheduleText() {
     const locale = translations[getActiveLang()];
     const textMap = {
-        walletScheduleTitle: locale.walletScheduleTitle,
         walletScheduleActionLabel: locale.walletScheduleActionLabel,
         walletScheduleActionSwap: locale.walletScheduleActionSwap,
         walletScheduleActionBridge: locale.walletScheduleActionBridge,
@@ -5058,7 +5097,8 @@ function populateWalletScheduleText() {
         walletScheduleTimezoneLabel: locale.walletScheduleTimezoneLabel,
         walletScheduleTelegramLabel: locale.walletScheduleTelegramLabel,
         walletScheduleAcknowledgementLabel: locale.walletScheduleAcknowledgementLabel,
-        walletScheduleSave: locale.walletScheduleSave,
+        walletScheduleSave: editingWalletScheduleId ? locale.walletScheduleUpdate : locale.walletScheduleSave,
+        walletScheduleValidate: locale.walletScheduleValidate,
         walletScheduleListTitle: locale.walletScheduleListTitle,
         walletScheduleFlexibleDescription: locale.walletScheduleFlexibleDescription,
         walletScheduleWeeklyMinLabel: locale.walletScheduleWeeklyMinLabel,
@@ -5070,11 +5110,28 @@ function populateWalletScheduleText() {
         walletSchedulePreviewRefresh: locale.walletSchedulePreviewRefresh,
         walletScheduleAutoMode: locale.walletScheduleAutoMode,
         walletScheduleCustomMode: locale.walletScheduleCustomMode,
+        walletScheduleOpTitle: locale.walletScheduleOpTitle,
+        walletScheduleOpDesc: locale.walletScheduleOpDesc,
+        walletScheduleAmountFixedMode: locale.walletScheduleAmountFixedMode,
+        walletScheduleAmountRandomMode: locale.walletScheduleAmountRandomMode,
+        walletScheduleAmountFixedLabel: locale.walletScheduleAmountFixedLabel,
+        walletScheduleAmountMinLabel: locale.walletScheduleAmountMinLabel,
+        walletScheduleAmountMaxLabel: locale.walletScheduleAmountMaxLabel,
+        walletScheduleFromNetworkLabel: locale.walletScheduleFromNetworkLabel,
+        walletScheduleToNetworkLabel: locale.walletScheduleToNetworkLabel,
+        walletScheduleFromTokenLabel: locale.walletScheduleFromTokenLabel,
+        walletScheduleToTokenLabel: locale.walletScheduleToTokenLabel,
     };
     Object.entries(textMap).forEach(([id, value]) => {
         const element = document.getElementById(id);
         if (element) element.textContent = value;
     });
+    fillWalletScheduleNetworkSelects();
+    ['walletScheduleFromToken', 'walletScheduleToToken'].forEach(id => {
+        const input = document.getElementById(id);
+        if (input) input.placeholder = locale.walletScheduleTokenPlaceholder;
+    });
+    syncWalletScheduleOperationFields();
     renderWalletScheduleInlineHint('walletScheduleSafety', 'wallet-schedule-safety', locale.walletScheduleSafety);
     renderWalletSchedulePreview();
 }
@@ -5179,6 +5236,79 @@ function setWalletScheduleCustomTime(day, value) {
     if (slot) slot.time = normalized;
 }
 
+function fillWalletScheduleNetworkSelects() {
+    ['walletScheduleFromNetwork', 'walletScheduleToNetwork'].forEach((id, index) => {
+        const select = document.getElementById(id);
+        if (!select) return;
+        const current = select.value;
+        if (select.options.length !== WALLET_SCHEDULE_NETWORKS.length) {
+            select.innerHTML = WALLET_SCHEDULE_NETWORKS
+                .map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`)
+                .join('');
+        }
+        select.value = WALLET_SCHEDULE_NETWORKS.includes(current)
+            ? current
+            : (index === 0 ? 'Base' : 'Arbitrum');
+    });
+}
+
+function setWalletScheduleFieldValue(id, value) {
+    const field = document.getElementById(id);
+    if (field) field.value = value ?? '';
+}
+
+function setWalletScheduleAmountMode(mode) {
+    walletScheduleAmountMode = mode === 'random' ? 'random' : 'fixed';
+    syncWalletScheduleOperationFields();
+}
+
+function syncWalletScheduleOperationFields() {
+    const locale = translations[getActiveLang()];
+    const action = document.getElementById('walletScheduleAction')?.value || 'dex';
+    const isBridge = action === 'bridge';
+    const fixedRow = document.getElementById('walletScheduleAmountFixedRow');
+    const randomRow = document.getElementById('walletScheduleAmountRandomRow');
+    const toWrap = document.getElementById('walletScheduleToNetworkWrap');
+    const fixedButton = document.getElementById('walletScheduleAmountFixedMode');
+    const randomButton = document.getElementById('walletScheduleAmountRandomMode');
+    if (fixedRow) fixedRow.hidden = walletScheduleAmountMode !== 'fixed';
+    if (randomRow) randomRow.hidden = walletScheduleAmountMode !== 'random';
+    if (toWrap) toWrap.hidden = !isBridge;
+    if (fixedButton) fixedButton.classList.toggle('is-active', walletScheduleAmountMode === 'fixed');
+    if (randomButton) randomButton.classList.toggle('is-active', walletScheduleAmountMode === 'random');
+    const saveButton = document.getElementById('walletScheduleSave');
+    if (saveButton && !walletScheduleMutationInFlight) {
+        saveButton.textContent = editingWalletScheduleId ? locale.walletScheduleUpdate : locale.walletScheduleSave;
+    }
+}
+
+function resetWalletScheduleForm() {
+    editingWalletScheduleId = null;
+    walletScheduleMode = 'flexible';
+    walletScheduleAmountMode = 'fixed';
+    walletScheduleCustomSlots = [];
+    setWalletScheduleFieldValue('walletScheduleAction', 'dex');
+    setWalletScheduleFieldValue('walletScheduleAmountFixed', '');
+    setWalletScheduleFieldValue('walletScheduleAmountMin', '');
+    setWalletScheduleFieldValue('walletScheduleAmountMax', '');
+    fillWalletScheduleNetworkSelects();
+    setWalletScheduleFieldValue('walletScheduleFromNetwork', 'Base');
+    setWalletScheduleFieldValue('walletScheduleToNetwork', 'Arbitrum');
+    setWalletScheduleFieldValue('walletScheduleFromToken', '');
+    setWalletScheduleFieldValue('walletScheduleToToken', '');
+    setWalletScheduleFieldValue('walletScheduleWeeklyMin', '3');
+    setWalletScheduleFieldValue('walletScheduleWeeklyMax', '4');
+    setWalletScheduleFieldValue('walletScheduleWindowStart', '10:00');
+    setWalletScheduleFieldValue('walletScheduleWindowEnd', '21:00');
+    const acknowledgement = document.getElementById('walletScheduleAcknowledgement');
+    if (acknowledgement) acknowledgement.checked = false;
+    syncWalletScheduleOperationFields();
+}
+
+function readWalletScheduleToken(id) {
+    return (document.getElementById(id)?.value || '').trim();
+}
+
 function populateWalletScheduleForm(schedule) {
     if (!schedule) return;
     const action = document.getElementById('walletScheduleAction');
@@ -5187,6 +5317,16 @@ function populateWalletScheduleForm(schedule) {
     if (action && ['dex', 'bridge', 'lending'].includes(schedule.action_type)) action.value = schedule.action_type;
     if (timezone && schedule.timezone) timezone.value = schedule.timezone;
     if (telegram) telegram.checked = schedule.telegram_enabled !== false;
+    walletScheduleAmountMode = schedule.amount_mode === 'random' ? 'random' : 'fixed';
+    fillWalletScheduleNetworkSelects();
+    setWalletScheduleFieldValue('walletScheduleAmountFixed', schedule.amount_fixed || '');
+    setWalletScheduleFieldValue('walletScheduleAmountMin', schedule.amount_min || '');
+    setWalletScheduleFieldValue('walletScheduleAmountMax', schedule.amount_max || '');
+    setWalletScheduleFieldValue('walletScheduleFromNetwork', schedule.from_network || 'Base');
+    setWalletScheduleFieldValue('walletScheduleToNetwork', schedule.to_network || 'Arbitrum');
+    setWalletScheduleFieldValue('walletScheduleFromToken', schedule.from_token || '');
+    setWalletScheduleFieldValue('walletScheduleToToken', schedule.to_token || '');
+    syncWalletScheduleOperationFields();
 
     const mode = schedule.schedule_mode === 'custom' || schedule.schedule_mode === 'fixed' ? 'custom' : 'flexible';
     walletScheduleMode = mode;
@@ -5212,16 +5352,226 @@ function populateWalletScheduleForm(schedule) {
     })).filter(slot => /^[A-Z][a-z]{2}$/.test(slot.day));
 }
 
+function getWalletScheduleBuilderMarkup() {
+    return `
+        <div id="walletScheduleSafety" class="wallet-schedule-notice"></div>
+        <div id="walletScheduleProxyNotice" class="wallet-schedule-proxy"></div>
+        <div class="wallet-schedule-form">
+            <label><span id="walletScheduleActionLabel"></span>
+                <select id="walletScheduleAction" class="auth-input" onchange="syncWalletScheduleOperationFields()">
+                    <option value="dex" id="walletScheduleActionSwap"></option>
+                    <option value="bridge" id="walletScheduleActionBridge"></option>
+                    <option value="lending" id="walletScheduleActionDefi"></option>
+                </select>
+            </label>
+            <label><span id="walletScheduleTimezoneLabel"></span>
+                <input id="walletScheduleTimezone" type="text" value="UTC" readonly class="auth-input">
+            </label>
+        </div>
+        <div class="wallet-schedule-op">
+            <div class="wallet-schedule-op-head">
+                <b id="walletScheduleOpTitle"></b>
+                <span id="walletScheduleOpDesc"></span>
+            </div>
+            <div class="wallet-schedule-mode-bar" role="group">
+                <button type="button" id="walletScheduleAmountFixedMode" class="wallet-schedule-mode is-active" onclick="setWalletScheduleAmountMode('fixed')"></button>
+                <button type="button" id="walletScheduleAmountRandomMode" class="wallet-schedule-mode" onclick="setWalletScheduleAmountMode('random')"></button>
+            </div>
+            <div id="walletScheduleAmountFixedRow" class="wallet-schedule-flex-grid">
+                <label><span id="walletScheduleAmountFixedLabel"></span>
+                    <input id="walletScheduleAmountFixed" type="text" inputmode="decimal" class="auth-input" autocomplete="off">
+                </label>
+            </div>
+            <div id="walletScheduleAmountRandomRow" class="wallet-schedule-flex-grid" hidden>
+                <label><span id="walletScheduleAmountMinLabel"></span>
+                    <input id="walletScheduleAmountMin" type="text" inputmode="decimal" class="auth-input" autocomplete="off">
+                </label>
+                <label><span id="walletScheduleAmountMaxLabel"></span>
+                    <input id="walletScheduleAmountMax" type="text" inputmode="decimal" class="auth-input" autocomplete="off">
+                </label>
+            </div>
+            <div class="wallet-schedule-flex-grid">
+                <label><span id="walletScheduleFromNetworkLabel"></span>
+                    <select id="walletScheduleFromNetwork" class="auth-input"></select>
+                </label>
+                <label id="walletScheduleToNetworkWrap"><span id="walletScheduleToNetworkLabel"></span>
+                    <select id="walletScheduleToNetwork" class="auth-input"></select>
+                </label>
+                <label><span id="walletScheduleFromTokenLabel"></span>
+                    <input id="walletScheduleFromToken" type="text" class="auth-input" spellcheck="false" autocomplete="off">
+                </label>
+                <label><span id="walletScheduleToTokenLabel"></span>
+                    <input id="walletScheduleToToken" type="text" class="auth-input" spellcheck="false" autocomplete="off">
+                </label>
+            </div>
+        </div>
+        <div id="walletScheduleFlexiblePanel" class="wallet-schedule-flex-panel">
+            <div id="walletScheduleFlexibleDescription" class="wallet-schedule-flex-description"></div>
+            <div class="wallet-schedule-mode-bar" role="group">
+                <button type="button" id="walletScheduleAutoMode" class="wallet-schedule-mode is-active" onclick="setWalletScheduleMode('flexible')"></button>
+                <button type="button" id="walletScheduleCustomMode" class="wallet-schedule-mode" onclick="setWalletScheduleMode('custom')"></button>
+            </div>
+            <div class="wallet-schedule-flex-grid">
+                <label><span id="walletScheduleWeeklyMinLabel"></span><input id="walletScheduleWeeklyMin" type="number" min="1" max="7" value="3" oninput="sanitizeIntegerInput(this, 1); checkInputLimit(this, 7)" class="auth-input"></label>
+                <label><span id="walletScheduleWeeklyMaxLabel"></span><input id="walletScheduleWeeklyMax" type="number" min="1" max="7" value="4" oninput="sanitizeIntegerInput(this, 1); checkInputLimit(this, 7)" class="auth-input"></label>
+                <label><span id="walletScheduleWindowStartLabel"></span><input id="walletScheduleWindowStart" type="text" value="10:00" placeholder="10:00" maxlength="5" inputmode="numeric" oninput="format24HourTimeInput(this)" onblur="normalize24HourTimeInput(this)" class="auth-input"></label>
+                <label><span id="walletScheduleWindowEndLabel"></span><input id="walletScheduleWindowEnd" type="text" value="21:00" placeholder="21:00" maxlength="5" inputmode="numeric" oninput="format24HourTimeInput(this)" onblur="normalize24HourTimeInput(this)" class="auth-input"></label>
+            </div>
+            <div class="wallet-schedule-calendar-head">
+                <div>
+                    <b id="walletSchedulePreviewTitle"></b>
+                    <span id="walletSchedulePreviewDesc"></span>
+                </div>
+                <button type="button" id="walletSchedulePreviewRefresh" class="wallet-schedule-preview-refresh" onclick="refreshWalletSchedulePreview()"></button>
+            </div>
+            <div id="walletScheduleGeneratedPreview" class="wallet-schedule-generated-preview" aria-live="polite"></div>
+        </div>
+        <label class="wallet-schedule-check"><input id="walletScheduleTelegram" type="checkbox" checked> <span id="walletScheduleTelegramLabel"></span></label>
+        <label class="wallet-schedule-check wallet-schedule-consent"><input id="walletScheduleAcknowledgement" type="checkbox"> <span id="walletScheduleAcknowledgementLabel"></span></label>
+        <div id="walletScheduleValidatePanel" class="wallet-schedule-validate-panel" hidden></div>
+        <div id="walletScheduleStatus" class="wallet-schedule-status"></div>
+        <div class="wallet-schedule-action-row">
+            <button type="button" id="walletScheduleValidate" onclick="validateWalletSchedule()" class="btn-dark-sm wallet-schedule-validate"></button>
+            <button type="button" id="walletScheduleSave" onclick="saveWalletSchedule()" class="btn-purple-lg wallet-schedule-save"></button>
+        </div>
+        <div class="wallet-schedule-list-head" id="walletScheduleListTitle"></div>
+        <div id="walletScheduleList" class="wallet-schedule-list"></div>
+    `;
+}
+
+async function openWalletWorkspace(walletId, options = {}) {
+    activeWalletWorkspaceId = Number(walletId);
+    activeWalletScheduleId = activeWalletWorkspaceId;
+    pendingWorkspaceScheduleId = options.scheduleId ? Number(options.scheduleId) : null;
+    if (currentSection !== 'Wallets') {
+        switchMenu(null, 'Wallets');
+        return;
+    }
+    await renderWalletWorkspace();
+}
+
 async function openWalletScheduleModal(walletId) {
-    activeWalletScheduleId = Number(walletId);
+    await openWalletWorkspace(walletId);
+}
+
+function closeWalletWorkspace() {
+    activeWalletWorkspaceId = null;
+    pendingWorkspaceScheduleId = null;
+    activeWalletScheduleId = null;
+    editingWalletScheduleId = null;
+    walletScheduleItems = [];
+    walletWorkspaceLastBalance = null;
+    const listView = document.getElementById('walletsListView');
+    const workspace = document.getElementById('walletWorkspaceView');
+    if (listView) listView.hidden = false;
+    if (workspace) {
+        workspace.hidden = true;
+        workspace.innerHTML = '';
+    }
+}
+
+function closeWalletScheduleModal() {
+    closeWalletWorkspace();
+}
+
+function handleWalletScheduleOverlayClick() {
+    // Schedule builder no longer uses a modal overlay.
+}
+
+async function resolveWalletWorkspaceRecord(walletId) {
+    let wallet = walletWorkspaceCache.find(item => Number(item.id) === Number(walletId));
+    if (wallet) return wallet;
+    const username = getCurrentUsername();
+    if (!username) return null;
+    const response = await fetch(`/api/wallets/${username}`);
+    const data = await response.json();
+    if (!response.ok || !Array.isArray(data.wallets)) return null;
+    walletWorkspaceCache = data.wallets;
+    return data.wallets.find(item => Number(item.id) === Number(walletId)) || null;
+}
+
+async function renderWalletWorkspace() {
+    const locale = translations[getActiveLang()];
+    const listView = document.getElementById('walletsListView');
+    const workspace = document.getElementById('walletWorkspaceView');
+    if (!workspace || !activeWalletWorkspaceId) return;
+    if (listView) listView.hidden = true;
+    workspace.hidden = false;
+    workspace.innerHTML = `<div class="dashboard-card wallet-workspace-card"><div class="account-empty-state">${escapeHtml(locale.loading)}</div></div>`;
+
+    const wallet = await resolveWalletWorkspaceRecord(activeWalletWorkspaceId);
+    if (!wallet) {
+        workspace.innerHTML = `<div class="dashboard-card wallet-workspace-card"><div class="account-empty-state">${escapeHtml(locale.walletLoadError)}</div>
+            <button type="button" class="btn-dark-sm" onclick="closeWalletWorkspace()">${escapeHtml(locale.walletWorkspaceBack)}</button></div>`;
+        return;
+    }
+
+    activeWalletScheduleId = Number(wallet.id);
+    activeWalletScheduleHasProxy = Boolean(wallet.has_proxy);
+    const walletName = escapeHtml(wallet.label || `${locale.walletDefaultName} ${wallet.id}`);
+    const address = escapeHtml(wallet.wallet_address);
+    const shortAddress = `${wallet.wallet_address.slice(0, 8)}…${wallet.wallet_address.slice(-6)}`;
+    const activeAddress = getActiveBaseWalletAddress().toLowerCase();
+    const isActive = activeAddress && wallet.wallet_address.toLowerCase() === activeAddress;
+    const networkOptions = WALLET_WORKSPACE_BALANCE_NETWORKS
+        .map(name => `<option value="${escapeHtml(name)}"${name === walletWorkspaceBalanceNetwork ? ' selected' : ''}>${escapeHtml(name)}</option>`)
+        .join('');
+
+    workspace.innerHTML = `
+        <div class="dashboard-card wallet-workspace-card">
+            <div class="wallet-workspace-header">
+                <button type="button" class="btn-dark-sm wallet-workspace-back" onclick="closeWalletWorkspace()">${escapeHtml(locale.walletWorkspaceBack)}</button>
+                <div class="wallet-workspace-identity">
+                    <div class="account-kicker">${escapeHtml(locale.walletWorkspaceKicker)}</div>
+                    <h2>${walletName}</h2>
+                    <div id="walletScheduleWallet" class="wallet-workspace-address">${address}</div>
+                    <div class="wallet-workspace-meta">
+                        <span>${isActive ? escapeHtml(locale.walletActive) : escapeHtml(locale.walletBaseMonitoring)}</span>
+                        <span>${wallet.has_proxy ? escapeHtml(locale.walletProxyConfigured) : escapeHtml(locale.walletNoProxy)}</span>
+                    </div>
+                </div>
+                <div class="wallet-workspace-header-actions">
+                    ${isActive ? '' : `<button type="button" class="btn-dark-sm" onclick="activateSavedWallet(${wallet.id}, '${wallet.wallet_address}')">${escapeHtml(locale.walletActivate)}</button>`}
+                    <button type="button" class="btn-dark-sm" onclick="switchMenu(null, 'Farming')">${escapeHtml(locale.walletWorkspaceDoOnce)}</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="dashboard-card wallet-workspace-card">
+            <div class="wallet-workspace-section-head">
+                <div>
+                    <div class="account-kicker">${escapeHtml(locale.walletWorkspaceBalancesKicker)}</div>
+                    <h3>${escapeHtml(locale.walletWorkspaceBalancesTitle)}</h3>
+                    <p>${escapeHtml(locale.walletWorkspaceBalancesDesc)}</p>
+                </div>
+                <div class="wallet-workspace-balance-controls">
+                    <label><span id="walletWorkspaceBalanceNetworkLabel">${escapeHtml(locale.walletWorkspaceBalanceNetwork)}</span>
+                        <select id="walletWorkspaceBalanceNetwork" class="auth-input" onchange="changeWalletWorkspaceBalanceNetwork(this.value)">${networkOptions}</select>
+                    </label>
+                    <button type="button" class="btn-dark-sm" onclick="loadWalletWorkspaceBalances(true)">${escapeHtml(locale.walletWorkspaceRefreshBalances)}</button>
+                </div>
+            </div>
+            <div id="walletWorkspaceBalanceContent" class="wallet-workspace-balance-grid"><div class="account-empty-state">${escapeHtml(locale.loading)}</div></div>
+            <div id="walletWorkspaceReadiness" class="wallet-workspace-readiness"></div>
+        </div>
+
+        <div class="dashboard-card wallet-workspace-card wallet-workspace-builder">
+            <div class="wallet-workspace-section-head">
+                <div>
+                    <div class="account-kicker">${escapeHtml(locale.walletWorkspaceBuilderKicker)}</div>
+                    <h3>${escapeHtml(locale.walletWorkspaceBuilderTitle)}</h3>
+                    <p>${escapeHtml(locale.walletWorkspaceBuilderDesc)}</p>
+                </div>
+            </div>
+            ${getWalletScheduleBuilderMarkup()}
+        </div>
+    `;
+
     walletSchedulePreviewVersion = 0;
-    walletScheduleMode = 'flexible';
-    walletScheduleCustomSlots = [];
+    resetWalletScheduleForm();
     populateWalletScheduleText();
     const timezoneInput = document.getElementById('walletScheduleTimezone');
     if (timezoneInput) timezoneInput.value = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-    const acknowledgement = document.getElementById('walletScheduleAcknowledgement');
-    if (acknowledgement) acknowledgement.checked = false;
     ['walletScheduleWeeklyMin', 'walletScheduleWeeklyMax', 'walletScheduleWindowStart', 'walletScheduleWindowEnd'].forEach(id => {
         const input = document.getElementById(id);
         if (input && input.dataset.schedulePreviewBound !== 'true') {
@@ -5231,19 +5581,153 @@ async function openWalletScheduleModal(walletId) {
     });
     const status = document.getElementById('walletScheduleStatus');
     if (status) status.textContent = '';
-    showAppModal('walletScheduleModal');
-    await loadWalletSchedules();
-}
+    const walletDisplay = document.getElementById('walletScheduleWallet');
+    if (walletDisplay) walletDisplay.textContent = `${wallet.label || `${locale.walletDefaultName} ${wallet.id}`} · ${shortAddress}`;
 
-function closeWalletScheduleModal() {
-    activeWalletScheduleId = null;
-    hideAppModal('walletScheduleModal');
-}
-
-function handleWalletScheduleOverlayClick(event) {
-    if (event.target.id === 'walletScheduleModal' && mousedownOverlayTarget?.id === 'walletScheduleModal') {
-        closeWalletScheduleModal();
+    await Promise.all([
+        loadWalletWorkspaceBalances(),
+        loadWalletSchedules(),
+    ]);
+    applyPendingScheduleDraft();
+    if (pendingWorkspaceScheduleId) {
+        const scheduleId = pendingWorkspaceScheduleId;
+        pendingWorkspaceScheduleId = null;
+        editWalletSchedule(scheduleId);
     }
+    updateWalletWorkspaceReadiness(wallet);
+    workspace.scrollIntoView({ block: 'start', behavior: 'smooth' });
+}
+
+function applyPendingScheduleDraft() {
+    const raw = localStorage.getItem('ax_schedule_draft');
+    if (!raw) return;
+    localStorage.removeItem('ax_schedule_draft');
+    let draft;
+    try {
+        draft = JSON.parse(raw);
+    } catch (_) {
+        return;
+    }
+    if (!draft || typeof draft !== 'object') return;
+    if (['dex', 'bridge', 'lending'].includes(draft.action_type)) {
+        setWalletScheduleFieldValue('walletScheduleAction', draft.action_type);
+    }
+    if (draft.amount_mode === 'random') {
+        setWalletScheduleAmountMode('random');
+        setWalletScheduleFieldValue('walletScheduleAmountMin', draft.amount_min || '');
+        setWalletScheduleFieldValue('walletScheduleAmountMax', draft.amount_max || '');
+    } else {
+        setWalletScheduleAmountMode('fixed');
+        setWalletScheduleFieldValue('walletScheduleAmountFixed', draft.amount_fixed || '');
+    }
+    fillWalletScheduleNetworkSelects();
+    if (draft.from_network) setWalletScheduleFieldValue('walletScheduleFromNetwork', draft.from_network);
+    if (draft.to_network) setWalletScheduleFieldValue('walletScheduleToNetwork', draft.to_network);
+    if (draft.from_token) setWalletScheduleFieldValue('walletScheduleFromToken', draft.from_token);
+    if (draft.to_token) setWalletScheduleFieldValue('walletScheduleToToken', draft.to_token);
+    syncWalletScheduleOperationFields();
+    renderWalletScheduleValidatePanel(null);
+}
+
+function changeWalletWorkspaceBalanceNetwork(network) {
+    walletWorkspaceBalanceNetwork = WALLET_WORKSPACE_BALANCE_NETWORKS.includes(network) ? network : 'Base';
+    loadWalletWorkspaceBalances(true);
+}
+
+async function loadWalletWorkspaceBalances(forceRefresh = false) {
+    const locale = translations[getActiveLang()];
+    const content = document.getElementById('walletWorkspaceBalanceContent');
+    if (!content || !activeWalletWorkspaceId) return;
+    const network = document.getElementById('walletWorkspaceBalanceNetwork')?.value || walletWorkspaceBalanceNetwork || 'Base';
+    walletWorkspaceBalanceNetwork = network;
+    content.innerHTML = `<div class="account-empty-state">${escapeHtml(locale.loading)}</div>`;
+    try {
+        const response = await fetch(`/api/wallets/${activeWalletWorkspaceId}/network-balance/${encodeURIComponent(network)}`);
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'balance_unavailable');
+        walletWorkspaceLastBalance = data;
+        const nativeSymbol = escapeHtml(data.native_symbol || 'ETH');
+        const nativeBalance = escapeHtml(data.native_balance || '0');
+        const usdcBalance = data.usdc_balance == null ? null : escapeHtml(data.usdc_balance);
+        const gasReserve = escapeHtml(data.native_gas_reserve || '—');
+        const gasOk = Boolean(data.native_gas_reserve_met);
+        content.innerHTML = `
+            <div class="wallet-workspace-balance-card">
+                <span>${escapeHtml(locale.walletWorkspaceNativeBalance)}</span>
+                <strong>${nativeBalance} ${nativeSymbol}</strong>
+                <button type="button" class="btn-dark-sm" onclick="applyWalletWorkspaceBalanceToAmount('native')">${escapeHtml(locale.walletWorkspaceUseAmount)}</button>
+            </div>
+            <div class="wallet-workspace-balance-card">
+                <span>USDC</span>
+                <strong>${usdcBalance == null ? escapeHtml(locale.walletWorkspaceBalanceUnavailable) : `${usdcBalance} USDC`}</strong>
+                ${usdcBalance == null ? '' : `<button type="button" class="btn-dark-sm" onclick="applyWalletWorkspaceBalanceToAmount('usdc')">${escapeHtml(locale.walletWorkspaceUseAmount)}</button>`}
+            </div>
+            <div class="wallet-workspace-balance-card ${gasOk ? 'is-ready' : 'is-attention'}">
+                <span>${escapeHtml(locale.walletWorkspaceGasReserve)}</span>
+                <strong>${gasReserve} ${nativeSymbol}</strong>
+                <small>${gasOk ? escapeHtml(locale.walletWorkspaceGasReady) : escapeHtml(locale.walletWorkspaceGasLow)}</small>
+            </div>
+        `;
+        const fromNetwork = document.getElementById('walletScheduleFromNetwork');
+        if (fromNetwork && WALLET_SCHEDULE_NETWORKS.includes(network)) fromNetwork.value = network;
+        updateWalletWorkspaceReadiness();
+    } catch (error) {
+        walletWorkspaceLastBalance = null;
+        content.innerHTML = `<div class="account-empty-state">${escapeHtml(translateBackendDetail(error.message) || locale.walletWorkspaceBalanceError)}</div>`;
+        updateWalletWorkspaceReadiness();
+    }
+}
+
+function applyWalletWorkspaceBalanceToAmount(kind) {
+    const data = walletWorkspaceLastBalance;
+    if (!data) return;
+    const value = kind === 'usdc' ? data.usdc_balance : data.native_balance;
+    if (value == null || value === '') return;
+    setWalletScheduleAmountMode('fixed');
+    setWalletScheduleFieldValue('walletScheduleAmountFixed', String(value));
+    if (data.network && WALLET_SCHEDULE_NETWORKS.includes(data.network)) {
+        setWalletScheduleFieldValue('walletScheduleFromNetwork', data.network);
+        syncWalletScheduleOperationFields();
+    }
+    document.getElementById('walletScheduleAmountFixed')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
+function updateWalletWorkspaceReadiness(wallet = null) {
+    const locale = translations[getActiveLang()];
+    const container = document.getElementById('walletWorkspaceReadiness');
+    if (!container) return;
+    const record = wallet || walletWorkspaceCache.find(item => Number(item.id) === Number(activeWalletWorkspaceId));
+    const hasProxy = Boolean(record?.has_proxy ?? activeWalletScheduleHasProxy);
+    const gasOk = Boolean(walletWorkspaceLastBalance?.native_gas_reserve_met);
+    const balanceLoaded = Boolean(walletWorkspaceLastBalance);
+    const enabledCount = walletScheduleItems.filter(item => item.enabled).length;
+    const rows = [
+        {
+            ok: hasProxy,
+            title: locale.walletWorkspaceReadyProxy,
+            detail: hasProxy ? locale.walletScheduleProxyReady : locale.walletScheduleProxyRequired,
+        },
+        {
+            ok: !balanceLoaded || gasOk,
+            title: locale.walletWorkspaceReadyGas,
+            detail: !balanceLoaded
+                ? locale.walletWorkspaceBalanceUnavailable
+                : (gasOk ? locale.walletWorkspaceGasReady : locale.walletWorkspaceGasLow),
+        },
+        {
+            ok: enabledCount > 0,
+            title: locale.walletWorkspaceReadySchedule,
+            detail: enabledCount > 0
+                ? locale.walletWorkspaceScheduleCount.replace('{count}', String(enabledCount))
+                : locale.walletWorkspaceScheduleEmpty,
+        },
+    ];
+    container.innerHTML = rows.map(row => `
+        <div class="wallet-workspace-ready-row ${row.ok ? 'is-ready' : 'is-attention'}">
+            <b>${escapeHtml(row.title)}</b>
+            <span>${escapeHtml(row.detail)}</span>
+        </div>
+    `).join('');
 }
 
 async function loadWalletSchedules() {
@@ -5258,7 +5742,12 @@ async function loadWalletSchedules() {
         if (!response.ok) throw new Error(data.detail || 'wallet_schedule_load_failed');
         activeWalletScheduleHasProxy = Boolean(data.wallet?.has_proxy);
         const schedules = Array.isArray(data.schedules) ? data.schedules : [];
-        populateWalletScheduleForm(schedules.find(item => item.enabled) || schedules[0]);
+        walletScheduleItems = schedules;
+        if (editingWalletScheduleId) {
+            const current = schedules.find(item => Number(item.id) === Number(editingWalletScheduleId));
+            if (current) populateWalletScheduleForm(current);
+            else resetWalletScheduleForm();
+        }
         const walletDisplay = document.getElementById('walletScheduleWallet');
         if (walletDisplay) {
             const label = data.wallet?.label || `${locale.walletDefaultName} ${activeWalletScheduleId}`;
@@ -5271,9 +5760,18 @@ async function loadWalletSchedules() {
         );
         const saveButton = document.getElementById('walletScheduleSave');
         if (saveButton) saveButton.disabled = !activeWalletScheduleHasProxy;
+        const validateButton = document.getElementById('walletScheduleValidate');
+        if (validateButton) validateButton.disabled = !activeWalletScheduleHasProxy;
+        syncWalletScheduleOperationFields();
         renderWalletSchedulePreview();
         renderWalletSchedules(schedules);
         loadWalletScheduleSummaries([{ id: activeWalletScheduleId }]);
+        updateWalletWorkspaceReadiness(data.wallet ? {
+            id: data.wallet.id,
+            has_proxy: data.wallet.has_proxy,
+            label: data.wallet.label,
+            wallet_address: data.wallet.wallet_address,
+        } : null);
         if (status && !data.telegram_linked) status.textContent = locale.walletScheduleTelegramMissing;
     } catch (error) {
         if (list) list.textContent = locale.walletScheduleLoadError;
@@ -5308,6 +5806,15 @@ function renderWalletSchedules(schedules) {
         const preview = generatedSlots.length
             ? `<small>${escapeHtml(locale.walletScheduleGeneratedLabel)}: ${generatedSlots.map(slot => `${escapeHtml(dayNames[slot.day] || slot.day)} ${escapeHtml(slot.time)}`).join(' · ')}</small>`
             : '';
+        const amountSummary = item.amount_mode === 'random' && item.amount_min && item.amount_max
+            ? `${escapeHtml(item.amount_min)}–${escapeHtml(item.amount_max)}`
+            : (item.amount_fixed ? escapeHtml(item.amount_fixed) : '');
+        const networkSummary = item.action_type === 'bridge' && item.from_network && item.to_network
+            ? `${escapeHtml(item.from_network)} → ${escapeHtml(item.to_network)}`
+            : (item.from_network ? escapeHtml(item.from_network) : '');
+        const operationSummary = [amountSummary, networkSummary].filter(Boolean).join(' · ');
+        const readiness = walletScheduleReadinessLabel(locale, item.readiness_status || 'unknown');
+        const readinessClass = item.readiness_status === 'ready' ? 'is-ready' : 'is-attention';
         const rerollButton = item.schedule_mode === 'flexible'
             ? `<button type="button" class="wallet-schedule-reroll" onclick="rerollWalletSchedule(${Number(item.id)}, this)">${escapeHtml(locale.walletScheduleReroll)}</button>`
             : '';
@@ -5316,14 +5823,30 @@ function renderWalletSchedules(schedules) {
             <div>
                 <b>${escapeHtml(actionNames[item.action_type] || item.action_type)}</b>
                 <small>${flexibleSummary} · ${escapeHtml(item.timezone)}${item.enabled ? '' : ` · ${escapeHtml(locale.walletScheduleDisabled)}`}</small>
+                ${operationSummary ? `<small>${operationSummary}</small>` : ''}
+                <small class="wallet-schedule-ready-tag ${readinessClass}">${escapeHtml(readiness)}</small>
                 ${preview}
             </div>
             <div class="wallet-schedule-actions">
+                <button type="button" class="wallet-schedule-edit" onclick="editWalletSchedule(${Number(item.id)})">${escapeHtml(locale.walletScheduleEdit)}</button>
                 ${rerollButton}
                 <button type="button" class="wallet-schedule-delete" onclick="deleteWalletSchedule(${Number(item.id)}, this)">${escapeHtml(locale.walletScheduleDelete)}</button>
             </div>
         </div>`;
     }).join('');
+}
+
+function editWalletSchedule(scheduleId) {
+    const schedule = walletScheduleItems.find(item => Number(item.id) === Number(scheduleId));
+    if (!schedule) return;
+    editingWalletScheduleId = Number(scheduleId);
+    populateWalletScheduleForm(schedule);
+    populateWalletScheduleText();
+    const acknowledgement = document.getElementById('walletScheduleAcknowledgement');
+    if (acknowledgement) acknowledgement.checked = Boolean(schedule.acknowledgement);
+    const status = document.getElementById('walletScheduleStatus');
+    if (status) status.textContent = '';
+    document.getElementById('walletScheduleOpTitle')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 }
 
 async function rerollWalletSchedule(scheduleId, button) {
@@ -5349,6 +5872,160 @@ async function rerollWalletSchedule(scheduleId, button) {
     }
 }
 
+function buildWalletSchedulePayloadFromForm() {
+    const locale = translations[getActiveLang()];
+    const windowStart = normalize24HourTime(document.getElementById('walletScheduleWindowStart')?.value);
+    const windowEnd = normalize24HourTime(document.getElementById('walletScheduleWindowEnd')?.value);
+    const weeklyMin = Number(document.getElementById('walletScheduleWeeklyMin')?.value || 3);
+    const weeklyMax = Number(document.getElementById('walletScheduleWeeklyMax')?.value || 4);
+    if (walletScheduleMode === 'flexible' && (
+        !windowStart || !windowEnd || windowStart >= windowEnd
+        || !Number.isInteger(weeklyMin) || !Number.isInteger(weeklyMax)
+        || weeklyMin < 1 || weeklyMax > 7 || weeklyMin > weeklyMax
+    )) {
+        return { error: locale.walletScheduleFlexibleInvalid };
+    }
+    if (walletScheduleMode === 'custom' && !walletScheduleCustomSlots.length) {
+        return { error: locale.walletScheduleCustomEmpty };
+    }
+    const actionType = document.getElementById('walletScheduleAction')?.value || 'dex';
+    const amountFixed = (document.getElementById('walletScheduleAmountFixed')?.value || '').trim();
+    const amountMin = (document.getElementById('walletScheduleAmountMin')?.value || '').trim();
+    const amountMax = (document.getElementById('walletScheduleAmountMax')?.value || '').trim();
+    if (walletScheduleAmountMode === 'fixed' && !amountFixed) {
+        return { error: locale.walletScheduleAmountRequired };
+    }
+    if (walletScheduleAmountMode === 'random') {
+        const minValue = Number(amountMin);
+        const maxValue = Number(amountMax);
+        if (!amountMin || !amountMax || !Number.isFinite(minValue) || !Number.isFinite(maxValue) || minValue <= 0 || maxValue <= 0 || minValue >= maxValue) {
+            return { error: locale.walletScheduleAmountRangeInvalid };
+        }
+    }
+    const fromToken = readWalletScheduleToken('walletScheduleFromToken');
+    const toToken = readWalletScheduleToken('walletScheduleToToken');
+    if ([fromToken, toToken].some(value => value && !/^0x[a-fA-F0-9]{40}$/.test(value))) {
+        return { error: locale.walletScheduleTokenInvalid };
+    }
+    const acknowledgement = Boolean(document.getElementById('walletScheduleAcknowledgement')?.checked);
+    if (!acknowledgement) {
+        return { error: locale.walletScheduleAcknowledgementRequired };
+    }
+    const fromNetwork = document.getElementById('walletScheduleFromNetwork')?.value || 'Base';
+    const toNetwork = document.getElementById('walletScheduleToNetwork')?.value || 'Arbitrum';
+    return {
+        payload: {
+            action_type: actionType,
+            day_of_week: 'Mon',
+            time_of_day: '18:00',
+            timezone: document.getElementById('walletScheduleTimezone')?.value || 'UTC',
+            enabled: true,
+            telegram_enabled: Boolean(document.getElementById('walletScheduleTelegram')?.checked),
+            acknowledgement,
+            schedule_mode: walletScheduleMode,
+            weekly_min: weeklyMin,
+            weekly_max: weeklyMax,
+            window_start: windowStart || '10:00',
+            window_end: windowEnd || '21:00',
+            custom_slots: walletScheduleMode === 'custom'
+                ? walletScheduleCustomSlots.map(slot => ({ day_of_week: slot.day, time_of_day: slot.time }))
+                : [],
+            reroll: true,
+            amount_mode: walletScheduleAmountMode,
+            amount_fixed: walletScheduleAmountMode === 'fixed' ? amountFixed : null,
+            amount_min: walletScheduleAmountMode === 'random' ? amountMin : null,
+            amount_max: walletScheduleAmountMode === 'random' ? amountMax : null,
+            from_network: fromNetwork,
+            to_network: actionType === 'bridge' ? toNetwork : fromNetwork,
+            from_token: fromToken || null,
+            to_token: toToken || null,
+            protocol: WALLET_SCHEDULE_PROTOCOL_BY_ACTION[actionType] || null,
+        },
+    };
+}
+
+function walletScheduleReadinessLabel(locale, status) {
+    const map = {
+        ready: locale.walletScheduleReadyOk,
+        insufficient_token: locale.walletScheduleReadyInsufficientToken,
+        insufficient_gas: locale.walletScheduleReadyInsufficientGas,
+        route_unavailable: locale.walletScheduleReadyRouteUnavailable,
+        route_changed: locale.walletScheduleReadyRouteChanged,
+        unknown: locale.walletScheduleReadyUnknown,
+    };
+    return map[status] || locale.walletScheduleReadyUnknown;
+}
+
+function renderWalletScheduleValidatePanel(result) {
+    const locale = translations[getActiveLang()];
+    const panel = document.getElementById('walletScheduleValidatePanel');
+    if (!panel) return;
+    if (!result) {
+        panel.hidden = true;
+        panel.innerHTML = '';
+        return;
+    }
+    const ready = Boolean(result.ready);
+    const blockers = Array.isArray(result.blockers) ? result.blockers : [];
+    const preview = result.quote_preview;
+    const previewText = preview
+        ? `${escapeHtml(preview.provider || '')}${preview.amount_out ? ` · out ${escapeHtml(String(preview.amount_out))}` : ''}${preview.tool ? ` · ${escapeHtml(preview.tool)}` : ''}`
+        : '';
+    panel.hidden = false;
+    panel.className = `wallet-schedule-validate-panel ${ready ? 'is-ready' : 'is-blocked'}`;
+    panel.innerHTML = `
+        <div class="wallet-schedule-validate-head">
+            <b>${escapeHtml(ready ? locale.walletScheduleValidateReady : locale.walletScheduleValidateBlocked)}</b>
+            <span>${escapeHtml(walletScheduleReadinessLabel(locale, result.readiness_status))}</span>
+        </div>
+        ${previewText ? `<div class="wallet-schedule-validate-preview">${previewText}</div>` : ''}
+        ${blockers.length ? `<ul>${blockers.map(item => `<li>${escapeHtml(window.translateBackendMessage(item.message || '') || item.message || '')}</li>`).join('')}</ul>` : ''}
+    `;
+}
+
+async function validateWalletSchedule() {
+    if (!activeWalletScheduleId || walletScheduleMutationInFlight) return;
+    const locale = translations[getActiveLang()];
+    const status = document.getElementById('walletScheduleStatus');
+    const button = document.getElementById('walletScheduleValidate');
+    if (!activeWalletScheduleHasProxy) {
+        if (status) status.textContent = locale.walletScheduleProxyRequired;
+        return;
+    }
+    const built = buildWalletSchedulePayloadFromForm();
+    if (built.error) {
+        if (status) status.textContent = built.error;
+        return;
+    }
+    try {
+        walletScheduleMutationInFlight = true;
+        if (button) { button.disabled = true; button.textContent = locale.walletScheduleValidating; }
+        if (status) status.textContent = locale.walletScheduleValidating;
+        const response = await fetch(`/api/wallets/${activeWalletScheduleId}/schedules/validate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(built.payload),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'wallet_schedule_validate_failed');
+        renderWalletScheduleValidatePanel(data);
+        if (status) {
+            status.textContent = data.ready
+                ? locale.walletScheduleValidateReady
+                : (translateBackendDetail(data.blockers?.[0]?.message || '') || locale.walletScheduleValidateBlocked);
+        }
+    } catch (error) {
+        renderWalletScheduleValidatePanel(null);
+        if (status) status.textContent = translateBackendDetail(error.message) || locale.walletScheduleValidateError;
+    } finally {
+        walletScheduleMutationInFlight = false;
+        if (button) {
+            button.disabled = !activeWalletScheduleHasProxy;
+            button.textContent = locale.walletScheduleValidate;
+        }
+    }
+}
+
 async function saveWalletSchedule() {
     if (!activeWalletScheduleId || walletScheduleMutationInFlight) return;
     const locale = translations[getActiveLang()];
@@ -5358,66 +6035,40 @@ async function saveWalletSchedule() {
         if (status) status.textContent = locale.walletScheduleProxyRequired;
         return;
     }
-    const windowStartInput = document.getElementById('walletScheduleWindowStart');
-    const windowEndInput = document.getElementById('walletScheduleWindowEnd');
-    const windowStart = normalize24HourTime(windowStartInput?.value);
-    const windowEnd = normalize24HourTime(windowEndInput?.value);
-    const weeklyMin = Number(document.getElementById('walletScheduleWeeklyMin')?.value || 3);
-    const weeklyMax = Number(document.getElementById('walletScheduleWeeklyMax')?.value || 4);
-    if (walletScheduleMode === 'flexible' && (
-        !windowStart || !windowEnd || windowStart >= windowEnd
-        || !Number.isInteger(weeklyMin) || !Number.isInteger(weeklyMax)
-        || weeklyMin < 1 || weeklyMax > 7 || weeklyMin > weeklyMax
-    )) {
-        if (status) status.textContent = locale.walletScheduleFlexibleInvalid;
+    const built = buildWalletSchedulePayloadFromForm();
+    if (built.error) {
+        if (status) status.textContent = built.error;
         return;
     }
-    if (walletScheduleMode === 'custom' && !walletScheduleCustomSlots.length) {
-        if (status) status.textContent = locale.walletScheduleCustomEmpty;
-        return;
-    }
-    const acknowledgement = Boolean(document.getElementById('walletScheduleAcknowledgement')?.checked);
-    if (!acknowledgement) {
-        if (status) status.textContent = locale.walletScheduleAcknowledgementRequired;
-        return;
-    }
-    const payload = {
-        action_type: document.getElementById('walletScheduleAction')?.value || 'dex',
-        // Legacy values keep the API compatible. Flexible plans use generated
-        // weekly slots; custom plans use the selected reminder slots below.
-        day_of_week: 'Mon',
-        time_of_day: '18:00',
-        timezone: document.getElementById('walletScheduleTimezone')?.value || 'UTC',
-        enabled: true,
-        telegram_enabled: Boolean(document.getElementById('walletScheduleTelegram')?.checked),
-        acknowledgement,
-        schedule_mode: walletScheduleMode,
-        weekly_min: weeklyMin,
-        weekly_max: weeklyMax,
-        window_start: windowStart || '10:00',
-        window_end: windowEnd || '21:00',
-        custom_slots: walletScheduleMode === 'custom'
-            ? walletScheduleCustomSlots.map(slot => ({ day_of_week: slot.day, time_of_day: slot.time }))
-            : [],
-        reroll: true,
-    };
     try {
         walletScheduleMutationInFlight = true;
         if (button) { button.disabled = true; button.textContent = locale.loading; }
-        const response = await fetch(`/api/wallets/${activeWalletScheduleId}/schedules`, {
-            method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload),
-        });
+        const scheduleId = editingWalletScheduleId;
+        const response = await fetch(
+            scheduleId
+                ? `/api/wallets/${activeWalletScheduleId}/schedules/${scheduleId}`
+                : `/api/wallets/${activeWalletScheduleId}/schedules`,
+            {
+                method: scheduleId ? 'PATCH' : 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(built.payload),
+            },
+        );
         const data = await response.json();
         if (!response.ok) throw new Error(data.detail || 'wallet_schedule_save_failed');
+        if (data.readiness) renderWalletScheduleValidatePanel(data.readiness);
         if (status) status.textContent = locale.walletScheduleSaved;
-        const consent = document.getElementById('walletScheduleAcknowledgement');
-        if (consent) consent.checked = false;
+        resetWalletScheduleForm();
+        populateWalletScheduleText();
         await loadWalletSchedules();
     } catch (error) {
         if (status) status.textContent = translateBackendDetail(error.message) || locale.walletScheduleSaveError;
     } finally {
         walletScheduleMutationInFlight = false;
-        if (button) { button.disabled = !activeWalletScheduleHasProxy; button.textContent = locale.walletScheduleSave; }
+        if (button) {
+            button.disabled = !activeWalletScheduleHasProxy;
+            button.textContent = editingWalletScheduleId ? locale.walletScheduleUpdate : locale.walletScheduleSave;
+        }
     }
 }
 
@@ -5439,6 +6090,181 @@ async function deleteWalletSchedule(scheduleId, button) {
         walletScheduleMutationInFlight = false;
         if (button) { button.disabled = false; button.textContent = locale.walletScheduleDelete; }
     }
+}
+
+let scheduleOverviewCache = { days: [], events: [] };
+let scheduleOverviewShowDisabled = false;
+
+async function loadScheduleOverview() {
+    const locale = translations[getActiveLang()];
+    const grid = document.getElementById('scheduleOverviewGrid');
+    const list = document.getElementById('scheduleOverviewList');
+    const meta = document.getElementById('scheduleOverviewMeta');
+    if (!grid || !list) return;
+    grid.innerHTML = `<div class="account-empty-state">${escapeHtml(locale.loading)}</div>`;
+    list.innerHTML = '';
+    if (meta) meta.textContent = locale.loading;
+    try {
+        const response = await fetch('/api/schedules/overview');
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.detail || 'schedule_overview_failed');
+        scheduleOverviewCache = {
+            days: Array.isArray(data.days) ? data.days : [],
+            events: Array.isArray(data.events) ? data.events : [],
+            week_start: data.week_start,
+            week_end: data.week_end,
+        };
+        if (meta) {
+            meta.textContent = locale.scheduleOverviewWeek
+                .replace('{start}', data.week_start || '—')
+                .replace('{end}', data.week_end || '—');
+        }
+        renderScheduleOverview();
+    } catch (error) {
+        grid.innerHTML = `<div class="account-empty-state">${escapeHtml(translateBackendDetail(error.message) || locale.scheduleOverviewLoadError)}</div>`;
+        list.innerHTML = '';
+        if (meta) meta.textContent = locale.scheduleOverviewLoadError;
+    }
+}
+
+function renderScheduleOverview() {
+    const locale = translations[getActiveLang()];
+    const grid = document.getElementById('scheduleOverviewGrid');
+    const list = document.getElementById('scheduleOverviewList');
+    if (!grid || !list) return;
+    const dayNames = Object.fromEntries(walletScheduleDayOptions(locale));
+    const actionNames = {
+        dex: locale.walletScheduleActionSwap,
+        bridge: locale.walletScheduleActionBridge,
+        lending: locale.walletScheduleActionDefi,
+    };
+    const events = scheduleOverviewCache.events.filter(item => scheduleOverviewShowDisabled || item.enabled);
+    const days = scheduleOverviewCache.days.length
+        ? scheduleOverviewCache.days
+        : ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, index) => ({
+            day,
+            date: scheduleOverviewCache.week_start || String(index),
+            event_count: 0,
+        }));
+
+    grid.innerHTML = days.map(day => {
+        const dayEvents = events.filter(item => item.date === day.date);
+        const chips = dayEvents.slice(0, 4).map(item => `
+            <button type="button" class="schedule-overview-chip readiness-${escapeHtml(item.readiness_status || 'unknown')}" onclick="openScheduleOverviewEvent(${Number(item.wallet_id)}, ${Number(item.schedule_id)})">
+                <b>${escapeHtml(item.time)}</b>
+                <span>${escapeHtml(actionNames[item.action_type] || item.action_type)}</span>
+                <small>${escapeHtml(item.wallet_label || '')}</small>
+            </button>
+        `).join('');
+        const more = dayEvents.length > 4
+            ? `<div class="schedule-overview-more">${escapeHtml(locale.scheduleOverviewMore.replace('{count}', String(dayEvents.length - 4)))}</div>`
+            : '';
+        return `
+            <article class="schedule-overview-day${dayEvents.length ? ' has-events' : ''}">
+                <header>
+                    <b>${escapeHtml(dayNames[day.day] || day.day)}</b>
+                    <span>${escapeHtml(day.date || '')}</span>
+                </header>
+                <div class="schedule-overview-day-body">
+                    ${chips || `<div class="schedule-overview-empty-day">${escapeHtml(locale.scheduleOverviewNoEventsDay)}</div>`}
+                    ${more}
+                </div>
+            </article>
+        `;
+    }).join('');
+
+    if (!events.length) {
+        list.innerHTML = renderAppEmptyState(
+            locale.scheduleOverviewEmptyTitle,
+            locale.scheduleOverviewEmptyDesc,
+            locale.scheduleOverviewEmptyAction,
+            "switchMenu(null, 'Wallets')",
+        );
+        return;
+    }
+
+    list.innerHTML = events.map(item => {
+        const amount = item.amount_summary ? ` · ${escapeHtml(item.amount_summary)}` : '';
+        const networks = item.action_type === 'bridge' && item.from_network && item.to_network
+            ? ` · ${escapeHtml(item.from_network)} → ${escapeHtml(item.to_network)}`
+            : (item.from_network ? ` · ${escapeHtml(item.from_network)}` : '');
+        const readiness = walletScheduleReadinessLabel(locale, item.readiness_status || 'unknown');
+        return `
+            <button type="button" class="schedule-overview-row" onclick="openScheduleOverviewEvent(${Number(item.wallet_id)}, ${Number(item.schedule_id)})">
+                <div>
+                    <b>${escapeHtml(dayNames[item.day] || item.day)} ${escapeHtml(item.time)}</b>
+                    <small>${escapeHtml(item.wallet_label || '')} · ${escapeHtml(actionNames[item.action_type] || item.action_type)}${amount}${networks}</small>
+                </div>
+                <span class="wallet-schedule-ready-tag ${item.readiness_status === 'ready' ? 'is-ready' : 'is-attention'}">${escapeHtml(readiness)}</span>
+            </button>
+        `;
+    }).join('');
+}
+
+function toggleScheduleOverviewDisabled(checkbox) {
+    scheduleOverviewShowDisabled = Boolean(checkbox?.checked);
+    renderScheduleOverview();
+}
+
+function openScheduleOverviewEvent(walletId, scheduleId) {
+    openWalletWorkspace(walletId, { scheduleId });
+}
+
+async function resolveActiveWalletRecord() {
+    const address = getActiveBaseWalletAddress();
+    if (!address) return null;
+    let wallet = walletWorkspaceCache.find(item => String(item.wallet_address || '').toLowerCase() === address.toLowerCase());
+    if (wallet) return wallet;
+    const username = getCurrentUsername();
+    if (!username) return null;
+    try {
+        const response = await fetch(`/api/wallets/${username}`);
+        const data = await response.json();
+        if (!response.ok || !Array.isArray(data.wallets)) return null;
+        walletWorkspaceCache = data.wallets;
+        return data.wallets.find(item => String(item.wallet_address || '').toLowerCase() === address.toLowerCase()) || null;
+    } catch (_) {
+        return null;
+    }
+}
+
+async function saveCurrentOperationToSchedule() {
+    const locale = translations[getActiveLang()];
+    const pane = localStorage.getItem('ax_activity_pane') || 'dex';
+    if (!['dex', 'bridges', 'lending'].includes(pane)) {
+        showNotification(locale.actionCenterSaveNeedsOperation, 'warning');
+        return;
+    }
+    const wallet = await resolveActiveWalletRecord();
+    if (!wallet) {
+        showNotification(locale.accountOverviewNoActiveWallet, 'warning');
+        switchMenu(null, 'Wallets');
+        return;
+    }
+    const draft = {
+        amount_mode: 'fixed',
+        action_type: pane === 'bridges' ? 'bridge' : (pane === 'lending' ? 'lending' : 'dex'),
+    };
+    if (pane === 'dex') {
+        draft.from_network = 'Base';
+        draft.to_network = 'Base';
+        draft.amount_fixed = (document.getElementById('operationAmount')?.value || '').trim();
+        draft.from_token = '0x0000000000000000000000000000000000000000';
+    } else if (pane === 'bridges') {
+        draft.from_network = document.getElementById('operationSourceNetwork')?.value || 'Base';
+        draft.to_network = document.getElementById('operationDestinationNetwork')?.value || 'Arbitrum';
+        draft.from_token = document.getElementById('operationSourceAsset')?.value || null;
+        draft.to_token = document.getElementById('operationReceiveAsset')?.value || null;
+        draft.amount_fixed = (document.getElementById('operationAmount')?.value || '').trim();
+    } else {
+        draft.from_network = 'Base';
+        draft.to_network = 'Base';
+        draft.from_token = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
+        draft.amount_fixed = (document.getElementById('lendingAmount')?.value || '').trim();
+    }
+    localStorage.setItem('ax_schedule_draft', JSON.stringify(draft));
+    showNotification(locale.actionCenterSaveToScheduleStarted, 'success');
+    await openWalletWorkspace(wallet.id);
 }
 
 function areInterfaceHintsEnabled() {
@@ -5635,6 +6461,100 @@ async function loadSecurityOverview() {
         container.textContent = t('securityUnavailable');
         container.style.color = '#facc15';
     }
+}
+
+function getDesktopCompanionText() {
+    return {
+        ru: {
+            creating: 'Создаём одноразовый код…',
+            copy: 'Скопировать',
+            copied: 'Код скопирован.',
+            fallback: 'Скопируйте код вручную.',
+            expires: (minutes) => `Код действует ${minutes} мин. Введите его в Desktop Companion.`,
+            failed: 'Не удалось создать одноразовый код. Повторите попытку.',
+        },
+        en: {
+            creating: 'Creating one-time code…',
+            copy: 'Copy',
+            copied: 'Code copied.',
+            fallback: 'Copy the code manually.',
+            expires: (minutes) => `The code is valid for ${minutes} min. Enter it in Desktop Companion.`,
+            failed: 'Could not create a one-time code. Please try again.',
+        },
+        zh: {
+            creating: '正在创建一次性代码…',
+            copy: '复制',
+            copied: '代码已复制。',
+            fallback: '请手动复制代码。',
+            expires: (minutes) => `代码有效期为 ${minutes} 分钟。请在 Desktop Companion 中输入。`,
+            failed: '无法创建一次性代码，请重试。',
+        },
+    }[currentLang] || {
+        creating: 'Creating one-time code…',
+        copy: 'Copy',
+        copied: 'Code copied.',
+        fallback: 'Copy the code manually.',
+        expires: (minutes) => `The code is valid for ${minutes} min. Enter it in Desktop Companion.`,
+        failed: 'Could not create a one-time code. Please try again.',
+    };
+}
+
+async function createDesktopCompanionPairingCode() {
+    const button = document.getElementById('desktopCompanionPairingButton');
+    const result = document.getElementById('desktopCompanionPairingResult');
+    const copyButton = document.getElementById('desktopCompanionCopyButton');
+    if (!button || !result || !copyButton || button.disabled) return;
+
+    const text = getDesktopCompanionText();
+    const originalText = button.textContent;
+    button.disabled = true;
+    button.textContent = text.creating;
+    try {
+        const response = await fetch('/api/companion/pairing-code', { method: 'POST' });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.code) throw new Error(data.detail || 'pairing_code_failed');
+
+        const minutes = Math.max(1, Math.ceil(Number(data.expires_in || 300) / 60));
+        result.dataset.code = String(data.code);
+        result.textContent = '';
+        result.style.color = 'var(--text-muted)';
+        const code = document.createElement('code');
+        code.textContent = data.code;
+        code.style.cssText = 'display:inline-block; margin-right:10px; padding:7px 10px; border:1px solid #7c3aed; border-radius:8px; background:#130d20; color:#e9d5ff; font-size:14px; font-weight:800; letter-spacing:.08em; user-select:all;';
+        const note = document.createElement('span');
+        note.textContent = text.expires(minutes);
+        result.append(code, note);
+        copyButton.disabled = false;
+        copyButton.textContent = text.copy;
+    } catch (error) {
+        result.dataset.code = '';
+        result.textContent = translateBackendDetail(error.message) || text.failed;
+        result.style.color = '#fca5a5';
+        copyButton.disabled = true;
+    } finally {
+        button.disabled = false;
+        button.textContent = originalText;
+    }
+}
+
+async function copyDesktopCompanionPairingCode() {
+    const result = document.getElementById('desktopCompanionPairingResult');
+    const copyButton = document.getElementById('desktopCompanionCopyButton');
+    const code = String(result?.dataset.code || '');
+    if (!code) return;
+
+    const text = getDesktopCompanionText();
+    try {
+        await navigator.clipboard.writeText(code);
+        showNotification(text.copied, 'success');
+    } catch (_) {
+        const range = document.createRange();
+        range.selectNodeContents(result);
+        window.getSelection()?.removeAllRanges();
+        window.getSelection()?.addRange(range);
+        showNotification(text.fallback, 'success');
+    }
+    if (copyButton) copyButton.textContent = text.copy;
 }
 
 async function createTelegramLink() {
@@ -7936,6 +8856,7 @@ function renderDashboardContent(section) {
                     <div class="account-section-heading"><div><div class="account-kicker">${t.accountOverviewShortcuts}</div><h3>${t.accountOverviewQuickTitle}</h3></div></div>
                     <div class="account-quick-actions">
                         <button type="button" onclick="switchMenu(null, 'Wallets')">${t.accountOverviewGoWallets}</button>
+                        <button type="button" onclick="switchMenu(null, 'Calendar')">${t.menuCalendar}</button>
                         <button type="button" onclick="openAccountWalletSchedule()">${t.accountOverviewOpenSchedule}</button>
                         <button type="button" onclick="switchMenu(null, 'Farming')">${t.accountOverviewGoActions}</button>
                         <button type="button" onclick="switchMenu(null, 'Settings')">${t.accountOverviewGoSettings}</button>
@@ -7979,6 +8900,32 @@ function renderDashboardContent(section) {
         const notifDefiWithdrawSubmittedChecked = localStorage.getItem('ax_notify_defi_withdraw_submitted') === 'true' ? 'checked' : '';
         const notifDefiFinalChecked = localStorage.getItem('ax_notify_defi_final') === 'true' ? 'checked' : '';
         const notifDefiErrorsChecked = localStorage.getItem('ax_notify_defi_errors') === 'true' ? 'checked' : '';
+        const companionText = {
+            ru: {
+                title: 'Desktop Companion',
+                description: 'Создайте одноразовый код для подключения приложения к этому аккаунту. Код действует 5 минут и заменяет предыдущий.',
+                create: 'Создать одноразовый код',
+                copy: 'Скопировать',
+                hint: 'Приватные ключи и seed-фразы для подключения не нужны.',
+                empty: 'Код ещё не создан.',
+            },
+            en: {
+                title: 'Desktop Companion',
+                description: 'Create a one-time code to connect the app to this account. The code is valid for 5 minutes and replaces the previous one.',
+                create: 'Create one-time code',
+                copy: 'Copy',
+                hint: 'Private keys and seed phrases are not required for pairing.',
+                empty: 'No code has been created yet.',
+            },
+            zh: {
+                title: 'Desktop Companion',
+                description: '创建一次性代码以将应用连接到此账户。代码有效期为 5 分钟，并会替换之前的代码。',
+                create: '创建一次性代码',
+                copy: '复制',
+                hint: '配对不需要私钥或助记词。',
+                empty: '尚未创建代码。',
+            },
+        }[currentLang] || null;
 
         const antiSybilWarningHtml = renderInterfaceHint('settings-safety-note', `${t.setWarnTitle}. ${t.setWarnDesc}`, 'warning', '', '🛡️');
 
@@ -8048,6 +8995,21 @@ function renderDashboardContent(section) {
                         <div>• ${t.securityConfirm}</div>
                         <div>• ${t.securitySingleSession}</div>
                     </div>
+                </div>
+
+                <div style="background:var(--bg-main); border:1px solid var(--border-color); border-radius:12px; padding:16px; margin-bottom:18px;">
+                    <div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start; margin-bottom:6px;">
+                        <div>
+                            <div style="font-size:13px; color:#fff; font-weight:700;">${companionText.title}</div>
+                            <div style="font-size:12px; color:var(--text-muted); line-height:1.45; margin-top:4px; max-width:720px;">${companionText.description}</div>
+                        </div>
+                    </div>
+                    <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin-top:12px;">
+                        <button type="button" id="desktopCompanionPairingButton" onclick="createDesktopCompanionPairingCode()" class="tg-notification-preset">${companionText.create}</button>
+                        <button type="button" id="desktopCompanionCopyButton" onclick="copyDesktopCompanionPairingCode()" class="tg-notification-preset" disabled>${companionText.copy}</button>
+                    </div>
+                    <div id="desktopCompanionPairingResult" aria-live="polite" style="margin-top:12px; min-height:22px; color:var(--text-muted); font-size:12px; line-height:1.45;">${companionText.empty}</div>
+                    <div style="margin-top:8px; color:#bfdbfe; font-size:12px; line-height:1.45;">${companionText.hint}</div>
                 </div>
 
                 <button type="button" onclick="saveGlobalProfileSettings()" class="btn-modal-primary" style="width:100%; padding: 12px; font-size: 14px; font-weight: 600; border-radius: 12px; cursor: pointer;">${t.btnSaveSet}</button>
@@ -8266,6 +9228,18 @@ function renderDashboardContent(section) {
         const activePane = { dex: dexPane, bridges: bridgesPane, lending: lendingPane, journal: journalPane }[activityPane];
         
         centerHtml = `
+            <div class="dashboard-card action-center-secondary" style="margin-bottom:16px;">
+                <div class="action-center-secondary__copy">
+                    <div class="account-kicker">${t.actionCenterSecondaryKicker}</div>
+                    <h3>${t.actionCenterSecondaryTitle}</h3>
+                    <p>${t.actionCenterSecondaryDesc}</p>
+                </div>
+                <div class="action-center-secondary__actions">
+                    <button type="button" class="btn-dark-sm" onclick="switchMenu(null, 'Calendar')">${t.menuCalendar}</button>
+                    <button type="button" class="btn-dark-sm" onclick="switchMenu(null, 'Wallets')">${t.accountOverviewGoWallets}</button>
+                    <button type="button" class="btn-purple-lg action-center-save-schedule" onclick="saveCurrentOperationToSchedule()">${t.actionCenterSaveToSchedule}</button>
+                </div>
+            </div>
             <div class="dashboard-card" style="margin-bottom:16px;">
                 <h3 style="color:#fff; margin:0 0 5px; font-size:17px;">${t.activityTitle}</h3>
                 <p style="color:var(--text-muted); font-size:13px; line-height:1.5; margin:0 0 14px;">${t.activityDesc}</p>
@@ -8286,31 +9260,61 @@ function renderDashboardContent(section) {
         }, 50);
     } else if (section === 'Wallets') {
         centerHtml = `
-            <div class="dashboard-card" style="margin-bottom: 16px;">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-                    <h3 style="color: #fff; margin: 0; font-size: 16px;">${t.walTitle}</h3>
-                    <span id="slot-info-badge" style="font-size: 12px; background: #1f1f1f; color: #fff; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border-color);">${t.loading}</span>
+            <div id="walletsListView">
+                <div class="dashboard-card" style="margin-bottom: 16px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                        <h3 style="color: #fff; margin: 0; font-size: 16px;">${t.walTitle}</h3>
+                        <span id="slot-info-badge" style="font-size: 12px; background: #1f1f1f; color: #fff; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border-color);">${t.loading}</span>
+                    </div>
+                    <p class="wallet-workspace-list-hint">${t.walletWorkspaceListHint}</p>
+                    <div id="walletsListContainer" style="display: flex; flex-direction: column; gap: 8px;">${t.loading}</div>
+                    <div style="margin-top: 12px; color: var(--text-muted); font-size: 12px; line-height: 1.5;">${t.slotsPurchaseUnavailable}</div>
+                    <div id="buySlotMsg" style="margin-top: 6px; font-size:12px;"></div>
                 </div>
-                <div id="walletsListContainer" style="display: flex; flex-direction: column; gap: 8px;">${t.loading}</div>
-                <div style="margin-top: 12px; color: var(--text-muted); font-size: 12px; line-height: 1.5;">${t.slotsPurchaseUnavailable}</div>
-                <div id="buySlotMsg" style="margin-top: 6px; font-size:12px;"></div>
+                <div class="dashboard-card">
+                    <h3 style="color: #fff; margin-top: 0; font-size: 16px;">${t.walletConnectTitle}</h3>
+                    <p style="color: var(--text-muted); font-size: 13px; line-height: 1.5; margin-bottom: 10px;">${t.walletConnectDesc}</p>
+                    <div style="display:flex; flex-wrap:wrap; gap:8px;">
+                        <button type="button" onclick="connectBaseWallet(true)" class="btn-dark-sm" style="width:auto; padding:10px 14px;">${t.btnConnectBase}</button>
+                        <button type="button" onclick="connectWalletConnectBase()" class="btn-dark-sm" style="width:auto; padding:10px 14px; border-color:#7c3aed;">${t.btnConnectWalletConnect}</button>
+                        <button type="button" id="disconnectBaseWalletButton" onclick="disconnectBaseWalletSession()" class="btn-dark-sm" style="display:none; width:auto; padding:10px 14px; border-color:#ef4444; color:#fca5a5;">${t.walletDisconnect}</button>
+                    </div>
+                    <div id="baseWalletConnectionStatus" style="display:none; color:#86efac; font-size:12px; margin-top:8px;"></div>
+                </div>
             </div>
-            <div class="dashboard-card">
-                <h3 style="color: #fff; margin-top: 0; font-size: 16px;">${t.walletConnectTitle}</h3>
-                <p style="color: var(--text-muted); font-size: 13px; line-height: 1.5; margin-bottom: 10px;">${t.walletConnectDesc}</p>
-                <div style="display:flex; flex-wrap:wrap; gap:8px;">
-                    <button type="button" onclick="connectBaseWallet(true)" class="btn-dark-sm" style="width:auto; padding:10px 14px;">${t.btnConnectBase}</button>
-                    <button type="button" onclick="connectWalletConnectBase()" class="btn-dark-sm" style="width:auto; padding:10px 14px; border-color:#7c3aed;">${t.btnConnectWalletConnect}</button>
-                    <button type="button" id="disconnectBaseWalletButton" onclick="disconnectBaseWalletSession()" class="btn-dark-sm" style="display:none; width:auto; padding:10px 14px; border-color:#ef4444; color:#fca5a5;">${t.walletDisconnect}</button>
+            <div id="walletWorkspaceView" class="wallet-workspace-view" hidden></div>
+        `;
+        setTimeout(async () => {
+            updateBaseWalletConnectionState();
+            await loadWalletsFromDB();
+            injectWalletSecurityBanner();
+            if (activeWalletWorkspaceId) await renderWalletWorkspace();
+        }, 50);
+    } else if (section === 'Calendar') {
+        centerHtml = `
+            <div class="dashboard-card schedule-overview-card">
+                <div class="schedule-overview-header">
+                    <div>
+                        <div class="account-kicker">${t.scheduleOverviewKicker}</div>
+                        <h3>${t.scheduleOverviewTitle}</h3>
+                        <p>${t.scheduleOverviewDesc}</p>
+                        <div id="scheduleOverviewMeta" class="schedule-overview-meta">${t.loading}</div>
+                    </div>
+                    <div class="schedule-overview-toolbar">
+                        <label class="schedule-overview-toggle">
+                            <input type="checkbox" id="scheduleOverviewShowDisabled" onchange="toggleScheduleOverviewDisabled(this)"${scheduleOverviewShowDisabled ? ' checked' : ''}>
+                            <span>${t.scheduleOverviewShowDisabled}</span>
+                        </label>
+                        <button type="button" class="btn-dark-sm" onclick="loadScheduleOverview()">${t.scheduleOverviewRefresh}</button>
+                        <button type="button" class="btn-dark-sm" onclick="switchMenu(null, 'Wallets')">${t.scheduleOverviewOpenWallets}</button>
+                    </div>
                 </div>
-                <div id="baseWalletConnectionStatus" style="display:none; color:#86efac; font-size:12px; margin-top:8px;"></div>
+                <div id="scheduleOverviewGrid" class="schedule-overview-grid">${t.loading}</div>
+                <div class="schedule-overview-list-head">${t.scheduleOverviewListTitle}</div>
+                <div id="scheduleOverviewList" class="schedule-overview-list">${t.loading}</div>
             </div>
         `;
-        setTimeout(() => {
-            updateBaseWalletConnectionState();
-            loadWalletsFromDB();
-            injectWalletSecurityBanner();
-        }, 50);
+        setTimeout(loadScheduleOverview, 50);
     } else if (section === 'Networks') {
         const networksHtml = NETWORKS_CONFIG.map(net => `
             <article class="network-overview-card">
@@ -8359,6 +9363,7 @@ function renderDashboardContent(section) {
                 <button type="button" class="dashboard-nav-item ${section === 'Looter' ? 'active' : ''}" onclick="switchMenu(this, 'Looter')">${t.menuLooter}</button>
                 <button type="button" class="dashboard-nav-item ${section === 'Farming' ? 'active' : ''}" onclick="switchMenu(this, 'Farming')">${t.menuFarm}</button>
                 <button type="button" class="dashboard-nav-item ${section === 'Wallets' ? 'active' : ''}" onclick="switchMenu(this, 'Wallets')">${t.menuWallets}</button>
+                <button type="button" class="dashboard-nav-item ${section === 'Calendar' ? 'active' : ''}" onclick="switchMenu(this, 'Calendar')">${t.menuCalendar}</button>
                 <button type="button" class="dashboard-nav-item ${section === 'Networks' ? 'active' : ''}" onclick="switchMenu(this, 'Networks')">${t.menuNet}</button>
                 <button type="button" class="dashboard-nav-item ${section === 'Settings' ? 'active' : ''}" onclick="switchMenu(this, 'Settings')">${t.menuSet}</button>
             </nav>

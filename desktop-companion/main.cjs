@@ -4,7 +4,7 @@ const path = require('path');
 const CryptoStorage = require('./crypto-storage.cjs');
 const TransactionExecutor = require('./tx-executor.cjs');
 const TaskPoller = require('./task-poller.cjs');
-const { normalizeSubscription } = require('./subscription-map.cjs');
+const { normalizeSubscription, resolveTier } = require('./subscription-map.cjs');
 
 const POLL_INTERVAL_MS = 60_000;
 const WEEKDAYS = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
@@ -34,10 +34,16 @@ function readConfig() { try { return JSON.parse(fs.readFileSync(configPath(), 'u
 function writeConfig(value) { fs.writeFileSync(configPath(), JSON.stringify(value, null, 2), { encoding: 'utf8', mode: 0o600 }); }
 
 function hydrateTierFromConfig(config = readConfig()) {
-  autoModeAllowed = Boolean(config.autoModeAllowed);
-  userTier = config.userTier || 'standard';
-  tierLevel = Number(config.tierLevel) || 0;
-  tierName = config.tierName || 'Standard';
+  const resolved = resolveTier({
+    tier_name: config.tierName,
+    user_tier: config.userTier,
+    tier_level: config.tierLevel,
+    auto_mode_allowed: config.autoModeAllowed,
+  }, { plan: config.tierName, level: config.tierLevel, userTier: config.userTier });
+  autoModeAllowed = resolved.allowed;
+  userTier = resolved.userTier;
+  tierLevel = resolved.level;
+  tierName = resolved.plan;
 }
 
 function normalizeOrigin(value) {
@@ -115,7 +121,52 @@ function nextSlot(task, now = new Date()) {
 }
 
 function scheduleRows(tasks) {
-  return tasks.map((task) => ({ scheduleId: task.schedule_id, walletLabel: String(task.wallet_label || 'Кошелёк'), walletAddress: String(task.wallet_address || ''), actionType: String(task.action_type || 'action'), scheduleMode: String(task.schedule_mode || 'fixed'), timezone: String(task.timezone || 'UTC'), nextAt: nextSlot(task) })).sort((left, right) => left.nextAt - right.nextAt);
+  return tasks.map((task) => {
+    const fromNetwork = task.from_network ? String(task.from_network) : '';
+    const toNetwork = task.to_network ? String(task.to_network) : '';
+    const amountSummary = task.amount_summary
+      ? String(task.amount_summary)
+      : (task.amount_mode === 'random' && task.amount_min && task.amount_max
+        ? `${task.amount_min}–${task.amount_max}`
+        : (task.amount_fixed ? String(task.amount_fixed) : ''));
+    return {
+      scheduleId: task.schedule_id,
+      walletId: task.wallet_id,
+      walletLabel: String(task.wallet_label || 'Кошелёк'),
+      walletAddress: String(task.wallet_address || ''),
+      actionType: String(task.action_type || 'action'),
+      scheduleMode: String(task.schedule_mode || 'fixed'),
+      timezone: String(task.timezone || 'UTC'),
+      amountSummary,
+      fromNetwork,
+      toNetwork,
+      fromToken: task.from_token ? String(task.from_token) : '',
+      toToken: task.to_token ? String(task.to_token) : '',
+      protocol: task.protocol ? String(task.protocol) : '',
+      readinessStatus: String(task.readiness_status || 'unknown'),
+      nextAt: nextSlot(task),
+    };
+  }).sort((left, right) => left.nextAt - right.nextAt);
+}
+
+function notificationBody(row) {
+  const parts = [`${row.walletLabel}: ${row.actionType}`];
+  if (row.amountSummary) parts.push(row.amountSummary);
+  if (row.fromNetwork && row.toNetwork && row.fromNetwork !== row.toNetwork) {
+    parts.push(`${row.fromNetwork} → ${row.toNetwork}`);
+  } else if (row.fromNetwork || row.toNetwork) {
+    parts.push(row.fromNetwork || row.toNetwork);
+  }
+  const readiness = String(row.readinessStatus || '').toLowerCase();
+  if (readiness.startsWith('insufficient')) {
+    parts.push('низкий баланс/газ');
+  } else if (readiness.includes('route') || readiness === 'quote_failed') {
+    parts.push('маршрут изменился');
+  } else if (readiness && readiness !== 'ready' && readiness !== 'unknown') {
+    parts.push(readiness);
+  }
+  parts.push('Откройте сайт и подтвердите в кошельке вручную.');
+  return parts.join(' · ');
 }
 
 function clearNotifications() { notificationTimers.forEach(clearTimeout); notificationTimers = []; }
@@ -125,7 +176,12 @@ function planNotifications(rows) {
     const delay = row.nextAt - Date.now();
     if (delay <= 0 || delay > 2_147_000_000) return;
     notificationTimers.push(setTimeout(() => {
-      if (Notification.isSupported()) new Notification({ title: 'AIRDROP-X: напоминание', body: `${row.walletLabel}: время проверить ${row.actionType}. Откройте сайт и подтвердите действие в кошельке вручную.` }).show();
+      if (Notification.isSupported()) {
+        new Notification({
+          title: 'AIRDROP-X: напоминание',
+          body: notificationBody(row),
+        }).show();
+      }
     }, delay));
   });
 }
@@ -139,12 +195,13 @@ function publicState() {
     origin: config.origin || 'https://airdrop-x.com',
     pairedAt: config.pairedAt || null,
     tierInfo: paired ? {
-      auto_mode_allowed: config.autoModeAllowed || false,
-      user_tier: config.userTier || 'standard',
-      tier_level: config.tierLevel || 0,
-      tier_name: config.tierName || 'Standard'
+      auto_mode_allowed: autoModeAllowed,
+      user_tier: userTier,
+      tier_level: tierLevel,
+      tier_name: tierName
     } : null,
-    subscription: paired ? (config.subscription || null) : null
+    subscription: paired ? (config.subscription || null) : null,
+    companionMode
   };
 }
 async function syncTasks() {
@@ -154,16 +211,15 @@ async function syncTasks() {
   const schedules = scheduleRows(Array.isArray(data.tasks) ? data.tasks : []);
 
   // Refresh tier gating on every sync so Premium unlocks without re-pair
-  if (typeof data.auto_mode_allowed === 'boolean' || data.tier_name || data.user_tier) {
-    autoModeAllowed = typeof data.auto_mode_allowed === 'boolean' ? data.auto_mode_allowed : autoModeAllowed;
-    userTier = data.user_tier || userTier;
-    tierLevel = Number.isFinite(data.tier_level) ? data.tier_level : tierLevel;
-    tierName = data.tier_name || tierName;
-    config.autoModeAllowed = autoModeAllowed;
-    config.userTier = userTier;
-    config.tierLevel = tierLevel;
-    config.tierName = tierName;
-  }
+  const resolved = resolveTier(data, { plan: config.tierName || tierName, level: config.tierLevel || tierLevel, userTier });
+  autoModeAllowed = resolved.allowed;
+  userTier = resolved.userTier;
+  tierLevel = resolved.level;
+  tierName = resolved.plan;
+  config.autoModeAllowed = autoModeAllowed;
+  config.userTier = userTier;
+  config.tierLevel = tierLevel;
+  config.tierName = tierName;
 
   config.subscription = normalizeSubscription(data, config.tierName || tierName);
 
@@ -239,6 +295,11 @@ ipcMain.handle('companion:pair', async (_, { origin, code }) => {
   userTier = data.user_tier || 'standard';
   tierLevel = data.tier_level || 0;
   tierName = data.tier_name || 'Standard';
+  const pairedTier = resolveTier(data, { plan: tierName, level: tierLevel, userTier });
+  autoModeAllowed = pairedTier.allowed;
+  userTier = pairedTier.userTier;
+  tierLevel = pairedTier.level;
+  tierName = pairedTier.plan;
   
   // Save token and tier information
   if (!safeStorage.isEncryptionAvailable()) throw new Error('Системное защищённое хранилище недоступно. Привязка не сохранена.');
@@ -268,7 +329,23 @@ ipcMain.handle('companion:pair', async (_, { origin, code }) => {
   };
 });
 ipcMain.handle('companion:sync', () => syncTasks());
-ipcMain.handle('companion:open-review', async () => shell.openExternal(publicState().origin));
+ipcMain.handle('companion:open-review', async (_event, query = {}) => {
+  const origin = String(publicState().origin || 'https://airdrop-x.com').replace(/\/$/, '');
+  const walletId = Number(query && query.walletId);
+  const scheduleId = Number(query && query.scheduleId);
+  if (Number.isFinite(walletId) && walletId > 0) {
+    const params = new URLSearchParams({
+      ax_open: 'workspace',
+      wallet_id: String(walletId),
+    });
+    if (Number.isFinite(scheduleId) && scheduleId > 0) {
+      params.set('schedule_id', String(scheduleId));
+    }
+    await shell.openExternal(`${origin}/?${params.toString()}`);
+    return;
+  }
+  await shell.openExternal(origin);
+});
 ipcMain.handle('companion:unpair', async () => {
   const config = readConfig(); const token = getToken(config);
   if (config.origin && token) { try { await requestApi(config.origin, '/api/companion/unpair', token, { method: 'POST' }); } catch (_) {} }
