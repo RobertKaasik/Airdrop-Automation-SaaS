@@ -4,6 +4,7 @@ const path = require('path');
 const CryptoStorage = require('./crypto-storage.cjs');
 const TransactionExecutor = require('./tx-executor.cjs');
 const TaskPoller = require('./task-poller.cjs');
+const { normalizeSubscription } = require('./subscription-map.cjs');
 
 const POLL_INTERVAL_MS = 60_000;
 const WEEKDAYS = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
@@ -142,7 +143,8 @@ function publicState() {
       user_tier: config.userTier || 'standard',
       tier_level: config.tierLevel || 0,
       tier_name: config.tierName || 'Standard'
-    } : null
+    } : null,
+    subscription: paired ? (config.subscription || null) : null
   };
 }
 async function syncTasks() {
@@ -152,8 +154,8 @@ async function syncTasks() {
   const schedules = scheduleRows(Array.isArray(data.tasks) ? data.tasks : []);
 
   // Refresh tier gating on every sync so Premium unlocks without re-pair
-  if (typeof data.auto_mode_allowed === 'boolean') {
-    autoModeAllowed = data.auto_mode_allowed;
+  if (typeof data.auto_mode_allowed === 'boolean' || data.tier_name || data.user_tier) {
+    autoModeAllowed = typeof data.auto_mode_allowed === 'boolean' ? data.auto_mode_allowed : autoModeAllowed;
     userTier = data.user_tier || userTier;
     tierLevel = Number.isFinite(data.tier_level) ? data.tier_level : tierLevel;
     tierName = data.tier_name || tierName;
@@ -163,12 +165,15 @@ async function syncTasks() {
     config.tierName = tierName;
   }
 
+  config.subscription = normalizeSubscription(data, config.tierName || tierName);
+
   config.lastSyncedAt = new Date().toISOString(); writeConfig(config); planNotifications(schedules);
   return {
     paired: true,
     schedules,
     lastSyncedAt: config.lastSyncedAt,
     safety: 'Только напоминания. Подпись всегда выполняется вручную в кошельке.',
+    subscription: config.subscription || null,
     tierInfo: {
       auto_mode_allowed: config.autoModeAllowed || false,
       user_tier: config.userTier || 'standard',
@@ -245,6 +250,7 @@ ipcMain.handle('companion:pair', async (_, { origin, code }) => {
   config.userTier = userTier;
   config.tierLevel = tierLevel;
   config.tierName = tierName;
+  config.subscription = normalizeSubscription(data, tierName);
   writeConfig(config);
   
   console.log(`[Tier] Paired with tier: ${tierName} (${userTier}), Level: ${tierLevel}, Auto allowed: ${autoModeAllowed}`);

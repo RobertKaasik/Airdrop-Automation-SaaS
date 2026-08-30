@@ -49,6 +49,132 @@ function safeSetText(element, text) {
 
 const $ = (id) => document.getElementById(id);
 
+const LOCALES = {
+  ru: {
+    intl: 'ru-RU', subtitle: 'Календарь и локальные напоминания по вашим расписаниям.',
+    manual: 'Ручное подтверждение', pairTitle: 'Подключить к аккаунту',
+    pairDescription: 'На сайте откройте «Настройки», создайте одноразовый код привязки и введите его здесь в течение 5 минут.',
+    origin: 'Адрес сайта', code: 'Одноразовый код', codePlaceholder: 'Например: 6BC352F310',
+    pair: 'Подключить', pairing: 'Подключение…',
+    planLabel: 'ТАРИФ АККАУНТА', calendarLabel: 'КАЛЕНДАРЬ', calendarTitle: 'Календарь напоминаний',
+    readOnly: 'ТОЛЬКО ПРОСМОТР', sync: 'Синхронизировать', syncing: 'Синхронизация…',
+    synced: 'Синхронизировано: {time}', syncError: 'Ошибка синхронизации: {error}',
+    review: 'Открыть сайт для проверки', unpair: 'Отключить приложение',
+    security: 'Безопасность:',
+    safety: ' приложение работает только с публичными расписаниями. Для обмена, моста или Lending откройте сайт, проверьте маршрут и подтвердите действие вручную в своём кошельке.',
+    active: 'Активен', grace: 'Льготный период', inactive: 'Неактивен',
+    unknown: 'Не удалось определить', expires: 'Действует до {time}', nextSync: 'Статус обновится при синхронизации.',
+    empty: 'Активных расписаний пока нет. Создайте их на сайте — здесь появятся напоминания.',
+    reminder: 'Следующее напоминание: {time} ({timezone})',
+  },
+  en: {
+    intl: 'en-US', subtitle: 'Calendar and local reminders for your schedules.',
+    manual: 'Manual confirmation', pairTitle: 'Connect your account',
+    pairDescription: 'On the website, open Settings, create a one-time pairing code, and enter it here within 5 minutes.',
+    origin: 'Website address', code: 'One-time code', codePlaceholder: 'Example: 6BC352F310',
+    pair: 'Connect', pairing: 'Connecting…',
+    planLabel: 'ACCOUNT PLAN', calendarLabel: 'CALENDAR', calendarTitle: 'Reminder calendar',
+    readOnly: 'READ-ONLY', sync: 'Synchronize', syncing: 'Synchronizing…',
+    synced: 'Synchronized: {time}', syncError: 'Synchronization error: {error}',
+    review: 'Open website to review', unpair: 'Disconnect application',
+    security: 'Security:',
+    safety: ' the app only uses public schedules. For swap, bridge, or lending, open the website, review the route, and confirm in your wallet.',
+    active: 'Active', grace: 'Grace period', inactive: 'Inactive',
+    unknown: 'Could not determine', expires: 'Active until {time}', nextSync: 'Status will update after sync.',
+    empty: 'There are no active schedules yet. Create them on the website — reminders will appear here.',
+    reminder: 'Next reminder: {time} ({timezone})',
+  },
+  zh: {
+    intl: 'zh-CN', subtitle: '查看日历和本地日程提醒。',
+    manual: '手动确认', pairTitle: '连接账户',
+    pairDescription: '请在网站的“设置”中创建一次性配对代码，并在 5 分钟内输入到这里。',
+    origin: '网站地址', code: '一次性代码', codePlaceholder: '例如：6BC352F310',
+    pair: '连接', pairing: '正在连接…',
+    planLabel: '账户套餐', calendarLabel: '日历', calendarTitle: '提醒日历',
+    readOnly: '只读', sync: '同步', syncing: '正在同步…',
+    synced: '已同步：{time}', syncError: '同步错误：{error}',
+    review: '打开网站查看', unpair: '断开应用连接',
+    security: '安全：',
+    safety: ' 应用只使用公开日程。兑换、跨链或借贷请在网站核对路线，并在钱包中手动确认。',
+    active: '有效', grace: '宽限期', inactive: '未激活',
+    unknown: '无法确定', expires: '有效期至 {time}', nextSync: '同步后将更新状态。',
+    empty: '暂无活跃日程。请在网站上创建，提醒将显示在这里。',
+    reminder: '下次提醒：{time}（{timezone}）',
+  },
+};
+
+let currentLocale = localStorage.getItem('airdropx-companion-locale') || 'ru';
+if (!LOCALES[currentLocale]) currentLocale = 'ru';
+let latestSchedules = [];
+let latestSubscription = null;
+let lastSyncedAt = null;
+let lastSyncError = '';
+
+function t(key, values = {}) {
+    return String(LOCALES[currentLocale][key] || LOCALES.en[key] || key).replace(/\{(\w+)\}/g, (_, name) => values[name] ?? '');
+}
+
+function setLabel(id, value) {
+    const label = $(id);
+    const node = label && Array.from(label.childNodes).find((child) => child.nodeType === Node.TEXT_NODE);
+    if (node) node.nodeValue = value;
+}
+
+function applyLocale(locale) {
+    if (!LOCALES[locale]) return;
+    currentLocale = locale;
+    localStorage.setItem('airdropx-companion-locale', locale);
+    document.documentElement.lang = currentLocale;
+    if ($('subtitle')) $('subtitle').textContent = t('subtitle');
+    if ($('safetyChip')) $('safetyChip').textContent = t('manual');
+    if ($('pairTitle')) $('pairTitle').textContent = t('pairTitle');
+    if ($('pairDescription')) $('pairDescription').textContent = t('pairDescription');
+    setLabel('originLabel', t('origin'));
+    setLabel('pairCodeLabel', t('code'));
+    if ($('pairCode')) $('pairCode').placeholder = t('codePlaceholder');
+    if ($('pairButton')) $('pairButton').textContent = t('pair');
+    if ($('planLabel')) $('planLabel').textContent = t('planLabel');
+    if ($('calendarLabel')) $('calendarLabel').textContent = t('calendarLabel');
+    if ($('calendarTitle')) $('calendarTitle').textContent = t('calendarTitle');
+    if ($('readOnly')) $('readOnly').textContent = t('readOnly');
+    if ($('syncButton')) $('syncButton').textContent = t('sync');
+    if ($('reviewButton')) $('reviewButton').textContent = t('review');
+    if ($('unpairButton')) $('unpairButton').textContent = t('unpair');
+    if ($('safetyTitle')) $('safetyTitle').textContent = t('security');
+    if ($('safetyText')) $('safetyText').textContent = t('safety');
+    document.querySelectorAll('[data-locale]').forEach((button) => {
+        const active = button.dataset.locale === currentLocale;
+        button.classList.toggle('is-active', active);
+        button.setAttribute('aria-pressed', String(active));
+    });
+    renderSubscription(latestSubscription, { tier_name: tierName });
+    renderSchedules(latestSchedules);
+    if ($('syncStatus')) {
+        if (lastSyncError) $('syncStatus').textContent = t('syncError', { error: lastSyncError });
+        else if (lastSyncedAt) $('syncStatus').textContent = t('synced', { time: formatWhen(lastSyncedAt, Intl.DateTimeFormat().resolvedOptions().timeZone) });
+    }
+}
+
+function renderSubscription(subscription, tierInfo = null) {
+    if (!$('planName')) return;
+    const plan = subscription?.plan || tierInfo?.tier_name || tierName || '';
+    const rawStatus = subscription?.status;
+    const status = (rawStatus === 'active' || rawStatus === 'grace' || rawStatus === 'expired')
+        ? rawStatus
+        : (plan ? 'active' : 'unknown');
+    $('planName').textContent = plan || t('unknown');
+    if ($('planStatus')) {
+        $('planStatus').textContent = status === 'active' ? t('active') : status === 'grace' ? t('grace') : t('inactive');
+        $('planStatus').className = `plan-status ${status === 'active' || status === 'grace' ? 'active' : 'inactive'}`;
+    }
+    const expiresAt = subscription?.expiresAt || subscription?.expires_at;
+    if ($('planMeta')) {
+        $('planMeta').textContent = expiresAt
+            ? t('expires', { time: formatWhen(expiresAt * 1000, Intl.DateTimeFormat().resolvedOptions().timeZone) })
+            : (plan ? '' : t('nextSync'));
+    }
+}
+
 // Global tier state
 let autoModeAllowed = false;
 let userTier = 'standard';
@@ -73,28 +199,32 @@ function message(text, error = false) {
 }
 
 function formatWhen(epoch, timeZone) {
+    const date = new Date(epoch);
+    if (Number.isNaN(date.getTime())) return '—';
     try {
-        return new Intl.DateTimeFormat('ru-RU', {
+        return new Intl.DateTimeFormat(LOCALES[currentLocale].intl, {
             dateStyle: 'medium',
             timeStyle: 'short',
             timeZone
-        }).format(new Date(epoch));
+        }).format(date);
     } catch (_) {
-        return new Date(epoch).toLocaleString('ru-RU');
+        return date.toLocaleString(LOCALES[currentLocale].intl);
     }
 }
 
 function renderSchedules(schedules = []) {
     const list = $('scheduleList');
+    if (!list) return;
+    latestSchedules = Array.isArray(schedules) ? schedules : [];
     list.replaceChildren();
-    if (!schedules.length) {
+    if (!latestSchedules.length) {
         const empty = document.createElement('div');
         empty.className = 'empty';
-        empty.textContent = 'Активных расписаний пока нет. Создайте их на сайте — здесь появятся напоминания.';
+        empty.textContent = t('empty');
         list.append(empty);
         return;
     }
-    schedules.forEach((schedule) => {
+    latestSchedules.forEach((schedule) => {
         const item = document.createElement('article');
         item.className = 'schedule';
         const title = document.createElement('strong');
@@ -105,7 +235,10 @@ function renderSchedules(schedules = []) {
         details.textContent = `${schedule.actionType} · ${schedule.scheduleMode} · ${schedule.timezone}`;
         const when = document.createElement('p');
         when.className = 'next';
-        when.textContent = `Следующее напоминание: ${formatWhen(schedule.nextAt, schedule.timezone)} (${schedule.timezone})`;
+        when.textContent = t('reminder', {
+            time: formatWhen(schedule.nextAt, schedule.timezone),
+            timezone: schedule.timezone
+        });
         item.append(title, address, details, when);
         list.append(item);
     });
@@ -216,7 +349,8 @@ async function handleToggleChange(event) {
 }
 
 async function sync() {
-    $('syncStatus').textContent = 'Синхронизация…';
+    lastSyncError = '';
+    $('syncStatus').textContent = t('syncing');
     try {
         const data = await window.companion.sync();
         if (data.tierInfo) {
@@ -230,10 +364,22 @@ async function sync() {
                 toggle.onchange = handleToggleChange;
             }
         }
+        latestSubscription = (data.subscription && data.subscription.plan)
+            ? data.subscription
+            : {
+                plan: (data.tierInfo && data.tierInfo.tier_name) || tierName,
+                status: (data.subscription && data.subscription.status) || 'active',
+                expiresAt: (data.subscription && (data.subscription.expiresAt || data.subscription.expires_at)) || null
+            };
+        lastSyncedAt = data.lastSyncedAt || new Date().toISOString();
+        renderSubscription(latestSubscription, data.tierInfo);
         renderSchedules(data.schedules);
-        $('syncStatus').textContent = `Синхронизировано: ${new Date(data.lastSyncedAt).toLocaleString('ru-RU')}`;
+        $('syncStatus').textContent = t('synced', {
+            time: formatWhen(lastSyncedAt, Intl.DateTimeFormat().resolvedOptions().timeZone)
+        });
     } catch (error) {
-        $('syncStatus').textContent = `Ошибка синхронизации: ${error.message}`;
+        lastSyncError = error.message || '—';
+        $('syncStatus').textContent = t('syncError', { error: lastSyncError });
     }
 }
 
@@ -260,13 +406,21 @@ async function showState() {
     $('origin').value = state.origin || 'https://airdrop-x.com';
     $('pairingCard').classList.toggle('hidden', state.paired);
     $('dashboardCard').classList.toggle('hidden', !state.paired);
-    if (state.paired) await sync();
+    latestSubscription = state.subscription || latestSubscription;
+    if (state.paired) {
+        renderSubscription(latestSubscription, state.tierInfo);
+        await sync();
+    }
 }
 
 // Event listeners
+document.querySelectorAll('[data-locale]').forEach((button) => {
+    button.addEventListener('click', () => applyLocale(button.dataset.locale));
+});
+
 $('pairButton').addEventListener('click', async () => {
     $('pairButton').disabled = true;
-    message('Подключение…');
+    message(t('pairing'));
     try {
         const result = await window.companion.pair({
             origin: $('origin').value,
@@ -295,6 +449,10 @@ $('reviewButton').addEventListener('click', () => window.companion.openReview())
 $('unpairButton').addEventListener('click', async () => {
     if (!confirm('Отключить приложение?')) return;
     await window.companion.unpair();
+    latestSchedules = [];
+    latestSubscription = null;
+    lastSyncedAt = null;
+    lastSyncError = '';
     await showState();
 });
 
@@ -521,4 +679,5 @@ async function showStateWithWalletCount() {
 // END KEY IMPORT FUNCTIONALITY
 // ==============================================================================
 
+applyLocale(currentLocale);
 showState().catch((error) => message(error.message, true));

@@ -14,38 +14,55 @@
 </head>
 <body>
     <main class="shell">
-        <header>
-            <span class="eyebrow">LOCAL COMPANION</span>
-            <h1>AIRDROP-X</h1>
-            <p>Синхронизированные локальные напоминания. Приватные ключи не хранятся, транзакции не подписываются и не отправляются.</p>
+        <header class="hero">
+            <div>
+                <p class="eyebrow">LOCAL COMPANION</p>
+                <h1>AIRDROP-X</h1>
+                <p id="subtitle" class="subtitle">Календарь и локальные напоминания по вашим расписаниям.</p>
+            </div>
+            <div class="hero-actions">
+                <div class="language-switch" role="group" aria-label="Language">
+                    <button type="button" data-locale="ru">RU</button>
+                    <button type="button" data-locale="en">EN</button>
+                    <button type="button" data-locale="zh">中文</button>
+                </div>
+                <div id="safetyChip" class="safety-chip">Ручное подтверждение</div>
+            </div>
         </header>
         
         <!-- Pairing Card -->
         <section id="pairingCard" class="card">
-            <h2>Подключить к аккаунту</h2>
-            <ol>
-                <li>На сайте откройте «Настройки».</li>
-                <li>Создайте код привязки.</li>
-                <li>Введите его здесь в течение пяти минут.</li>
-            </ol>
-            <label>Адрес сайта
-                <input id="origin" type="url" value="https://airdrop-x.com">
+            <h2 id="pairTitle">Подключить к аккаунту</h2>
+            <p id="pairDescription">На сайте откройте «Настройки», создайте одноразовый код привязки и введите его здесь в течение 5 минут.</p>
+            <label id="originLabel">Адрес сайта
+                <input id="origin" type="url" value="https://airdrop-x.com" autocomplete="url">
             </label>
-            <label>Одноразовый код
-                <input id="pairCode" maxlength="32" autocomplete="one-time-code">
+            <label id="pairCodeLabel">Одноразовый код
+                <input id="pairCode" maxlength="32" autocomplete="one-time-code" placeholder="Например: 6BC352F310">
             </label>
             <button id="pairButton" class="primary">Подключить</button>
             <p id="pairMessage"></p>
         </section>
         
         <!-- Dashboard Card -->
-        <section id="dashboardCard" class="card hidden">
+        <section id="dashboardCard" class="dashboard hidden">
+            <section class="card account-card">
+                <div>
+                    <p id="planLabel" class="label">ТАРИФ АККАУНТА</p>
+                    <h2 id="planName">Синхронизация…</h2>
+                    <p id="planMeta" class="muted"></p>
+                </div>
+                <span id="planStatus" class="plan-status">…</span>
+            </section>
+
+            <section class="card">
             <div class="row">
                 <div>
-                    <h2>Календарь напоминаний</h2>
+                    <p id="calendarLabel" class="label">КАЛЕНДАРЬ</p>
+                    <h2 id="calendarTitle">Календарь напоминаний</h2>
                     <p id="syncStatus" class="muted"></p>
                 </div>
-                <span class="badge">READ-ONLY</span>
+                <span id="readOnly" class="badge">READ-ONLY</span>
             </div>
             
             <!-- Agent Mode Toggle Section -->
@@ -108,6 +125,7 @@
                 <button id="reviewButton">Открыть сайт для проверки</button>
                 <button id="unpairButton" class="danger">Отключить приложение</button>
             </div>
+            </section>
         </section>
         
         <!-- VIP Consent Dialog -->
@@ -178,8 +196,8 @@
         </div>
         
         <aside class="safety">
-            <strong>Безопасность:</strong> приложение работает только с публичными расписаниями. 
-            Для обмена, моста или Lending откройте сайт, проверьте маршрут и подтвердите действие вручную в своём кошельке.
+            <strong id="safetyTitle">Безопасность:</strong>
+            <span id="safetyText"> приложение работает только с публичными расписаниями. Для обмена, моста или Lending откройте сайт, проверьте маршрут и подтвердите действие вручную в своём кошельке.</span>
         </aside>
     </main>
     <script src="renderer.js"></script>

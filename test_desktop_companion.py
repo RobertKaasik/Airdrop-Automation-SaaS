@@ -85,6 +85,8 @@ class DesktopCompanionTests(unittest.TestCase):
         self.assertEqual(len(feed["tasks"]), 1)
         self.assertEqual(feed["subscription"]["plan"], "Pro")
         self.assertEqual(feed["subscription"]["status"], "active")
+        self.assertEqual(feed["tier_name"], "Pro")
+        self.assertEqual(feed["subscription_status"], "active")
         task = feed["tasks"][0]
         self.assertEqual(task["wallet_address"], "0x123456…345678")
         self.assertNotIn("private_key", task)

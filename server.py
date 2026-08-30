@@ -2298,6 +2298,7 @@ async def pair_desktop_companion(payload: DesktopCompanionPairRequest, request: 
     tier_level = tier_info["level"]
     tier_name = tier_info["name"]
     auto_mode_allowed = is_agent_mode_allowed(subscription_plan)
+    subscription_state = get_subscription_state(user)
     
     raw_token = f"axc_{secrets.token_urlsafe(32)}"
     db.delete(pairing)
@@ -2319,6 +2320,13 @@ async def pair_desktop_companion(payload: DesktopCompanionPairRequest, request: 
         "tier_level": tier_level,
         "tier_name": tier_name,
         "auto_mode_allowed": auto_mode_allowed,
+        "subscription_status": subscription_state["status"],
+        "subscription_expires_at": subscription_state["expires_at"],
+        "subscription": {
+            "plan": subscription_plan,
+            "status": subscription_state["status"],
+            "expires_at": subscription_state["expires_at"],
+        },
     }
 
 
@@ -2361,7 +2369,8 @@ async def get_desktop_companion_tasks(
     current_user: User = Depends(get_desktop_companion_user),
 ):
     """Return schedule metadata only — no keys, signatures, routes, or transaction payloads."""
-    if get_subscription_state(current_user)["status"] == "expired":
+    subscription_state = get_subscription_state(current_user)
+    if subscription_state["status"] == "expired":
         raise HTTPException(status_code=402, detail="Subscription expired. Renew the plan to use Desktop Companion reminders")
     rows = (
         db.query(WalletActionSchedule, Wallet)
@@ -2403,6 +2412,13 @@ async def get_desktop_companion_tasks(
         "tier_level": tier_info["level"],
         "tier_name": tier_info["name"],
         "auto_mode_allowed": is_agent_mode_allowed(subscription_plan),
+        "subscription_status": subscription_state["status"],
+        "subscription_expires_at": subscription_state["expires_at"],
+        "subscription": {
+            "plan": subscription_plan,
+            "status": subscription_state["status"],
+            "expires_at": subscription_state["expires_at"],
+        },
     }
 
 

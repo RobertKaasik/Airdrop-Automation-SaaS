@@ -24,5 +24,6 @@ assert.equal(main.includes('new Notification'), true, 'Local reminders must rema
 assert.equal(main.includes('/api/companion/agent/tasks'), true, 'Agent poller must use dedicated executable-task endpoint.');
 assert.equal(preload.includes("contextBridge.exposeInMainWorld('companion'"), true, 'Only the narrow IPC bridge is exposed.');
 assert.equal(renderer.includes('innerHTML'), false, 'Remote schedule data must not be inserted as HTML.');
+assert.equal(main.includes('normalizeSubscription'), true, 'Sync must map tier_name into the plan card.');
 assert.equal(packageJson.includes('"ethers"'), true, 'ethers.js required for agent signing in main process.');
 console.log('Safe Companion checks passed.');
